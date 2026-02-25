@@ -1,0 +1,344 @@
+SPEC FOR DEVELOPER — AUTOMATING MASTER PROMPT vULTRA-FINAL
+XAUUSD BUY-ONLY | NEWS → ANALYZE → TABLE | MT5/MT4 IMPLEMENTATION
+
+NOTE TO DEVELOPER
+User will ask you for cost and timeline. Please quote based on this spec (Phase‑1 and Phase‑2) and clarify any assumptions (data feeds, infra, hosting). Implementation can be staged; don’t over-automate NEWS semantics on day one.
+
+==================================================
+A) HIGH-LEVEL ARCHITECTURE
+==================================================
+Goal: Automate as much of the MASTER PROMPT vULTRA-FINAL as possible for XAUUSD intraday BUY‑ONLY, with:
+
+- Hard risk gates:
+  ADR/ATR filters, mean‑distance, hazard windows, late-session rules.
+- Structural logic:
+  S/R mapping, spike/impulse detection, phase classification.
+- Execution logic:
+  Pending orders with PE (expiry) and ML (max holding time), rotation caps, kill‑switch.
+- Optional AI link:
+  The textual NEWS/ANALYZE/TABLE layer remains driven by the user’s AI assistant; your code only needs to consume its outputs (or replicate some NEWS logic with APIs if agreed).
+
+Recommended stack:
+- MT4/MT5 (C++‑like MQL4/MQL5) for direct trade execution.
+- A small bridge service (Python/Node or C#) for:
+  - Economic calendar + news APIs,
+  - Optional AI calls,
+  - Parsing TABLE text into structured orders.
+
+==================================================
+B) DATA INPUTS REQUIRED
+==================================================
+From broker / MT5:
+- XAUUSD tick/1m/5m/15m/30m/1h prices.
+- Time (server).
+- Spread / tick volume.
+- Order/position lists.
+
+From indicators (compute or attach):
+- 20‑day ADR (daily high‑low average).
+- ATR on M15 and H1 (configurable, default 14 or 20).
+- MA20 on H1 and M30.
+- RSI (H1, H4 for T3‑EXT).
+- Session classification (Japan / India / London / US) from server time + time‑zone offsets.
+- Day of week.
+
+From external APIs:
+- Economic calendar with event type, importance, timestamp.
+- (Optional) News headlines for geo/policy shock labelling.
+- (Optional) DXY, yields, equities, risk proxies.
+
+From AI assistant (optional but recommended):
+- Textual NEWS / ANALYZE / TABLE responses following the MASTER PROMPT format.
+- You will need a parser to extract the TABLE rows.
+
+==================================================
+C) TECHNICAL MODULE BREAKDOWN
+==================================================
+
+1) VOLATILITY & ADR/ATR ENGINE
+--------------------------------
+Implement functions:
+
+- CalcADR20():
+  - Using last 20 daily candles high‑low, compute ADR.
+- CurrentDayRange():
+  - TodayRange = TodayHigh − TodayLow.
+  - ADR% = TodayRange / ADR20 * 100.
+
+- CalcATR(timeframe, period):
+  - ATR_M15, ATR_H1.
+
+- MeanDistanceFromMA(timeframe):
+  - distance = |price − MA20| / ATR(timeframe).
+
+- PhaseClassifier():
+  - Based on ADR%, ATR slope, and price vs MA20:
+    - Compression (low ADR%, flat ATR).
+    - Early Expansion (ADR rising, ATR rising, price breaking range).
+    - Late Expansion–Exhaustion (ADR high, price far from MA20).
+    - Early Mean‑Reversion (price snapping back toward MA20).
+    - Shock (extreme range, gaps, news tag).
+
+Apply hard laws:
+- ADR ≥120 → block all new trades.
+- ADR ≥95 → block Rail‑B.
+- Mean distance >1.5 ATR for Rail‑B; >2.5 ATR for Rail‑A unless deep reclaim.
+
+2) SESSION, DAY, WEEK FILTERS
+------------------------------
+- Map server time to KSA.
+- Determine session:
+  - Japan: approx 00:00–06:59 KSA
+  - India: 07:00–10:29
+  - London: 10:30–17:00
+  - US: 17:00–23:59 (adapt to broker/region).
+- For each session, track:
+  - Early/Mid/Late (divide into thirds).
+- DayOfWeek() to handle Thursday/Friday rules.
+- Week context (pre‑event/week of FOMC etc.) can be passed in manually or inferred via calendar cluster density.
+
+Enforce:
+- Late London (last 45m) and late US (last 60m) → no Rail‑B.
+- Thursday US hazard zones → stricter gates.
+
+3) ECONOMIC CALENDAR & HAZARD WINDOWS
+--------------------------------------
+- Pull economic events (CPI, PCE, NFP, FOMC etc.) with timestamps.
+- Tag Tier‑1 vs ULTRA.
+- For each:
+  - Compute NO‑TRADE windows:
+    - Tier‑1: [T−30, T+30].
+    - ULTRA: [T−45, T+60].
+- From these windows, build SOS boundaries:
+  - Earliest upcoming hazard for PE/ML scheduling.
+
+Expose utility:
+- IsWithinHazardNow() for blocking trade entry.
+- PE/ML must satisfy:
+  - Tier‑1: PE ≤ T−20m; ML ≤ T−40m.
+  - ULTRA: PE ≤ T−30m; ML ≤ T−60m.
+
+4) STRUCTURE & S/R DETECTION
+-----------------------------
+Within MT5 EA or external code:
+
+- Identify:
+  - Daily high/low.
+  - Last significant swing highs/lows on M15/M30/H1.
+- Build S/R map:
+  - S1: nearest significant support below price.
+  - S2: deeper support where flushing likely.
+  - R1: nearest resistance above price.
+  - R2: sweep pocket above R1.
+  - FAIL: level that invalidates long bias (e.g., key daily/weekly low).
+
+Implement mid‑zone detection:
+- If price between S1 and R1 without clear structure → mid‑zone (no new orders).
+
+5) SPIKE / LEG‑2 / WATERFALL DETECTION
+---------------------------------------
+Implement pattern detection:
+
+- SpikeScanner():
+  - On M5/M15, detect bars where range > X × ATR (e.g., ≥1.5 ATR).
+  - Cluster multi‑bar expansions:
+    - If 2–3 big bars consecutively with ADR jump → candidate waterfall.
+- Classify:
+  - Leg‑1: first strong break from compression.
+  - Leg‑2: continuation move after a pullback/compression.
+  - Exhaustion: expansion with many upper wicks / long tails, followed by sideways/overlap.
+  - Waterfall: multiple large red bars down (for long side risk).
+
+Impulse Decay Gate:
+- For potential leg‑2 long (Rail‑B):
+  - Reject if:
+    - ATR slope flat or down after spike.
+    - ≥2 overlapping candles near highs.
+    - ≥2 long upper wicks.
+    - Volume (if available) dropping.
+
+Waterfall Shield 2.0:
+- If ≥2 of:
+  - 3 wide M15 candles in sequence.
+  - >1.3×ATR15 in <20m.
+  - >20% ADR consumed in <30m.
+  - New negative NEWS geo shock tag.
+→ Block all new longs until at least X compression bars (e.g., 8) appear.
+
+6) RAIL SELECTION & ENTRY PLACEMENT
+------------------------------------
+Rail‑A (BUY LIMIT reclaim/value):
+- Candidate levels: S1/S2 or reclaimed swept lows.
+- Check:
+  - Bias from NEWS/ANALYZE: Rail‑A allowed.
+  - Level is not mid‑zone.
+  - Segment is Compression / Early Expansion / Early Mean‑Reversion.
+- Place BUY LIMIT at level ± buffer:
+  - Eg. entry = S1 + small ATR fraction.
+
+Rail‑B (BUY STOP continuation — leg‑2 harvester):
+- Candidate: above compression high.
+- Conditions:
+  - ADR <95.
+  - Mean‑distance ≤1.2–1.5×ATR.
+  - Compression pre‑break: at least 6 candles.
+  - Breakout acceptance: at least 2 body closes above box.
+  - Impulse Decay Gate passes.
+  - No hazard within 90 minutes of intended ML.
+  - Not Thursday US hazard zone; not late session.
+
+7) PE & ML TIME LOGIC
+----------------------
+PE (Pending Expiry):
+- For each pending order, set MT5 expiry field to PE.
+- Derive PE from:
+  - Setup type:
+    - US leg‑2: PE 10–20m.
+    - London expansion: 20–40m.
+    - M15 reclaim/value: 20–45m.
+    - H1 reclaim: 45–90m.
+  - Clamp to:
+    - Before hazard buffers,
+    - Before SOS boundary,
+    - Inside current session.
+
+ML (Max‑Life):
+- Implement as:
+  - A time‑check inside EA:
+    - For each open position, store ML timestamp in order comment or global variable.
+    - Periodic timer checks current time ≥ ML → close or move to scratch logic.
+- ML baselines:
+  - Leg‑2: 12–25m.
+  - London expansion: 25–45m.
+  - M15 reclaim: 30–60m.
+  - H1 reclaim: 45–90m.
+- Scratch rule:
+  - Attempt to close near BE (±2 USD) if TP not hit by ML.
+
+8) ROTATION & ATTEMPTS ENGINE
+------------------------------
+State machine per session:
+
+- Track:
+  - attemptsUsed (0..3),
+  - lastSession ID,
+  - lastFailReason.
+
+Rules:
+- On each stop‑out/ML scratch/PE expiry, increment attemptsUsed.
+- If attemptsUsed ≥ maxAttempts (from ANALYZE or default):
+  - Don’t place new orders this session → kill‑switch.
+
+Session capital tier logic:
+- Tier A (London early, US leg‑2 news days):
+  - maxAttempts = 2,
+  - allow both Rail‑A and Rail‑B (if legal).
+- Tier B (Japan/India quiet):
+  - maxAttempts = 2,
+  - mostly Rail‑A.
+- Tier C (Thursday US, late sessions):
+  - maxAttempts = 1,
+  - A+ setups only, usually Rail‑A reclaim.
+
+9) TABLE PARSER (OPTIONAL AI INTEGRATION)
+-----------------------------------------
+If using AI’s textual TABLE:
+
+- Expect TABLE in structured rows with:
+  - Slot, Rail, Entry, TP, PE, ML, size flag, attempt, invalidation.
+- Implement parser (regex/JSON) to read those lines and:
+  - Validate them against your own risk gates (EA must be defensive).
+  - Convert into pending orders:
+    - BUY_LIMIT / BUY_STOP with price = Entry.
+    - TP = TP price.
+    - Expiration = PE.
+  - Store ML in comment/variable for time‑based exit.
+
+If not using AI directly, you can have EA generate its own TABLE‑like log into a file or journal for your review.
+
+==================================================
+D) IMPLEMENTATION PHASES
+==================================================
+
+PHASE 1 — TECHNICAL & EXECUTION ENGINE
+- Implement modules 1–8 inside an MT5 EA:
+  - ADR/ATR/mean distance,
+  - session/day filters,
+  - calendar hazard windows,
+  - structure S/R,
+  - spike/waterfall logic,
+  - PE/ML timers,
+  - rotation/kill‑switch,
+  - Rail‑A/Rail‑B order placement.
+- Provide a configuration panel:
+  - ADR/mean thresholds,
+  - PE/ML presets,
+  - maxAttempts,
+  - enabling/disabling Rail‑B, etc.
+- Output all decisions into a human‑readable log (or custom “TABLE” journal).
+
+PHASE 2 — NEWS & AI INTEGRATION (OPTIONAL)
+- Add:
+  - News/calendar APIs for more granular regime tagging.
+  - AI bridge to:
+    - Call the user’s chosen LLM with the MASTER PROMPT vULTRA.
+    - Forward NEWS/ANALYZE/TABLE responses into a parser.
+- Merge AI suggestions with EA gates:
+  - “EA will only execute TABLE rows that don’t violate hard coded ADR/phase/hazard rules.”
+
+==================================================
+E) WHAT TO TELL THE USER
+==================================================
+- You will provide:
+  - Estimated dev hours and phases for:
+    - EA-only technical engine (Phase 1).
+    - Optional AI/news integration (Phase 2).
+  - Testing plan:
+    - Replay / backtest on historical XAUUSD.
+    - Forward demo for at least 2–4 weeks before live.
+- Clarify:
+  - Required APIs (calendar, possibly news),
+  - VPS or local machine needs,
+  - Any broker constraints (hedging rules, order limits).
+
+User will decide budget and timeline based on your quote. They already have the full logical spec; your job is to translate it into robust, testable code that adheres strictly to the risk gates and timing rules above.
+
+
+He further clarifies:
+
+
+[4:20 pm, 23/2/2026] انيس ذباي: In short, I want to automate the system with some tools. I just send you the requirement.
+[4:24 pm, 23/2/2026] انيس ذباي: I have money kept in bullion shops at uae and they provide me mt5 to buy and sell. So this is physical gold I am dealing with. And mt5 acts as a billng machine like those in super markets where we bill and go without meeting the shop owner for ijaab and Kabul which is shuruth of business.
+[4:33 pm, 23/2/2026] انيس ذباي: Right now I have developed a master prompt and I am applying the prompt to chatgpt , perplexity, grok and Gemini and then I feed the screen shots for it to send me the table means at what rates to buy and sell. 
+
+
+This is too hectic for me.
+
+Like there are four sessions daily. 
+
+Japan which starts at 2:00 am 
+
+So I need to take screenshots of the time frames and send at 2:00 and then again at 2: 15 and then again at 2:20 to generate the exact table to place .
+
+Then India session starts from 6 am till 11:30 am 
+
+So I need to repeatedly feed the ais with screenshots such that it gives me the right table .
+
+Then London session starts by 11: 30
+
+And then new York session starts at 3:30 
+
+And new York session is full of surprises like news.
+[4:34 pm, 23/2/2026] انيس ذباي: So I want to build a tool which would feed the ais with the screenshots of the required info time to time
+
+
+Then it would validate the table generated by the ai by other ais
+
+Then it would place the table over mt5
+
+And send me the screenshot over whatsapp
+
+
+
+[5:17 pm, 23/2/2026] انيس ذباي: I have explained you the things in the most simplest way infact
+[5:17 pm, 23/2/2026] انيس ذباي: Now need a software setup to coordinate it between the ais and the mt5

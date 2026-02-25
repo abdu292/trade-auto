@@ -1,0 +1,86 @@
+# ------------------------------
+# .NET / Visual Studio
+# ------------------------------
+**/bin/
+**/obj/
+.vs/
+*.user
+*.rsuser
+*.suo
+TestResults/
+
+# ------------------------------
+# Python (aiworker)
+# ------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.venv/
+venv/
+env/
+
+# ------------------------------
+# Flutter / Dart (ui)
+# ------------------------------
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.pub-cache/
+coverage/
+**/doc/api/
+
+# Flutter/Android generated outputs
+**/.gradle/
+**/.cxx/
+**/local.properties
+**/captures/
+**/GeneratedPluginRegistrant.java
+
+# Flutter/iOS generated outputs
+**/DerivedData/
+**/Pods/
+**/.symlinks/
+**/Flutter/ephemeral/
+**/Flutter/flutter_export_environment.sh
+
+# Generic build outputs
+build/
+
+# ------------------------------
+# MT5 EA
+# ------------------------------
+*.ex5
+mt5ea/build/
+
+# ------------------------------
+# IDE / Editor
+# ------------------------------
+.vscode/
+.idea/
+*.iml
+*.swp
+
+# ------------------------------
+# Environment / local secrets
+# ------------------------------
+.env
+.env.*
+
+# ------------------------------
+# Logs
+# ------------------------------
+*.log
+
+# ------------------------------
+# OS junk
+# ------------------------------
+.DS_Store
+Thumbs.db

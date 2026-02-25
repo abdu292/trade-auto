@@ -1,0 +1,20 @@
+using Brain.Application.Common.Interfaces;
+using Brain.Application.Common.Models;
+
+namespace Brain.Infrastructure.Services.External;
+
+public sealed class MockAIWorkerClient : IAIWorkerClient
+{
+    public Task<TradeSignalContract> AnalyzeAsync(MarketSnapshotContract snapshot, CancellationToken cancellationToken)
+    {
+        var result = new TradeSignalContract(
+            Rail: "BUY_LIMIT",
+            Entry: snapshot.Ma20,
+            Tp: snapshot.Ma20 + (snapshot.Atr * 1.5m),
+            Pe: DateTimeOffset.UtcNow.AddMinutes(20),
+            Ml: 3600,
+            Confidence: 0.74m);
+
+        return Task.FromResult(result);
+    }
+}
