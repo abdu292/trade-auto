@@ -13,7 +13,10 @@ public:
     void Configure(string baseUrl, string apiKey = "")
     {
         m_baseUrl = baseUrl;
+        StringReplace(m_baseUrl, "http://localhost", "http://127.0.0.1");
+        StringReplace(m_baseUrl, "https://localhost", "https://127.0.0.1");
         m_apiKey = apiKey;
+        Print("ApiClient configured. BaseUrl=", m_baseUrl, ", ApiKeyLength=", StringLen(m_apiKey));
     }
 
     string BuildHeaders()
@@ -33,11 +36,21 @@ public:
         char result[];
         string responseHeaders;
 
+        ResetLastError();
         int code = WebRequest("GET", url, headers, 5000, postData, result, responseHeaders);
-        if (code != 200)
-            return false;
-
         string response = CharArrayToString(result);
+
+        if (code != 200)
+        {
+            int lastError = GetLastError();
+            Print("GetPendingTrade failed. HTTP=", code,
+                  ", LastError=", lastError,
+                  ", Url=", url,
+                  ", ApiKeyLength=", StringLen(m_apiKey),
+                  ", Response=", response,
+                  ", ResponseHeaders=", responseHeaders);
+            return false;
+        }
 
         command.id = "mock-id";
         command.type = "BUY_LIMIT";
@@ -57,11 +70,24 @@ public:
         string payload = "{\"tradeId\":\"" + tradeId + "\",\"status\":\"" + status + "\"}";
 
         char postData[];
-        StringToCharArray(payload, postData);
+        StringToCharArray(payload, postData, 0, StringLen(payload));
         char result[];
         string responseHeaders;
 
+        ResetLastError();
         int code = WebRequest("POST", url, headers, 5000, postData, result, responseHeaders);
+        if (!(code >= 200 && code < 300))
+        {
+            int lastError = GetLastError();
+            string response = CharArrayToString(result);
+            Print("PostTradeStatus failed. HTTP=", code,
+                  ", LastError=", lastError,
+                  ", Url=", url,
+                  ", TradeId=", tradeId,
+                  ", Status=", status,
+                  ", Response=", response,
+                  ", ResponseHeaders=", responseHeaders);
+        }
         return code >= 200 && code < 300;
     }
 };

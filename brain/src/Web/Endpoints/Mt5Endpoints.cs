@@ -1,5 +1,6 @@
 using Brain.Web.Filters;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace Brain.Web.Endpoints;
 
@@ -35,8 +36,30 @@ public static class Mt5Endpoints
 
         mt5Group.MapPost(
             "/trade-status",
-            (Mt5TradeStatusRequest request, ILogger<object> logger) =>
+            async Task<IResult> (HttpRequest httpRequest, ILogger<object> logger, CancellationToken cancellationToken) =>
             {
+                using var reader = new StreamReader(httpRequest.Body);
+                var rawBody = await reader.ReadToEndAsync(cancellationToken);
+                var sanitizedBody = rawBody.TrimEnd('\0', ' ', '\r', '\n', '\t');
+
+                Mt5TradeStatusRequest? request;
+                try
+                {
+                    request = JsonSerializer.Deserialize<Mt5TradeStatusRequest>(
+                        sanitizedBody,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                catch (JsonException ex)
+                {
+                    logger.LogWarning(ex, "Invalid JSON payload on /mt5/trade-status. RawBody={RawBody}", rawBody);
+                    return TypedResults.BadRequest(new { error = "Invalid JSON payload" });
+                }
+
+                if (request is null || string.IsNullOrWhiteSpace(request.TradeId) || string.IsNullOrWhiteSpace(request.Status))
+                {
+                    return TypedResults.BadRequest(new { error = "tradeId and status are required" });
+                }
+
                 logger.LogInformation(
                     "→ POST /mt5/trade-status: TradeId={TradeId}, Status={Status}",
                     request.TradeId, request.Status);
@@ -51,4 +74,4 @@ public static class Mt5Endpoints
     }
 }
 
-public sealed record Mt5TradeStatusRequest(Guid TradeId, string Status);
+public sealed record Mt5TradeStatusRequest(string TradeId, string Status);
