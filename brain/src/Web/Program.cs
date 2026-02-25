@@ -7,12 +7,13 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-Log.Logger = new LoggerConfiguration()
-	.ReadFrom.Configuration(builder.Configuration)
-	.WriteTo.Console()
-	.CreateLogger();
+builder.Host.UseSerilog((context, config) =>
+	config.ReadFrom.Configuration(context.Configuration));
 
-builder.Host.UseSerilog();
+try
+{
+	Log.Information("🚀 Building application...");
+
 
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks();
@@ -52,6 +53,16 @@ await using (var scope = app.Services.CreateAsyncScope())
 	await dbContext.Database.EnsureCreatedAsync();
 }
 
+Log.Information("🚀 Starting application... Listening on: http://localhost:5000");
 app.Run();
+}
+catch (Exception ex)
+{
+	Log.Fatal(ex, "💥 Application terminated unexpectedly");
+}
+finally
+{
+	Log.CloseAndFlush();
+}
 
 public partial class Program;

@@ -20,7 +20,11 @@ public static class DependencyInjection
         services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(connectionString));
         services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
 
-        services.AddScoped<IAIWorkerClient, MockAIWorkerClient>();
+        // HttpClient for AI Worker service at http://localhost:8001
+        services.AddHttpClient<HttpAIWorkerClient>()
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+        
+        services.AddScoped<IAIWorkerClient>(provider => provider.GetRequiredService<HttpAIWorkerClient>());
         services.AddScoped<IMt5BridgeClient, MockMt5BridgeClient>();
         services.AddScoped<INotificationService, MockNotificationService>();
         services.AddScoped<IMarketDataProvider, MockMarketDataProvider>();
@@ -29,6 +33,7 @@ public static class DependencyInjection
 
         services.AddHostedService<SessionSchedulerBackgroundService>();
         services.AddHostedService<SignalPollingBackgroundService>();
+        services.AddHostedService<MarketSnapshotPollingService>();
 
         return services;
     }

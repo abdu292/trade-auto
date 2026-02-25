@@ -8,13 +8,12 @@ using MediatR;
 namespace Brain.Application.Features.Signals.Handlers;
 
 public sealed class AnalyzeSnapshotCommandHandler(
-    IMarketDataProvider marketDataProvider,
     IAIWorkerClient aiWorkerClient,
     IApplicationDbContext dbContext) : IRequestHandler<AnalyzeSnapshotCommand, TradeSignalDto>
 {
     public async Task<TradeSignalDto> Handle(AnalyzeSnapshotCommand request, CancellationToken cancellationToken)
     {
-        var snapshot = await marketDataProvider.GetSnapshotAsync(request.Symbol, cancellationToken);
+        var snapshot = request.Snapshot;
         var signal = await aiWorkerClient.AnalyzeAsync(snapshot, cancellationToken);
 
         var entity = TradeSignal.Create(

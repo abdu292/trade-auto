@@ -1,3 +1,4 @@
+using Brain.Application.Common.Interfaces;
 using Brain.Application.Features.Signals.Commands;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,10 +17,12 @@ public sealed class SignalPollingBackgroundService(
         {
             using var scope = scopeFactory.CreateScope();
             var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            var marketData = scope.ServiceProvider.GetRequiredService<IMarketDataProvider>();
 
             try
             {
-                await mediator.Send(new AnalyzeSnapshotCommand("EURUSD"), stoppingToken);
+                var snapshot = await marketData.GetSnapshotAsync("EURUSD", stoppingToken);
+                await mediator.Send(new AnalyzeSnapshotCommand(snapshot), stoppingToken);
             }
             catch (Exception ex)
             {
