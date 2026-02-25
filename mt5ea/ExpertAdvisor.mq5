@@ -7,7 +7,6 @@
 
 input string BrainBaseUrl = "http://127.0.0.1:5000";
 input string BrainApiKey = "dev-local-change-me";
-input int PollSeconds = 10;
 
 ApiClient g_api;
 TradeExecutor g_executor;
@@ -16,26 +15,17 @@ RiskGuards g_riskGuards;
 int OnInit()
 {
     g_api.Configure(BrainBaseUrl, BrainApiKey);
-    EventSetTimer(PollSeconds);
-    Print("Trade Auto EA initialized - Polling every ", PollSeconds, " seconds");
+    Print("Trade Auto EA initialized - Reacting to price ticks");
     return(INIT_SUCCEEDED);
 }
 
-void OnDeinit(const int reason)
+void OnTick()
 {
-    EventKillTimer();
-}
-
-void OnTimer()
-{
-    Print("Polling Brain API at ", BrainBaseUrl);
-    
     TradeCommand command;
     bool hasCommand = g_api.GetPendingTrade(command);
 
     if (!hasCommand)
     {
-        Print("No pending trades available");
         return;
     }
 
