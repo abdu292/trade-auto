@@ -22,7 +22,7 @@ public static class MonitoringEndpoints
 
         monitoring.MapGet(
             "/approvals",
-            IResult (ITradeApprovalStore approvals, int take) => TypedResults.Ok(approvals.GetPending(take <= 0 ? 20 : take)))
+            IResult (ITradeApprovalStore approvals, int take = 20) => TypedResults.Ok(approvals.GetPending(take <= 0 ? 20 : take)))
             .WithName("GetApprovalQueue")
             .WithDescription("Returns manual approval queue. APPROVE moves trade to MT5 pending queue.");
 

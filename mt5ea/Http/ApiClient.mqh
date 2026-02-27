@@ -139,8 +139,6 @@ public:
     void Configure(string baseUrl, string apiKey = "")
     {
         m_baseUrl = baseUrl;
-        StringReplace(m_baseUrl, "http://localhost", "http://127.0.0.1");
-        StringReplace(m_baseUrl, "https://localhost", "https://127.0.0.1");
         m_apiKey = apiKey;
         Print("ApiClient configured. BaseUrl=", m_baseUrl, ", ApiKeyLength=", StringLen(m_apiKey));
     }
@@ -180,6 +178,11 @@ public:
                   ", ApiKeyLength=", StringLen(m_apiKey),
                   ", Response=", response,
                   ", ResponseHeaders=", responseHeaders);
+
+            if (lastError == 4014 || lastError == 5203 || lastError == 4006)
+            {
+                Print("WebRequest troubleshooting: In MT5 Tools->Options->Expert Advisors, enable 'Allow WebRequest for listed URL' and add exact URL: ", m_baseUrl);
+            }
             return false;
         }
 
@@ -296,6 +299,11 @@ public:
             Print("PostMarketSnapshot failed. HTTP=", code,
                   ", LastError=", lastError,
                   ", Response=", response);
+
+            if (lastError == 4014 || lastError == 5203 || lastError == 4006)
+            {
+                Print("WebRequest troubleshooting: In MT5 Tools->Options->Expert Advisors, enable 'Allow WebRequest for listed URL' and add exact URL: ", m_baseUrl);
+            }
             return false;
         }
 

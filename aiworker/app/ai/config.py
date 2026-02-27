@@ -12,7 +12,7 @@ def _read_openai_models() -> List[str]:
 
 
 def _read_openrouter_models() -> List[str]:
-    raw = os.getenv("OPENROUTER_MODELS", "openai/gpt-4.1-mini,google/gemini-2.0-flash")
+    raw = os.getenv("OPENROUTER_MODELS", "openai/gpt-4.1-mini,google/gemini-2.0-flash-001")
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 

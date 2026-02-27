@@ -45,3 +45,4 @@ This is the only high-level operations document you need day to day.
 ## Source of Truth
 - Spec: ../spec/spec_v3.md
 - Implemented SOP: ../spec/SOP_SPEC_V3_IMPLEMENTATION.md
+- E2E Runbook: ./E2E_LOCAL_TEST.md

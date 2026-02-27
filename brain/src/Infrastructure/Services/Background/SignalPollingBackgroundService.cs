@@ -93,6 +93,10 @@ public sealed class SignalPollingBackgroundService(
                     pending.Regime,
                     pending.AlignmentScore);
             }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("No MT5 snapshot available yet.", StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogInformation("Waiting for first MT5 snapshot before running signal loop.");
+            }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Signal polling iteration failed.");
