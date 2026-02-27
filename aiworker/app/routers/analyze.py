@@ -14,16 +14,15 @@ async def analyze(snapshot: MarketSnapshot) -> TradeSignal:
     Analyze market data and generate trade signal using AI providers
     
     Request:
-        - symbol: Trading pair (e.g., EURUSD)
+        - symbol: Trading pair (XAUUSD only)
         - close: Current price
         - OHLC + technical indicators
         - session_name: Current trading session
         
     Response:
-        - rail: A (high confidence) | B (medium) | C (low)
+        - rail: BUY_LIMIT | BUY_STOP
         - entry: Entry price
         - tp: Take profit
-        - sl: Stop loss
         - pe: Pending expiry (HH:MM)
         - ml: Max life (HH:MM)
         - confidence: 0.0-1.0

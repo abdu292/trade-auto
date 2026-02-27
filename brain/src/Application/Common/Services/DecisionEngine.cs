@@ -4,6 +4,9 @@ namespace Brain.Application.Common.Services;
 
 public static class DecisionEngine
 {
+    private const decimal OunceToGram = 31.1035m;
+    private const decimal UsdToAed = 3.674m;
+
     public static DecisionResultContract Evaluate(
         MarketSnapshotContract snapshot,
         RegimeClassificationContract regime,
@@ -23,6 +26,12 @@ public static class DecisionEngine
         if (string.Equals(aiSignal.SafetyTag, "BLOCK", StringComparison.OrdinalIgnoreCase))
         {
             return NoTrade("NO TRADE - HIGH RISK (AI safety block)", aiSignal.AlignmentScore);
+        }
+
+        if (string.Equals(regime.Regime, "NEWS_SPIKE", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(regime.Regime, "FRIDAY_HIGH_RISK", StringComparison.OrdinalIgnoreCase))
+        {
+            return NoTrade($"NO TRADE - HIGH RISK ({regime.Regime})", aiSignal.AlignmentScore);
         }
 
         var score = Math.Clamp(aiSignal.AlignmentScore, 0m, 1m);
@@ -45,9 +54,29 @@ public static class DecisionEngine
         };
 
         var rail = regime.Regime == "EXPANSION" ? "BUY_STOP" : "BUY_LIMIT";
+        if (rail == "BUY_STOP" && !snapshot.IsBreakoutConfirmed)
+        {
+            return NoTrade("NO TRADE - HIGH RISK (expansion without breakout confirmation)", score);
+        }
+
+        var compressionFloor = snapshot.SessionLow > 0m
+            ? snapshot.SessionLow
+            : snapshot.PreviousDayLow;
+
         var entry = rail == "BUY_LIMIT"
             ? primaryClose - entryDistance
             : primaryClose + (entryDistance * 0.60m);
+
+        if (regime.Regime == "COMPRESSION" && compressionFloor > 0m)
+        {
+            entry = Math.Min(entry, compressionFloor + (snapshot.Atr * 0.20m));
+        }
+
+        if (regime.Regime == "POST_SPIKE_PULLBACK")
+        {
+            var deeperPullback = primaryClose - (snapshot.Atr * 0.95m);
+            entry = Math.Min(entry, deeperPullback);
+        }
 
         var tpMultiplier = regime.Regime switch
         {
@@ -62,7 +91,17 @@ public static class DecisionEngine
         var baseGrams = regime.RiskTag == "SAFE" ? 18m : 9m;
         var volatilityPenalty = Math.Clamp(snapshot.VolatilityExpansion <= 0 ? 0.15m : snapshot.VolatilityExpansion / 2m, 0.10m, 0.55m);
         var exposurePenalty = Math.Clamp(ledgerState.OpenExposurePercent / 100m, 0m, 0.70m);
-        var grams = Math.Max(2m, baseGrams * (1m - volatilityPenalty) * (1m - exposurePenalty));
+        var reentryScale = ledgerState.OpenBuyCount <= 0 ? 1m : 1m / (ledgerState.OpenBuyCount + 1m);
+        var riskScale = regime.RiskTag == "SAFE" ? 1.00m : 0.60m;
+
+        var rawGrams = Math.Max(2m, baseGrams * (1m - volatilityPenalty) * (1m - exposurePenalty) * reentryScale * riskScale);
+        var maxAffordableGrams = ToMaxAffordableGrams(ledgerState.DeployableCashAed, entry);
+        var grams = Math.Max(0m, Math.Min(rawGrams, maxAffordableGrams));
+
+        if (grams < 2m)
+        {
+            return NoTrade("NO TRADE - HIGH RISK (insufficient deployable cash for minimum grams)", score);
+        }
 
         var expiry = snapshot.Timestamp.UtcDateTime.Add(GetSessionExpiry(snapshot.Session));
 
@@ -81,12 +120,32 @@ public static class DecisionEngine
 
     private static TimeSpan GetSessionExpiry(string session) => session.ToUpperInvariant() switch
     {
-        "ASIA" => TimeSpan.FromHours(6),
+        "JAPAN" => TimeSpan.FromHours(6),
+        "INDIA" => TimeSpan.FromHours(6),
+        "ASIA" => TimeSpan.FromHours(5),
         "EUROPE" => TimeSpan.FromHours(4),
         "LONDON" => TimeSpan.FromHours(4),
-        "NEW_YORK" => TimeSpan.FromHours(3),
+        "NEW_YORK" => TimeSpan.FromHours(2),
         _ => TimeSpan.FromHours(4)
     };
+
+    private static decimal ToMaxAffordableGrams(decimal deployableCashAed, decimal entryUsdPerOunce)
+    {
+        if (deployableCashAed <= 0m || entryUsdPerOunce <= 0m)
+        {
+            return 0m;
+        }
+
+        var shopBuy = entryUsdPerOunce + 0.80m;
+        var usdPerGram = shopBuy / OunceToGram;
+        if (usdPerGram <= 0m)
+        {
+            return 0m;
+        }
+
+        var aedPerGram = usdPerGram * UsdToAed;
+        return deployableCashAed / aedPerGram;
+    }
 
     private static DecisionResultContract NoTrade(string reason, decimal score) =>
         new(

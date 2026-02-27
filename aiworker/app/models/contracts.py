@@ -16,6 +16,17 @@ class MarketSnapshot(BaseModel):
     atr: float
     adr: float
     ma20: float
+    ma20H4: float = 0.0
+    ma20H1: float = 0.0
+    ma20M30: float = 0.0
+    rsiH1: float = 0.0
+    rsiM15: float = 0.0
+    atrH1: float = 0.0
+    atrM15: float = 0.0
+    previousDayHigh: float = 0.0
+    previousDayLow: float = 0.0
+    sessionHigh: float = 0.0
+    sessionLow: float = 0.0
     session: str
     timestamp: datetime
     volatilityExpansion: float | None = None
@@ -23,6 +34,18 @@ class MarketSnapshot(BaseModel):
     mt5ServerTime: datetime | None = None
     ksaTime: datetime | None = None
     mt5ToKsaOffsetMinutes: int = 50
+    telegramImpactTag: str = "LOW"
+    tradingViewConfirmation: str = "NEUTRAL"
+    isCompression: bool = False
+    isExpansion: bool = False
+    isAtrExpanding: bool = False
+    hasOverlapCandles: bool = False
+    hasImpulseCandles: bool = False
+    hasLiquiditySweep: bool = False
+    hasPanicDropSequence: bool = False
+    isPostSpikePullback: bool = False
+    isLondonNyOverlap: bool = False
+    isBreakoutConfirmed: bool = False
     isUsRiskWindow: bool = False
     isFriday: bool = False
 
@@ -37,5 +60,7 @@ class TradeSignal(BaseModel):
     safetyTag: str = "CAUTION"
     directionBias: str = "BULLISH"
     alignmentScore: float = 0.5
+    newsImpactTag: str = "LOW"
+    tvConfirmationTag: str = "NEUTRAL"
     newsTags: list[str] = []
     summary: str = ""

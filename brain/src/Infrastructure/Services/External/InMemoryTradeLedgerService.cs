@@ -7,7 +7,7 @@ namespace Brain.Infrastructure.Services.External;
 public sealed class InMemoryTradeLedgerService : ITradeLedgerService
 {
     private const decimal OunceToGram = 31.1035m;
-    private const decimal UsdToAed = 3.6725m;
+    private const decimal UsdToAed = 3.674m;
     private const decimal InitialCashAed = 100000m;
 
     private readonly Lock _gate = new();

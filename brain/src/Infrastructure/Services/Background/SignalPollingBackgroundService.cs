@@ -18,7 +18,7 @@ public sealed class SignalPollingBackgroundService(
             using var scope = scopeFactory.CreateScope();
             var marketData = scope.ServiceProvider.GetRequiredService<IMarketDataProvider>();
             var aiWorker = scope.ServiceProvider.GetRequiredService<IAIWorkerClient>();
-            var pendingTrades = scope.ServiceProvider.GetRequiredService<IPendingTradeStore>();
+            var approvals = scope.ServiceProvider.GetRequiredService<ITradeApprovalStore>();
             var ledger = scope.ServiceProvider.GetRequiredService<ITradeLedgerService>();
             var tradingViewStore = scope.ServiceProvider.GetRequiredService<ITradingViewSignalStore>();
 
@@ -81,9 +81,9 @@ public sealed class SignalPollingBackgroundService(
                     Regime: regime.Regime,
                     RiskTag: regime.RiskTag);
 
-                pendingTrades.Enqueue(pending);
+                approvals.Enqueue(pending);
                 logger.LogInformation(
-                    "Queued pending trade {TradeId} {Type} {Symbol} @ {Price} TP={Tp} grams={Grams} regime={Regime} score={Score:0.00}",
+                    "Queued approval trade {TradeId} {Type} {Symbol} @ {Price} TP={Tp} grams={Grams} regime={Regime} score={Score:0.00}",
                     pending.Id,
                     pending.Type,
                     pending.Symbol,
@@ -161,10 +161,24 @@ public sealed class SignalPollingBackgroundService(
             mergedScore += 0.04m;
         }
 
+        if (string.Equals(tradingView.ConfirmationTag, "CONFIRM", StringComparison.OrdinalIgnoreCase))
+        {
+            mergedScore += 0.08m;
+        }
+        else if (string.Equals(tradingView.ConfirmationTag, "CONTRADICT", StringComparison.OrdinalIgnoreCase))
+        {
+            mergedScore -= 0.18m;
+            if (!string.Equals(mergedSafety, "BLOCK", StringComparison.OrdinalIgnoreCase))
+            {
+                mergedSafety = "CAUTION";
+            }
+        }
+
         mergedScore = Math.Clamp(mergedScore, 0m, 1m);
         var mergedTags = (aiSignal.NewsTags ?? [])
             .Concat([
                 $"tradingview_signal_{tradingView.Signal.ToLowerInvariant()}",
+                $"tradingview_confirmation_{tradingView.ConfirmationTag.ToLowerInvariant()}",
                 $"tradingview_risk_{tradingView.RiskTag.ToLowerInvariant()}",
                 $"tradingview_bias_{tradingView.Bias.ToLowerInvariant()}"
             ])
@@ -183,6 +197,7 @@ public sealed class SignalPollingBackgroundService(
             AlignmentScore = mergedScore,
             SafetyTag = mergedSafety,
             DirectionBias = mergedBias,
+            TvConfirmationTag = tradingView.ConfirmationTag,
             NewsTags = mergedTags,
             Summary = string.IsNullOrWhiteSpace(aiSignal.Summary)
                 ? $"TV:{tradingView.Signal}/{tradingView.Bias}/{tradingView.RiskTag}"

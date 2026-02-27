@@ -21,11 +21,13 @@ from app.ai.config import (
 @dataclass
 class TelegramNewsContext:
     enabled: bool
+    impact_tag: str
     risk_tag: str
     direction_bias: str
     tags: list[str]
     summary: str
     headlines: list[str]
+    items: list[dict[str, str]]
 
 
 class TelegramNewsService:
@@ -40,16 +42,19 @@ class TelegramNewsService:
         if not self._enabled:
             return TelegramNewsContext(
                 enabled=False,
+                impact_tag="LOW",
                 risk_tag="CAUTION",
                 direction_bias="NEUTRAL",
                 tags=["telegram_not_configured"],
                 summary="Telegram bot token is not configured.",
                 headlines=[],
+                items=[],
             )
 
         updates = await self._fetch_updates()
-        headlines = self._extract_recent_headlines(updates)
-        return self._analyze_headlines(symbol, headlines)
+        items = self._extract_recent_items(updates)
+        headlines = [f"{item['channel']}: {item['text']}" for item in items]
+        return self._analyze_headlines(symbol, headlines, items)
 
     async def _fetch_updates(self) -> list[dict[str, Any]]:
         endpoint = f"{TELEGRAM_BOT_BASE_URL}/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
@@ -72,10 +77,10 @@ class TelegramNewsService:
 
         return [item for item in result if isinstance(item, dict)]
 
-    def _extract_recent_headlines(self, updates: list[dict[str, Any]]) -> list[str]:
+    def _extract_recent_items(self, updates: list[dict[str, Any]]) -> list[dict[str, str]]:
         since = datetime.now(timezone.utc) - timedelta(minutes=max(1, TELEGRAM_LOOKBACK_MINUTES))
         allowed_channels = {self._normalize_channel(value) for value in TELEGRAM_CHANNELS}
-        headlines: list[str] = []
+        items: list[dict[str, str]] = []
 
         for update in updates:
             post = update.get("channel_post") or update.get("edited_channel_post")
@@ -103,19 +108,33 @@ class TelegramNewsService:
                 continue
 
             compact = self._compact_whitespace(text)
-            headlines.append(f"{current_channel}: {compact[:220]}")
+            lowered = compact.lower()
+            category = "LOW"
+            if any(keyword.strip().lower() in lowered for keyword in TELEGRAM_BLOCK_KEYWORDS if keyword.strip()):
+                category = "HIGH"
+            elif any(keyword.strip().lower() in lowered for keyword in TELEGRAM_CAUTION_KEYWORDS if keyword.strip()):
+                category = "MODERATE"
 
-        return headlines[-25:]
+            items.append({
+                "channel": current_channel,
+                "timestamp": post_dt.isoformat(),
+                "category": category,
+                "text": compact[:220],
+            })
 
-    def _analyze_headlines(self, symbol: str, headlines: list[str]) -> TelegramNewsContext:
+        return items[-25:]
+
+    def _analyze_headlines(self, symbol: str, headlines: list[str], items: list[dict[str, str]]) -> TelegramNewsContext:
         if not headlines:
             return TelegramNewsContext(
                 enabled=True,
+                impact_tag="LOW",
                 risk_tag="CAUTION",
                 direction_bias="NEUTRAL",
                 tags=["telegram_no_recent_posts"],
                 summary="No recent Telegram channel posts in configured lookback window.",
                 headlines=[],
+                items=[],
             )
 
         block_hits = self._count_keyword_hits(headlines, TELEGRAM_BLOCK_KEYWORDS)
@@ -123,7 +142,8 @@ class TelegramNewsService:
         bullish_hits = self._count_keyword_hits(headlines, TELEGRAM_BULLISH_KEYWORDS)
         bearish_hits = self._count_keyword_hits(headlines, TELEGRAM_BEARISH_KEYWORDS)
 
-        risk_tag = "BLOCK" if block_hits > 0 else ("CAUTION" if caution_hits > 0 else "SAFE")
+        impact_tag = "HIGH" if block_hits > 0 else ("MODERATE" if caution_hits > 0 else "LOW")
+        risk_tag = "BLOCK" if impact_tag == "HIGH" else ("CAUTION" if impact_tag == "MODERATE" else "SAFE")
 
         direction_bias = "NEUTRAL"
         if bullish_hits > bearish_hits:
@@ -143,17 +163,19 @@ class TelegramNewsService:
 
         summary = (
             f"Telegram ({symbol}) posts={len(headlines)}, "
-            f"risk={risk_tag}, bullish={bullish_hits}, bearish={bearish_hits}, "
+            f"impact={impact_tag}, risk={risk_tag}, bullish={bullish_hits}, bearish={bearish_hits}, "
             f"block={block_hits}, caution={caution_hits}"
         )
 
         return TelegramNewsContext(
             enabled=True,
+            impact_tag=impact_tag,
             risk_tag=risk_tag,
             direction_bias=direction_bias,
             tags=tags,
             summary=summary,
             headlines=headlines,
+            items=items,
         )
 
     @staticmethod

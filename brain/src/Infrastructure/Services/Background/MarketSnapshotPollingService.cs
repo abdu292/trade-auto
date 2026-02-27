@@ -90,42 +90,41 @@ public sealed class MarketSnapshotPollingService : BackgroundService
         var random = new Random();
         var now = DateTimeOffset.UtcNow;
 
-        // Simulate EURUSD price around 1.1025 ± variance
-        var basePrice = 1.1025m;
-        var variance = (decimal)((random.NextDouble() - 0.5) * 0.001);
+        var basePrice = 2940.00m;
+        var variance = (decimal)((random.NextDouble() - 0.5) * 8.0);
         var closePrice = basePrice + variance;
 
         var timeframeData = new[]
         {
             new TimeframeDataContract(
                 Timeframe: "M5",
-                Open: basePrice - 0.0002m,
-                High: closePrice + 0.0004m,
-                Low: closePrice - 0.0005m,
+                Open: basePrice - 1.20m,
+                High: closePrice + 1.60m,
+                Low: closePrice - 1.80m,
                 Close: closePrice),
             new TimeframeDataContract(
                 Timeframe: "M15",
-                Open: basePrice - 0.0003m,
-                High: closePrice + 0.0005m,
-                Low: closePrice - 0.0005m,
+                Open: basePrice - 1.80m,
+                High: closePrice + 2.10m,
+                Low: closePrice - 2.30m,
                 Close: closePrice),
             new TimeframeDataContract(
                 Timeframe: "M30",
-                Open: basePrice - 0.0004m,
-                High: closePrice + 0.0006m,
-                Low: closePrice - 0.0006m,
+                Open: basePrice - 2.20m,
+                High: closePrice + 2.80m,
+                Low: closePrice - 2.70m,
                 Close: closePrice),
             new TimeframeDataContract(
                 Timeframe: "H1",
-                Open: basePrice - 0.0005m,
-                High: closePrice + 0.0008m,
-                Low: closePrice - 0.0006m,
+                Open: basePrice - 4.20m,
+                High: closePrice + 4.80m,
+                Low: closePrice - 4.50m,
                 Close: closePrice),
             new TimeframeDataContract(
                 Timeframe: "H4",
-                Open: basePrice - 0.001m,
-                High: basePrice + 0.002m,
-                Low: basePrice - 0.0015m,
+                Open: basePrice - 10.20m,
+                High: basePrice + 12.20m,
+                Low: basePrice - 11.50m,
                 Close: closePrice)
         };
 
@@ -135,9 +134,20 @@ public sealed class MarketSnapshotPollingService : BackgroundService
         return new MarketSnapshotContract(
             Symbol: "XAUUSD",
             TimeframeData: timeframeData,
-            Atr: 0.00095m,
-            Adr: 0.0012m,
+            Atr: 14.2m,
+            Adr: 18.0m,
             Ma20: basePrice,
+            Ma20H4: basePrice - 6.5m,
+            Ma20H1: basePrice - 2.6m,
+            Ma20M30: basePrice - 1.1m,
+            RsiH1: 52m,
+            RsiM15: 49m,
+            AtrH1: 14.2m,
+            AtrM15: 5.8m,
+            PreviousDayHigh: basePrice + 16m,
+            PreviousDayLow: basePrice - 14m,
+            SessionHigh: basePrice + 7m,
+            SessionLow: basePrice - 6m,
             Session: DetermineSession(now),
             Timestamp: now,
             VolatilityExpansion: 0.79m,
@@ -145,6 +155,18 @@ public sealed class MarketSnapshotPollingService : BackgroundService
             Mt5ServerTime: mt5ServerTime,
             KsaTime: ksaTime,
             Mt5ToKsaOffsetMinutes: 50,
+            TelegramImpactTag: "LOW",
+            TradingViewConfirmation: "NEUTRAL",
+            IsCompression: true,
+            IsExpansion: false,
+            IsAtrExpanding: false,
+            HasOverlapCandles: true,
+            HasImpulseCandles: false,
+            HasLiquiditySweep: false,
+            HasPanicDropSequence: false,
+            IsPostSpikePullback: false,
+            IsLondonNyOverlap: false,
+            IsBreakoutConfirmed: false,
             IsUsRiskWindow: now.Hour is >= 12 and < 17,
             IsFriday: mt5ServerTime.DayOfWeek == DayOfWeek.Friday);
     }

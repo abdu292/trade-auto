@@ -64,6 +64,17 @@ public static class Mt5Endpoints
                     Atr: request.Atr,
                     Adr: request.Adr,
                     Ma20: request.Ma20,
+                    Ma20H4: request.Ma20H4 ?? request.Ma20,
+                    Ma20H1: request.Ma20H1 ?? request.Ma20,
+                    Ma20M30: request.Ma20M30 ?? request.Ma20,
+                    RsiH1: request.RsiH1 ?? 0m,
+                    RsiM15: request.RsiM15 ?? 0m,
+                    AtrH1: request.AtrH1 ?? request.Atr,
+                    AtrM15: request.AtrM15 ?? request.Atr,
+                    PreviousDayHigh: request.PreviousDayHigh ?? 0m,
+                    PreviousDayLow: request.PreviousDayLow ?? 0m,
+                    SessionHigh: request.SessionHigh ?? 0m,
+                    SessionLow: request.SessionLow ?? 0m,
                     Session: request.Session,
                     Timestamp: request.Timestamp,
                     VolatilityExpansion: volatilityExpansion,
@@ -71,6 +82,18 @@ public static class Mt5Endpoints
                     Mt5ServerTime: mt5ServerTime,
                     KsaTime: ksaTime,
                     Mt5ToKsaOffsetMinutes: request.Mt5ToKsaOffsetMinutes ?? 50,
+                    TelegramImpactTag: NormalizeImpactTag(request.TelegramImpactTag),
+                    TradingViewConfirmation: NormalizeConfirmationTag(request.TradingViewConfirmation),
+                    IsCompression: request.IsCompression ?? false,
+                    IsExpansion: request.IsExpansion ?? false,
+                    IsAtrExpanding: request.IsAtrExpanding ?? false,
+                    HasOverlapCandles: request.HasOverlapCandles ?? false,
+                    HasImpulseCandles: request.HasImpulseCandles ?? false,
+                    HasLiquiditySweep: request.HasLiquiditySweep ?? false,
+                    HasPanicDropSequence: request.HasPanicDropSequence ?? false,
+                    IsPostSpikePullback: request.IsPostSpikePullback ?? false,
+                    IsLondonNyOverlap: request.IsLondonNyOverlap ?? false,
+                    IsBreakoutConfirmed: request.IsBreakoutConfirmed ?? false,
                     IsUsRiskWindow: request.IsUsRiskWindow ?? false,
                     IsFriday: mt5ServerTime.DayOfWeek == DayOfWeek.Friday);
 
@@ -187,6 +210,28 @@ public static class Mt5Endpoints
 
         return app;
     }
+
+    private static string NormalizeImpactTag(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "HIGH" => "HIGH",
+            "MODERATE" => "MODERATE",
+            _ => "LOW",
+        };
+    }
+
+    private static string NormalizeConfirmationTag(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "CONFIRM" => "CONFIRM",
+            "CONTRADICT" => "CONTRADICT",
+            _ => "NEUTRAL",
+        };
+    }
 }
 
 public sealed record Mt5TradeStatusRequest(
@@ -202,11 +247,34 @@ public sealed record Mt5MarketSnapshotRequest(
     decimal Atr,
     decimal Adr,
     decimal Ma20,
+    decimal? Ma20H4,
+    decimal? Ma20H1,
+    decimal? Ma20M30,
+    decimal? RsiH1,
+    decimal? RsiM15,
+    decimal? AtrH1,
+    decimal? AtrM15,
+    decimal? PreviousDayHigh,
+    decimal? PreviousDayLow,
+    decimal? SessionHigh,
+    decimal? SessionLow,
     string Session,
     DateTimeOffset Timestamp,
     decimal? VolatilityExpansion,
     DateTimeOffset? Mt5ServerTime,
     int? Mt5ToKsaOffsetMinutes,
+    string? TelegramImpactTag,
+    string? TradingViewConfirmation,
+    bool? IsCompression,
+    bool? IsExpansion,
+    bool? IsAtrExpanding,
+    bool? HasOverlapCandles,
+    bool? HasImpulseCandles,
+    bool? HasLiquiditySweep,
+    bool? HasPanicDropSequence,
+    bool? IsPostSpikePullback,
+    bool? IsLondonNyOverlap,
+    bool? IsBreakoutConfirmed,
     bool? IsUsRiskWindow);
 
 public sealed record Mt5TimeframeDataRequest(

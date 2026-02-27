@@ -38,6 +38,7 @@ public static class TradingViewEndpoints
                     Symbol: (request.Symbol ?? "XAUUSD").Trim().ToUpperInvariant(),
                     Timeframe: (request.Timeframe ?? "M15").Trim().ToUpperInvariant(),
                     Signal: (request.Signal ?? "NEUTRAL").Trim().ToUpperInvariant(),
+                    ConfirmationTag: NormalizeConfirmationTag(request.ConfirmationTag),
                     Bias: NormalizeBias(request.Bias),
                     RiskTag: NormalizeRiskTag(request.RiskTag),
                     Score: Math.Clamp(request.Score ?? 0.5m, 0m, 1m),
@@ -100,6 +101,17 @@ public static class TradingViewEndpoints
             _ => "NEUTRAL",
         };
     }
+
+    private static string NormalizeConfirmationTag(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "CONFIRM" => "CONFIRM",
+            "CONTRADICT" => "CONTRADICT",
+            _ => "NEUTRAL",
+        };
+    }
 }
 
 public sealed record TradingViewWebhookRequest(
@@ -107,6 +119,7 @@ public sealed record TradingViewWebhookRequest(
     string? Symbol,
     string? Timeframe,
     string? Signal,
+    string? ConfirmationTag,
     string? Bias,
     string? RiskTag,
     decimal? Score,
