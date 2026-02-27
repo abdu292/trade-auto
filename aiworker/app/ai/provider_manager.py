@@ -3,6 +3,7 @@ from typing import Optional, Dict, List, Tuple
 import asyncio
 from app.ai.providers.base_provider import AIProvider, TradeSignal, AIProviderConfig
 from app.ai.providers.openai_provider import OpenAIProvider
+from app.ai.providers.openrouter_provider import OpenRouterProvider
 from app.ai.providers.grok_provider import GrokProvider
 from app.ai.providers.perplexity_provider import PerplexityProvider
 from app.ai.providers.gemini_provider import GeminiProvider
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 class AIProviderManager:
     _provider_registry = {
         "openai": OpenAIProvider,
+        "openrouter": OpenRouterProvider,
         "grok": GrokProvider,
         "perplexity": PerplexityProvider,
         "gemini": GeminiProvider,

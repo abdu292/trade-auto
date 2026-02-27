@@ -1,14 +1,14 @@
 # AI Worker
 
-FastAPI service providing multi-AI provider committee consensus for trading signal validation.
+FastAPI service providing deterministic XAUUSD signal orchestration for the Brain backend.
 
 ## Features
 
-- ✅ **Committee Consensus**: Parallel voting across multiple AI models
-- ✅ **4 Providers**: OpenAI, Grok (xAI), Perplexity, Gemini (Google)
-- ✅ **Extensible Registry**: Add providers with config only, zero architecture changes
+- ✅ **Universal One-Key Mode (default)** via OpenRouter
+- ✅ **Optional Multi-Provider Mode** (OpenAI/Grok/Perplexity/Gemini)
+- ✅ **Committee Consensus** with configurable agreement threshold
 - ✅ **Configurable Thresholds**: Min agreement count, entry tolerance percentage
-- ✅ **Production Ready**: Used by Brain API for real MT5 market snapshot analysis
+- ✅ **Production Use**: Called by Brain API for market snapshot analysis
 
 ## Run
 
@@ -18,10 +18,9 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # Create .env with API keys (see AI_INTEGRATION_GUIDE.md)
-# OPENAI_API_KEY=sk-proj-...
-# GROK_API_KEY=...
-# PERPLEXITY_API_KEY=...
-# GEMINI_API_KEY=...
+# AI_PROVIDER_MODE=universal
+# OPENROUTER_API_KEY=...
+# OPENROUTER_MODELS=openai/gpt-4.1-mini,google/gemini-2.0-flash
 # TELEGRAM_BOT_TOKEN=...
 # TELEGRAM_CHANNELS=@channel_one,@channel_two,-1001234567890
 
@@ -56,19 +55,15 @@ Invoke-RestMethod -Uri "http://localhost:8001/analyze" `
 	-ContentType "application/json"
 ```
 
-## Documentation
-
-- [AI Integration Guide](AI_INTEGRATION_GUIDE.md) — Detailed setup and configuration
-- [AI Integration Summary](../AI_INTEGRATION_SUMMARY.md) — Quick reference
-
 ## Configuration
 
-See [AI_INTEGRATION_GUIDE.md](AI_INTEGRATION_GUIDE.md) for full setup instructions.
-
 **Key environment variables:**
+- `AI_PROVIDER_MODE`: `universal` (recommended) or `multi`
+- `OPENROUTER_API_KEY`: single-key universal gateway
+- `OPENROUTER_MODELS`: comma-separated models used with universal mode
 - `AI_STRATEGY`: `committee` (production) or `single` (dev)
 - `CONSENSUS_MIN_AGREEMENT`: Minimum models that must agree (default: 2)
 - `CONSENSUS_ENTRY_TOLERANCE_PCT`: Entry price tolerance (default: 0.003 = 0.3%)
-- `OPENAI_MODELS`, `GROK_MODELS`, `PERPLEXITY_MODELS`, `GEMINI_MODELS`: Comma-separated model names
+- `OPENAI_MODELS`, `GROK_MODELS`, `PERPLEXITY_MODELS`, `GEMINI_MODELS`: Used only in `multi` mode
 - `TELEGRAM_CHANNELS`: Comma-separated list of channels/IDs, flexible for adding more later
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_LOOKBACK_MINUTES`, `TELEGRAM_*_KEYWORDS`: Telegram news ingestion and risk tagging

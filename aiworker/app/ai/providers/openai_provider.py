@@ -68,7 +68,7 @@ class OpenAIProvider(AIProvider):
                 return None
             
             return TradeSignal(
-                rail=data.get("rail", "C"),
+                rail=data.get("rail", "BUY_LIMIT"),
                 entry=float(data["entry"]),
                 tp=float(data["tp"]),
                 sl=float(data["sl"]),

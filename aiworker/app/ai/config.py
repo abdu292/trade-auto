@@ -11,6 +11,11 @@ def _read_openai_models() -> List[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _read_openrouter_models() -> List[str]:
+    raw = os.getenv("OPENROUTER_MODELS", "openai/gpt-4.1-mini,google/gemini-2.0-flash")
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 def _read_csv_env(name: str, default: str = "") -> List[str]:
     raw = os.getenv(name, default)
     items = [item.strip() for item in raw.split(",") if item.strip()]
@@ -25,6 +30,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+AI_PROVIDER_MODE = os.getenv("AI_PROVIDER_MODE", "universal").lower()
 
 # committee|single
 AI_STRATEGY = os.getenv("AI_STRATEGY", "committee").lower()
@@ -59,6 +66,21 @@ TELEGRAM_BEARISH_KEYWORDS = _read_csv_env(
 
 def build_analyzers() -> List[AIProviderConfig]:
     analyzers: List[AIProviderConfig] = []
+
+    if AI_PROVIDER_MODE == "universal" and OPENROUTER_API_KEY:
+        for model in _read_openrouter_models():
+            analyzers.append(
+                AIProviderConfig(
+                    name=f"openrouter:{model}",
+                    provider="openrouter",
+                    api_key=OPENROUTER_API_KEY,
+                    model=model,
+                    temperature=0.2,
+                    max_tokens=450,
+                    timeout=20,
+                )
+            )
+        return analyzers
 
     if OPENAI_API_KEY:
         for model in _read_openai_models():
