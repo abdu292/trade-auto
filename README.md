@@ -2,10 +2,7 @@
 
 Monorepo for a multi-project automation platform:
 
-- `brain` - .NET 10 Clean Architecture backend
-- `aiworker` - FastAPI AI analysis service
-- `ui` - Flutter app (Riverpod + Dio)
-- `mt5ea` - MQL5 Expert Advisor skeleton
+	- `aiworker` - FastAPI multi-AI committee consensus service (OpenAI, Grok, Perplexity, Gemini)
 
 See each project README for run instructions.
 
@@ -19,7 +16,13 @@ See each project README for run instructions.
 ## Local Quick Start
 
 1. Run `brain` backend.
-2. Run `aiworker` on port `8000`.
+2. Run `aiworker` on port `8001` (see [AI Integration Guide](aiworker/AI_INTEGRATION_GUIDE.md) for API keys setup).
 3. Run Flutter UI with `--dart-define=BRAIN_API_BASE_URL=http://localhost:5000/api`.
 4. Point MT5 EA `BrainBaseUrl` to backend host.
+
+## Documentation
+
+- **AI Integration**: [AI_INTEGRATION_GUIDE.md](aiworker/AI_INTEGRATION_GUIDE.md) — Committee consensus setup
+- **Quick Reference**: [AI_INTEGRATION_SUMMARY.md](AI_INTEGRATION_SUMMARY.md) — Provider details and API reference
+- **Local Setup**: [LOCAL_INTEGRATION_SETUP.md](LOCAL_INTEGRATION_SETUP.md) — Full stack setup guide
 

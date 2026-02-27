@@ -47,7 +47,14 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 adr = snapshot.Adr,
                 ma20 = snapshot.Ma20,
                 session = snapshot.Session,
-                timestamp = snapshot.Timestamp
+                timestamp = snapshot.Timestamp,
+                volatilityExpansion = snapshot.VolatilityExpansion,
+                dayOfWeek = snapshot.DayOfWeek.ToString(),
+                mt5ServerTime = snapshot.Mt5ServerTime,
+                ksaTime = snapshot.KsaTime,
+                mt5ToKsaOffsetMinutes = snapshot.Mt5ToKsaOffsetMinutes,
+                isUsRiskWindow = snapshot.IsUsRiskWindow,
+                isFriday = snapshot.IsFriday,
             };
 
             var jsonContent = new StringContent(
@@ -77,7 +84,12 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 Tp: Convert.ToDecimal(result.Tp),
                 Pe: result.Pe,
                 Ml: result.Ml,
-                Confidence: Convert.ToDecimal(result.Confidence));
+                Confidence: Convert.ToDecimal(result.Confidence),
+                SafetyTag: result.SafetyTag ?? "CAUTION",
+                DirectionBias: result.DirectionBias ?? "BULLISH",
+                AlignmentScore: Convert.ToDecimal(result.AlignmentScore ?? result.Confidence),
+                NewsTags: result.NewsTags ?? ["unknown_news_state"],
+                Summary: result.Summary ?? "No AI summary provided.");
 
             _logger.LogInformation(
                 "← [AIWorker] Analysis complete: {Signal} (confidence={Confidence})",
@@ -109,5 +121,10 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         double Tp,
         DateTimeOffset Pe,
         int Ml,
-        double Confidence);
+        double Confidence,
+        string? SafetyTag,
+        string? DirectionBias,
+        double? AlignmentScore,
+        IReadOnlyCollection<string>? NewsTags,
+        string? Summary);
 }

@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 from dataclasses import dataclass
-import json
 
 @dataclass
 class AIProviderConfig:
     """Configuration for each AI provider"""
     name: str
+    provider: str
     api_key: str
     model: str
     temperature: float = 0.7
@@ -17,7 +17,7 @@ class AIProviderConfig:
 @dataclass
 class TradeSignal:
     """Structured trade signal output"""
-    rail: str  # A, B, C
+    rail: str  # BUY_LIMIT / BUY_STOP
     entry: float
     tp: float  # Take Profit
     sl: float  # Stop Loss
@@ -65,14 +65,14 @@ class AIProvider(ABC):
     
     def _build_system_prompt(self) -> str:
         """Common system prompt for all providers"""
-        return """You are a professional forex trading AI. Analyze the market data and provide trade recommendations.
+        return """You are a gold (XAUUSD) trading AI. Analyze the market data and provide a buy-first pending recommendation.
 
 IMPORTANT: Always respond with ONLY valid JSON in this exact format:
 {
-  "rail": "A" or "B" or "C",
+    "rail": "BUY_LIMIT" or "BUY_STOP",
   "entry": <price>,
   "tp": <price>,
-  "sl": <price>,
+    "sl": 0,
   "pe": "HH:MM",
   "ml": "HH:MM",
   "confidence": <0.0-1.0>,
@@ -80,13 +80,12 @@ IMPORTANT: Always respond with ONLY valid JSON in this exact format:
 }
 
 Rules:
-- rail "A" = High confidence (> 0.8)
-- rail "B" = Medium confidence (0.5-0.8)
-- rail "C" = Low confidence (< 0.5)
+- Symbol is XAUUSD only.
+- Buy-first only. Never output sell-first logic.
+- No hedging and no market execution.
+- No stop-loss logic, keep sl=0.
 - pe (pending expiry) = when to cancel if not triggered
 - ml (max life) = max hold time for the trade
-- TP should be 1.5x to 2x the risk
-- SL should protect capital (usually 2-3% of entry)
 - If no good setup, respond with: {"signal": null}
 
 DO NOT add any explanation outside the JSON."""

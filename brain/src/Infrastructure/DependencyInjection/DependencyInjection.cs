@@ -25,15 +25,19 @@ public static class DependencyInjection
             .SetHandlerLifetime(TimeSpan.FromMinutes(5));
         
         services.AddScoped<IAIWorkerClient>(provider => provider.GetRequiredService<HttpAIWorkerClient>());
+        services.AddSingleton<ILatestMarketSnapshotStore, InMemoryLatestMarketSnapshotStore>();
+        services.AddSingleton<IPendingTradeStore, InMemoryPendingTradeStore>();
+        services.AddSingleton<ITradingViewSignalStore, InMemoryTradingViewSignalStore>();
+        services.AddSingleton<INotificationFeedStore, InMemoryNotificationFeedStore>();
+        services.AddSingleton<ITradeLedgerService, InMemoryTradeLedgerService>();
         services.AddScoped<IMt5BridgeClient, MockMt5BridgeClient>();
         services.AddScoped<INotificationService, MockNotificationService>();
-        services.AddScoped<IMarketDataProvider, MockMarketDataProvider>();
+        services.AddScoped<IMarketDataProvider, Mt5MarketDataProvider>();
         services.AddScoped<IWhatsAppService, MockWhatsAppService>();
         services.AddScoped<ICalendarService, MockCalendarService>();
 
         services.AddHostedService<SessionSchedulerBackgroundService>();
         services.AddHostedService<SignalPollingBackgroundService>();
-        services.AddHostedService<MarketSnapshotPollingService>();
 
         return services;
     }

@@ -9,6 +9,10 @@ struct TradeCommand
     double tp;
     datetime expiry;
     int ml;
+    double grams;
+    double alignmentScore;
+    string regime;
+    string riskTag;
 };
 
 #endif

@@ -1,3 +1,5 @@
+using Brain.Application.Common.Interfaces;
+using Brain.Application.Common.Models;
 using Brain.Web.Filters;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -14,29 +16,87 @@ public static class Mt5Endpoints
 
         mt5Group.MapGet(
             "/pending-trades",
-            (ILogger<object> logger) =>
+            IResult (IPendingTradeStore pendingTradeStore, ILogger<object> logger) =>
             {
                 logger.LogInformation("→ GET /mt5/pending-trades");
-                var response = new
+
+                if (!pendingTradeStore.TryDequeue(out var trade) || trade is null)
                 {
-                    id = Guid.NewGuid(),
-                    type = "BUY_LIMIT",
-                    symbol = "EURUSD",
-                    price = 1.10250m,
-                    tp = 1.10400m,
-                    expiry = DateTimeOffset.UtcNow.AddMinutes(20),
-                    ml = 3600
-                };
-                logger.LogInformation("← GET /mt5/pending-trades returns trade {Type} @ {Price}", 
-                    response.type, response.price);
-                return TypedResults.Ok(response);
+                    logger.LogInformation("← GET /mt5/pending-trades no pending trades");
+                    return TypedResults.NoContent();
+                }
+
+                logger.LogInformation("← GET /mt5/pending-trades returns {TradeId} {Type} @ {Price}",
+                    trade.Id, trade.Type, trade.Price);
+
+                return TypedResults.Ok(new
+                {
+                    id = trade.Id,
+                    type = trade.Type,
+                    symbol = trade.Symbol,
+                    price = trade.Price,
+                    tp = trade.Tp,
+                    expiry = trade.Expiry,
+                    ml = trade.Ml,
+                    grams = trade.Grams,
+                    alignmentScore = trade.AlignmentScore,
+                    regime = trade.Regime,
+                    riskTag = trade.RiskTag,
+                });
             })
             .WithName("GetPendingTrades")
             .WithDescription("Fetch pending trade orders for MT5 Expert Advisor");
 
         mt5Group.MapPost(
+            "/market-snapshot",
+            (Mt5MarketSnapshotRequest request, ILatestMarketSnapshotStore snapshotStore, ILogger<object> logger) =>
+            {
+                var mt5ServerTime = request.Mt5ServerTime ?? request.Timestamp;
+                var ksaTime = mt5ServerTime.AddMinutes(request.Mt5ToKsaOffsetMinutes ?? 50);
+                var volatilityExpansion = request.VolatilityExpansion ?? (request.Adr <= 0 ? 0 : request.Atr / request.Adr);
+
+                var timeframeData = request.TimeframeData.Select(tf =>
+                    new TimeframeDataContract(tf.Timeframe, tf.Open, tf.High, tf.Low, tf.Close)).ToArray();
+
+                var snapshot = new MarketSnapshotContract(
+                    Symbol: request.Symbol,
+                    TimeframeData: timeframeData,
+                    Atr: request.Atr,
+                    Adr: request.Adr,
+                    Ma20: request.Ma20,
+                    Session: request.Session,
+                    Timestamp: request.Timestamp,
+                    VolatilityExpansion: volatilityExpansion,
+                    DayOfWeek: mt5ServerTime.DayOfWeek,
+                    Mt5ServerTime: mt5ServerTime,
+                    KsaTime: ksaTime,
+                    Mt5ToKsaOffsetMinutes: request.Mt5ToKsaOffsetMinutes ?? 50,
+                    IsUsRiskWindow: request.IsUsRiskWindow ?? false,
+                    IsFriday: mt5ServerTime.DayOfWeek == DayOfWeek.Friday);
+
+                snapshotStore.Upsert(snapshot);
+                logger.LogInformation(
+                    "→ POST /mt5/market-snapshot stored {Symbol} snapshot ({TimeframeCount} TFs, regimeVol={VolatilityExpansion:0.00}, mt5={Mt5Time}, ksa={KsaTime})",
+                    request.Symbol,
+                    timeframeData.Length,
+                    volatilityExpansion,
+                    mt5ServerTime,
+                    ksaTime);
+
+                return TypedResults.Ok(new { received = true });
+            })
+            .WithName("PostMarketSnapshot")
+            .WithDescription("Expert Advisor posts latest market snapshot for AI analysis");
+
+        mt5Group.MapPost(
             "/trade-status",
-            async Task<IResult> (HttpRequest httpRequest, ILogger<object> logger, CancellationToken cancellationToken) =>
+            async Task<IResult> (
+                HttpRequest httpRequest,
+                ILogger<object> logger,
+                ITradeLedgerService ledger,
+                IWhatsAppService whatsApp,
+                INotificationService notification,
+                CancellationToken cancellationToken) =>
             {
                 using var reader = new StreamReader(httpRequest.Body);
                 var rawBody = await reader.ReadToEndAsync(cancellationToken);
@@ -63,6 +123,61 @@ public static class Mt5Endpoints
                 logger.LogInformation(
                     "→ POST /mt5/trade-status: TradeId={TradeId}, Status={Status}",
                     request.TradeId, request.Status);
+
+                var normalizedStatus = request.Status.Trim().ToUpperInvariant();
+                var mt5Time = request.Mt5Time ?? DateTimeOffset.UtcNow;
+                if (!Guid.TryParse(request.TradeId, out var tradeId))
+                {
+                    return TypedResults.BadRequest(new { error = "Invalid tradeId" });
+                }
+
+                if (normalizedStatus is "BUY_TRIGGERED" or "BUY_FILLED" or "FILLED_BUY")
+                {
+                    var buySlip = ledger.ApplyBuyFill(
+                        tradeId,
+                        request.Grams ?? 0m,
+                        request.Mt5Price ?? 0m,
+                        mt5Time);
+
+                    await whatsApp.SendMessageAsync("ops-whatsapp", buySlip.Message, cancellationToken);
+                    await notification.NotifyAsync("BUY SLIP", buySlip.Message, cancellationToken);
+
+                    return TypedResults.Ok(new
+                    {
+                        received = true,
+                        slip = buySlip,
+                        ledger = ledger.GetState(),
+                    });
+                }
+
+                if (normalizedStatus is "TP_HIT" or "TP_FILLED" or "SELL_TP_FILLED")
+                {
+                    var sellSlip = ledger.ApplySellFill(
+                        tradeId,
+                        request.Mt5Price ?? 0m,
+                        mt5Time);
+
+                    if (sellSlip is null)
+                    {
+                        return TypedResults.Ok(new
+                        {
+                            received = true,
+                            duplicateIgnored = true,
+                            ledger = ledger.GetState(),
+                        });
+                    }
+
+                    await whatsApp.SendMessageAsync("ops-whatsapp", sellSlip.Message, cancellationToken);
+                    await notification.NotifyAsync("SELL SLIP", sellSlip.Message, cancellationToken);
+
+                    return TypedResults.Ok(new
+                    {
+                        received = true,
+                        slip = sellSlip,
+                        ledger = ledger.GetState(),
+                    });
+                }
+
                 logger.LogInformation(
                     "← /mt5/trade-status: Status callback processed");
                 return TypedResults.Ok(new { received = true });
@@ -74,4 +189,29 @@ public static class Mt5Endpoints
     }
 }
 
-public sealed record Mt5TradeStatusRequest(string TradeId, string Status);
+public sealed record Mt5TradeStatusRequest(
+    string TradeId,
+    string Status,
+    decimal? Mt5Price,
+    decimal? Grams,
+    DateTimeOffset? Mt5Time,
+    long? Ticket);
+public sealed record Mt5MarketSnapshotRequest(
+    string Symbol,
+    IReadOnlyCollection<Mt5TimeframeDataRequest> TimeframeData,
+    decimal Atr,
+    decimal Adr,
+    decimal Ma20,
+    string Session,
+    DateTimeOffset Timestamp,
+    decimal? VolatilityExpansion,
+    DateTimeOffset? Mt5ServerTime,
+    int? Mt5ToKsaOffsetMinutes,
+    bool? IsUsRiskWindow);
+
+public sealed record Mt5TimeframeDataRequest(
+    string Timeframe,
+    decimal Open,
+    decimal High,
+    decimal Low,
+    decimal Close);

@@ -13,7 +13,12 @@ public sealed class MockAIWorkerClient : IAIWorkerClient
             Tp: snapshot.Ma20 + (snapshot.Atr * 1.5m),
             Pe: DateTimeOffset.UtcNow.AddMinutes(20),
             Ml: 3600,
-            Confidence: 0.74m);
+            Confidence: 0.74m,
+            SafetyTag: "SAFE",
+            DirectionBias: "BULLISH",
+            AlignmentScore: 0.76m,
+            NewsTags: ["no_high_impact_news"],
+            Summary: "Mock AI alignment supports buy-first accumulation.");
 
         return Task.FromResult(result);
     }

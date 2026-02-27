@@ -30,8 +30,7 @@ async def analyze(snapshot: MarketSnapshot) -> TradeSignal:
         - reasoning: Why this signal
     """
     try:
-        # Initialize with configured AI providers (fallback by default)
-        analyzer = AnalyzerService(use_consensus=False)
+        analyzer = AnalyzerService()
         signal = await analyzer.analyze(snapshot)
         logger.info(f"✓ Signal generated for {snapshot.symbol}: {signal.rail} @ {signal.entry}")
         return signal

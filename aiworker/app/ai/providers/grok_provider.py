@@ -65,7 +65,7 @@ class GrokProvider(AIProvider):
             json_str = response[json_start:json_end]
             data = json.loads(json_str)
             
-            if data.get("signal") is None:
+            if "signal" in data and data.get("signal") is None:
                 logger.info("Grok returned no signal")
                 return None
             
@@ -75,7 +75,7 @@ class GrokProvider(AIProvider):
                 tp=float(data["tp"]),
                 sl=float(data["sl"]),
                 pe=data.get("pe", "00:30"),
-                ml=data.get("ml", "02:00"),
+                ml=str(data.get("ml", "02:00")),
                 confidence=float(data.get("confidence", 0.5)),
                 reasoning=data.get("reasoning", "")
             )

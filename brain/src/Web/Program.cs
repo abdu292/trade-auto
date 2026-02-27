@@ -43,7 +43,9 @@ app.MapGroup("/api")
 	.MapStrategyEndpoints()
 	.MapRiskEndpoints()
 	.MapSessionEndpoints()
-	.MapSignalsEndpoints();
+	.MapSignalsEndpoints()
+	.MapTradingViewEndpoints()
+	.MapMonitoringEndpoints();
 
 app.MapMt5Endpoints();
 

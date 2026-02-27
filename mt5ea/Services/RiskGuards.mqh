@@ -14,6 +14,12 @@ public:
         if (command.ml <= 0)
             return false;
 
+        if (command.grams <= 0)
+            return false;
+
+        if (!(command.type == "BUY_LIMIT" || command.type == "BUY_STOP"))
+            return false;
+
         return true;
     }
 };

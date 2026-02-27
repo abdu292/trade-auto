@@ -98,6 +98,24 @@ public sealed class MarketSnapshotPollingService : BackgroundService
         var timeframeData = new[]
         {
             new TimeframeDataContract(
+                Timeframe: "M5",
+                Open: basePrice - 0.0002m,
+                High: closePrice + 0.0004m,
+                Low: closePrice - 0.0005m,
+                Close: closePrice),
+            new TimeframeDataContract(
+                Timeframe: "M15",
+                Open: basePrice - 0.0003m,
+                High: closePrice + 0.0005m,
+                Low: closePrice - 0.0005m,
+                Close: closePrice),
+            new TimeframeDataContract(
+                Timeframe: "M30",
+                Open: basePrice - 0.0004m,
+                High: closePrice + 0.0006m,
+                Low: closePrice - 0.0006m,
+                Close: closePrice),
+            new TimeframeDataContract(
                 Timeframe: "H1",
                 Open: basePrice - 0.0005m,
                 High: closePrice + 0.0008m,
@@ -111,14 +129,24 @@ public sealed class MarketSnapshotPollingService : BackgroundService
                 Close: closePrice)
         };
 
+        var mt5ServerTime = now;
+        var ksaTime = mt5ServerTime.AddMinutes(50);
+
         return new MarketSnapshotContract(
-            Symbol: "EURUSD",
+            Symbol: "XAUUSD",
             TimeframeData: timeframeData,
             Atr: 0.00095m,
             Adr: 0.0012m,
             Ma20: basePrice,
             Session: DetermineSession(now),
-            Timestamp: now);
+            Timestamp: now,
+            VolatilityExpansion: 0.79m,
+            DayOfWeek: mt5ServerTime.DayOfWeek,
+            Mt5ServerTime: mt5ServerTime,
+            KsaTime: ksaTime,
+            Mt5ToKsaOffsetMinutes: 50,
+            IsUsRiskWindow: now.Hour is >= 12 and < 17,
+            IsFriday: mt5ServerTime.DayOfWeek == DayOfWeek.Friday);
     }
 
     /// <summary>

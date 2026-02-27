@@ -18,6 +18,13 @@ class MarketSnapshot(BaseModel):
     ma20: float
     session: str
     timestamp: datetime
+    volatilityExpansion: float | None = None
+    dayOfWeek: str | None = None
+    mt5ServerTime: datetime | None = None
+    ksaTime: datetime | None = None
+    mt5ToKsaOffsetMinutes: int = 50
+    isUsRiskWindow: bool = False
+    isFriday: bool = False
 
 
 class TradeSignal(BaseModel):
@@ -27,3 +34,8 @@ class TradeSignal(BaseModel):
     pe: datetime
     ml: int
     confidence: float
+    safetyTag: str = "CAUTION"
+    directionBias: str = "BULLISH"
+    alignmentScore: float = 0.5
+    newsTags: list[str] = []
+    summary: str = ""
