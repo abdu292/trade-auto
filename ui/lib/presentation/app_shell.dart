@@ -1,25 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/risk/presentation/risk_control_screen.dart';
 import '../features/sessions/presentation/session_overview_screen.dart';
 import '../features/strategies/presentation/strategy_control_screen.dart';
 import '../features/trades/presentation/trades_screen.dart';
+import 'app_providers.dart';
 
-class AppShell extends StatefulWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   @override
-  State<AppShell> createState() => _AppShellState();
+  ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends ConsumerState<AppShell> {
   int _index = 0;
   bool _isEmergencyPaused = false;
 
   @override
   Widget build(BuildContext context) {
-    final screens = [
+    final screens = <Widget>[
       DashboardScreen(isEmergencyPaused: _isEmergencyPaused),
       const StrategyControlScreen(),
       const RiskControlScreen(),
@@ -27,37 +29,122 @@ class _AppShellState extends State<AppShell> {
       const SessionOverviewScreen(),
     ];
 
+    final destinations = const <NavigationDestination>[
+      NavigationDestination(
+          icon: Icon(Icons.dashboard_outlined),
+          selectedIcon: Icon(Icons.dashboard),
+          label: 'Dashboard'),
+      NavigationDestination(
+          icon: Icon(Icons.tune_outlined),
+          selectedIcon: Icon(Icons.tune),
+          label: 'Strategies'),
+      NavigationDestination(
+          icon: Icon(Icons.shield_outlined),
+          selectedIcon: Icon(Icons.shield),
+          label: 'Risk'),
+      NavigationDestination(
+          icon: Icon(Icons.swap_horiz_outlined),
+          selectedIcon: Icon(Icons.swap_horiz),
+          label: 'Trades'),
+      NavigationDestination(
+          icon: Icon(Icons.schedule_outlined),
+          selectedIcon: Icon(Icons.schedule),
+          label: 'Sessions'),
+    ];
+
+    Future<void> refreshEverything() async {
+      ref
+        ..invalidate(healthProvider)
+        ..invalidate(ledgerProvider)
+        ..invalidate(notificationsProvider)
+        ..invalidate(approvalsProvider)
+        ..invalidate(strategiesProvider)
+        ..invalidate(riskProfilesProvider)
+        ..invalidate(activeTradesProvider)
+        ..invalidate(signalsProvider)
+        ..invalidate(sessionsProvider);
+    }
+
+    final isCompact = MediaQuery.sizeOf(context).width < 900;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Trade Auto'),
         actions: [
+          IconButton(
+            onPressed: refreshEverything,
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: FilledButton(
-              onPressed: () => setState(() => _isEmergencyPaused = !_isEmergencyPaused),
+              onPressed: () =>
+                  setState(() => _isEmergencyPaused = !_isEmergencyPaused),
               child: Text(_isEmergencyPaused ? 'Resume' : 'Emergency Pause'),
             ),
           ),
         ],
       ),
-      body: Row(
+      body: Column(
         children: [
-          NavigationRail(
-            selectedIndex: _index,
-            onDestinationSelected: (value) => setState(() => _index = value),
-            labelType: NavigationRailLabelType.all,
-            destinations: const [
-              NavigationRailDestination(icon: Icon(Icons.dashboard), label: Text('Dashboard')),
-              NavigationRailDestination(icon: Icon(Icons.tune), label: Text('Strategies')),
-              NavigationRailDestination(icon: Icon(Icons.shield), label: Text('Risk')),
-              NavigationRailDestination(icon: Icon(Icons.swap_horiz), label: Text('Trades')),
-              NavigationRailDestination(icon: Icon(Icons.schedule), label: Text('Sessions')),
-            ],
+          if (_isEmergencyPaused)
+            Material(
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    Icon(Icons.pause_circle_filled),
+                    SizedBox(width: 8),
+                    Expanded(
+                        child: Text(
+                            'Emergency pause enabled: manual actions only.')),
+                  ],
+                ),
+              ),
+            ),
+          Expanded(
+            child: isCompact
+                ? screens[_index]
+                : Row(
+                    children: [
+                      NavigationRail(
+                        selectedIndex: _index,
+                        onDestinationSelected: (value) =>
+                            setState(() => _index = value),
+                        labelType: NavigationRailLabelType.all,
+                        destinations: const [
+                          NavigationRailDestination(
+                              icon: Icon(Icons.dashboard),
+                              label: Text('Dashboard')),
+                          NavigationRailDestination(
+                              icon: Icon(Icons.tune),
+                              label: Text('Strategies')),
+                          NavigationRailDestination(
+                              icon: Icon(Icons.shield), label: Text('Risk')),
+                          NavigationRailDestination(
+                              icon: Icon(Icons.swap_horiz),
+                              label: Text('Trades')),
+                          NavigationRailDestination(
+                              icon: Icon(Icons.schedule),
+                              label: Text('Sessions')),
+                        ],
+                      ),
+                      const VerticalDivider(width: 1),
+                      Expanded(child: screens[_index]),
+                    ],
+                  ),
           ),
-          const VerticalDivider(width: 1),
-          Expanded(child: screens[_index]),
         ],
       ),
+      bottomNavigationBar: isCompact
+          ? NavigationBar(
+              selectedIndex: _index,
+              destinations: destinations,
+              onDestinationSelected: (value) => setState(() => _index = value),
+            )
+          : null,
     );
   }
 }

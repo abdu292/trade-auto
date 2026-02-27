@@ -1,39 +1,109 @@
 import 'package:dio/dio.dart';
 
+import '../domain/models.dart';
+
 class BrainApi {
   const BrainApi(this._dio);
 
   final Dio _dio;
 
-  Future<List<dynamic>> getStrategies() async {
-    final response = await _dio.get('/strategies');
-    return response.data as List<dynamic>;
+  Future<bool> getHealth() async {
+    final response = await _dio.get('/health');
+    return response.statusCode == 200;
   }
 
-  Future<List<dynamic>> getRiskProfiles() async {
-    final response = await _dio.get('/risk/profiles');
-    return response.data as List<dynamic>;
+  Future<List<StrategyProfile>> getStrategies() async {
+    final response = await _dio.get('/api/strategies/');
+    return _asList(response.data).map(StrategyProfile.fromJson).toList();
   }
 
-  Future<List<dynamic>> getTrades() async {
-    final response = await _dio.get('/trades/active');
-    return response.data as List<dynamic>;
+  Future<List<RiskProfile>> getRiskProfiles() async {
+    final response = await _dio.get('/api/risk/profiles');
+    return _asList(response.data).map(RiskProfile.fromJson).toList();
   }
 
-  Future<List<dynamic>> getSessions() async {
-    final response = await _dio.get('/sessions');
-    return response.data as List<dynamic>;
+  Future<List<TradeItem>> getTrades() async {
+    final response = await _dio.get('/api/trades/active');
+    return _asList(response.data).map(TradeItem.fromJson).toList();
+  }
+
+  Future<List<TradeSignal>> getSignals() async {
+    final response = await _dio.get('/api/signals/');
+    return _asList(response.data).map(TradeSignal.fromJson).toList();
+  }
+
+  Future<List<SessionStateItem>> getSessions() async {
+    final response = await _dio.get('/api/sessions/');
+    return _asList(response.data).map(SessionStateItem.fromJson).toList();
+  }
+
+  Future<LedgerState> getLedgerState() async {
+    final response = await _dio.get('/api/monitoring/ledger');
+    return LedgerState.fromJson(_asMap(response.data));
+  }
+
+  Future<List<NotificationFeedItem>> getNotifications({int take = 20}) async {
+    final response = await _dio
+        .get('/api/monitoring/notifications', queryParameters: {'take': take});
+    return _asList(response.data).map(NotificationFeedItem.fromJson).toList();
+  }
+
+  Future<List<PendingApproval>> getApprovals({int take = 20}) async {
+    final response = await _dio
+        .get('/api/monitoring/approvals', queryParameters: {'take': take});
+    return _asList(response.data).map(PendingApproval.fromJson).toList();
+  }
+
+  Future<TradeSignal> analyzeSnapshot(AnalyzeSnapshotInput input) async {
+    final response =
+        await _dio.post('/api/signals/analyze', data: input.toJson());
+    return TradeSignal.fromJson(_asMap(response.data));
   }
 
   Future<void> toggleSession(String session, bool isEnabled) async {
-    await _dio.put('/sessions/toggle', data: {'session': session, 'isEnabled': isEnabled});
+    await _dio.put('/api/sessions/toggle',
+        data: {'session': session, 'isEnabled': isEnabled});
   }
 
   Future<void> activateStrategy(String id) async {
-    await _dio.put('/strategies/$id/activate');
+    await _dio.put('/api/strategies/$id/activate');
   }
 
   Future<void> activateRisk(String id) async {
-    await _dio.put('/risk/profiles/$id/activate');
+    await _dio.put('/api/risk/profiles/$id/activate');
   }
+
+  Future<void> approveTrade(String tradeId) async {
+    await _dio.post('/api/monitoring/approvals/$tradeId/approve');
+  }
+
+  Future<void> rejectTrade(String tradeId) async {
+    await _dio.post('/api/monitoring/approvals/$tradeId/reject');
+  }
+}
+
+Map<String, dynamic> _asMap(dynamic data) {
+  if (data is Map<String, dynamic>) {
+    return data;
+  }
+
+  if (data is Map) {
+    return data.map((key, value) => MapEntry(key.toString(), value));
+  }
+
+  return const <String, dynamic>{};
+}
+
+List<Map<String, dynamic>> _asList(dynamic data) {
+  if (data is! List) {
+    return const [];
+  }
+
+  return data
+      .map((item) => item is Map<String, dynamic>
+          ? item
+          : item is Map
+              ? item.map((key, value) => MapEntry(key.toString(), value))
+              : const <String, dynamic>{})
+      .toList();
 }
