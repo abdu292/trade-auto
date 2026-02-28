@@ -10,6 +10,7 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
     final health = ref.watch(healthProvider);
     final ledger = ref.watch(ledgerProvider);
     final runtime = ref.watch(runtimeStatusProvider);
@@ -26,16 +27,27 @@ class DashboardScreen extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: refresh,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          Card(
+          _AnimatedCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(isEmergencyPaused
-                      ? Icons.pause_circle_filled
-                      : Icons.play_circle_fill),
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: isEmergencyPaused
+                        ? colorScheme.errorContainer
+                        : colorScheme.primaryContainer,
+                    child: Icon(
+                      isEmergencyPaused
+                          ? Icons.pause_circle_filled
+                          : Icons.play_circle_fill,
+                      color: isEmergencyPaused
+                          ? colorScheme.error
+                          : colorScheme.primary,
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -50,7 +62,7 @@ class DashboardScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Card(
+          _AnimatedCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -61,6 +73,9 @@ class DashboardScreen extends ConsumerWidget {
                   const SizedBox(height: 8),
                   health.when(
                     data: (ok) => Chip(
+                      backgroundColor: ok
+                          ? colorScheme.primaryContainer
+                          : colorScheme.errorContainer,
                       avatar: Icon(ok ? Icons.check_circle : Icons.error),
                       label: Text(ok ? 'Backend healthy' : 'Backend unhealthy'),
                     ),
@@ -102,7 +117,7 @@ class DashboardScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Card(
+          _AnimatedCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -138,16 +153,16 @@ class DashboardScreen extends ConsumerWidget {
                               value: state.panicSuspected ? 'YES' : 'NO'),
                           _MetricChip(
                               label: 'TV Alert', value: state.tvAlertType),
-                            _MetricChip(
+                          _MetricChip(
                               label: 'Macro Bias', value: state.macroBias),
-                            _MetricChip(
+                          _MetricChip(
                               label: 'Institutional',
                               value: state.institutionalBias),
-                            _MetricChip(
+                          _MetricChip(
                               label: 'Hazard Active',
                               value:
-                                state.activeBlockedHazardWindows.toString()),
-                            _MetricChip(
+                                  state.activeBlockedHazardWindows.toString()),
+                          _MetricChip(
                               label: 'Macro Age (m)',
                               value: state.macroCacheAgeMinutes.toString()),
                         ],
@@ -161,7 +176,7 @@ class DashboardScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Card(
+          _AnimatedCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -182,7 +197,16 @@ class DashboardScreen extends ConsumerWidget {
                               (item) => ListTile(
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
-                                leading: const Icon(Icons.notifications),
+                                leading: Container(
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.secondaryContainer,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child:
+                                      const Icon(Icons.notifications, size: 18),
+                                ),
                                 title: Text(item.title),
                                 subtitle:
                                     Text('${item.channel} • ${item.message}'),
@@ -214,6 +238,21 @@ class _MetricChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Chip(
       label: Text('$label: $value'),
+    );
+  }
+}
+
+class _AnimatedCard extends StatelessWidget {
+  const _AnimatedCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      child: Card(child: child),
     );
   }
 }

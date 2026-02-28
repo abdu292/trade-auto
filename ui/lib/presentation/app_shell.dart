@@ -19,6 +19,14 @@ class _AppShellState extends ConsumerState<AppShell> {
   int _index = 0;
   bool _isEmergencyPaused = false;
 
+  static const _navigationLabels = [
+    'Dashboard',
+    'Strategies',
+    'Risk',
+    'Trades',
+    'Sessions',
+  ];
+
   @override
   Widget build(BuildContext context) {
     final screens = <Widget>[
@@ -70,7 +78,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Trade Auto'),
+        title: Text(_navigationLabels[_index]),
         actions: [
           IconButton(
             onPressed: refreshEverything,
@@ -89,25 +97,41 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
       body: Column(
         children: [
-          if (_isEmergencyPaused)
-            Material(
-              color: Theme.of(context).colorScheme.errorContainer,
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Row(
-                  children: [
-                    Icon(Icons.pause_circle_filled),
-                    SizedBox(width: 8),
-                    Expanded(
-                        child: Text(
-                            'Emergency pause enabled: manual actions only.')),
-                  ],
-                ),
-              ),
-            ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            child: _isEmergencyPaused
+                ? Material(
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    child: const Padding(
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(Icons.pause_circle_filled),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Emergency pause enabled: manual actions only.',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
           Expanded(
             child: isCompact
-                ? screens[_index]
+                ? AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    child: KeyedSubtree(
+                      key: ValueKey(_index),
+                      child: screens[_index],
+                    ),
+                  )
                 : Row(
                     children: [
                       NavigationRail(
@@ -133,7 +157,17 @@ class _AppShellState extends ConsumerState<AppShell> {
                         ],
                       ),
                       const VerticalDivider(width: 1),
-                      Expanded(child: screens[_index]),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          switchInCurve: Curves.easeOut,
+                          switchOutCurve: Curves.easeIn,
+                          child: KeyedSubtree(
+                            key: ValueKey(_index),
+                            child: screens[_index],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
           ),
