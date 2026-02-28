@@ -4,10 +4,10 @@ FastAPI service providing deterministic XAUUSD signal orchestration for the Brai
 
 ## Features
 
-- ✅ **Universal One-Key Mode (default)** via OpenRouter
-- ✅ **Optional Multi-Provider Mode** (OpenAI/Grok/Perplexity/Gemini)
-- ✅ **Committee Consensus** with configurable agreement threshold
-- ✅ **Configurable Thresholds**: Min agreement count, entry tolerance percentage
+- ✅ **Grok-only live decision engine** (spec-aligned)
+- ✅ **Grok transport selectable**: `openrouter` now, `direct` later
+- ✅ **Single-analyzer deterministic runtime path**
+- ✅ **Telegram context enrichment + consensus tags**
 - ✅ **Production Use**: Called by Brain API for market snapshot analysis
 
 ## Run
@@ -18,9 +18,12 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # Create .env with API keys (see AI_INTEGRATION_GUIDE.md)
-# AI_PROVIDER_MODE=universal
+# GROK_RUNTIME_TRANSPORT=openrouter
 # OPENROUTER_API_KEY=...
-# OPENROUTER_MODELS=openai/gpt-4.1-mini,google/gemini-2.0-flash
+# GROK_OPENROUTER_MODEL=x-ai/grok-2-latest
+# (later optional) GROK_RUNTIME_TRANSPORT=direct
+# (later optional) GROK_API_KEY=...
+# (later optional) GROK_MODEL=grok-2-latest
 # TELEGRAM_BOT_TOKEN=...
 # TELEGRAM_CHANNELS=@channel_one,@channel_two,-1001234567890
 
@@ -58,12 +61,26 @@ Invoke-RestMethod -Uri "http://localhost:8001/analyze" `
 ## Configuration
 
 **Key environment variables:**
-- `AI_PROVIDER_MODE`: `universal` (recommended) or `multi`
-- `OPENROUTER_API_KEY`: single-key universal gateway
-- `OPENROUTER_MODELS`: comma-separated models used with universal mode
-- `AI_STRATEGY`: `committee` (production) or `single` (dev)
-- `CONSENSUS_MIN_AGREEMENT`: Minimum models that must agree (default: 2)
+- `GROK_RUNTIME_TRANSPORT`: `openrouter` (recommended now) or `direct`
+- `OPENROUTER_API_KEY`: required when transport is `openrouter`
+- `GROK_OPENROUTER_MODEL`: must be Grok model id (default `x-ai/grok-2-latest`)
+- `GROK_API_KEY`: required when transport is `direct`
+- `GROK_MODEL`: direct Grok model name (default `grok-2-latest`)
 - `CONSENSUS_ENTRY_TOLERANCE_PCT`: Entry price tolerance (default: 0.003 = 0.3%)
-- `OPENAI_MODELS`, `GROK_MODELS`, `PERPLEXITY_MODELS`, `GEMINI_MODELS`: Used only in `multi` mode
 - `TELEGRAM_CHANNELS`: Comma-separated list of channels/IDs, flexible for adding more later
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_LOOKBACK_MINUTES`, `TELEGRAM_*_KEYWORDS`: Telegram news ingestion and risk tagging
+
+## Spec parity health check
+
+Check:
+
+```powershell
+Invoke-RestMethod http://localhost:8001/health | ConvertTo-Json -Depth 8
+```
+
+Expected:
+- `ai.analyzerCount = 1`
+- `ai.liveDecisionEngine = grok`
+- `ai.transport = openrouter` or `direct`
+- `ai.analyzers[0]` contains `grok`
+- `ai.parityBlockers = []`

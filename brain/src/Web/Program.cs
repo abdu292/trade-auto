@@ -3,6 +3,8 @@ using Brain.Infrastructure.Data;
 using Brain.Infrastructure.DependencyInjection;
 using Brain.Web.Endpoints;
 using Brain.Web.Filters;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -53,6 +55,22 @@ await using (var scope = app.Services.CreateAsyncScope())
 {
 	var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 	await dbContext.Database.EnsureCreatedAsync();
+
+	if (app.Environment.IsDevelopment())
+	{
+		try
+		{
+			_ = await dbContext.HazardWindows.AsNoTracking().Take(1).ToListAsync();
+			_ = await dbContext.TelegramChannels.AsNoTracking().Take(1).ToListAsync();
+			_ = await dbContext.MacroCacheStates.AsNoTracking().Take(1).ToListAsync();
+		}
+		catch (SqlException ex) when (ex.Number == 208)
+		{
+			Log.Warning("Detected outdated development schema. Recreating LocalDB to apply latest model.");
+			await dbContext.Database.EnsureDeletedAsync();
+			await dbContext.Database.EnsureCreatedAsync();
+		}
+	}
 }
 
 Log.Information("🚀 Starting application... Listening on: http://localhost:5000");

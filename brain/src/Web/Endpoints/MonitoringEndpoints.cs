@@ -1,4 +1,6 @@
 using Brain.Application.Common.Interfaces;
+using Brain.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace Brain.Web.Endpoints;
 
@@ -19,6 +21,145 @@ public static class MonitoringEndpoints
             (INotificationFeedStore feedStore, int take = 50) => TypedResults.Ok(feedStore.GetLatest(take)))
             .WithName("GetNotificationFeed")
             .WithDescription("Returns mock outbound notifications (WhatsApp + mobile app feed).");
+
+        monitoring.MapGet(
+            "/runtime",
+            IResult (
+                ILatestMarketSnapshotStore snapshotStore,
+                ITradingViewSignalStore tradingViewStore,
+                IPendingTradeStore pendingTrades,
+                INotificationFeedStore feedStore,
+                IApplicationDbContext db) =>
+            {
+                snapshotStore.TryGet(out var snapshot);
+                tradingViewStore.TryGetLatest(out var tv);
+                var latestNotifications = feedStore.GetLatest(5);
+                var macro = db.MacroCacheStates.AsNoTracking().FirstOrDefault();
+                var now = DateTimeOffset.UtcNow;
+                var activeHazardCount = db.HazardWindows
+                    .AsNoTracking()
+                    .Count(x => x.IsActive && x.IsBlocked && x.StartUtc <= now && x.EndUtc >= now);
+
+                return TypedResults.Ok(new
+                {
+                    symbol = snapshot?.Symbol ?? "XAUUSD",
+                    mt5ServerTime = snapshot?.Mt5ServerTime,
+                    ksaTime = snapshot?.KsaTime,
+                    session = snapshot?.Session ?? "UNKNOWN",
+                    bid = snapshot?.Bid ?? 0m,
+                    ask = snapshot?.Ask ?? 0m,
+                    spread = snapshot?.Spread ?? 0m,
+                    spreadMedian60m = snapshot?.SpreadMedian60m ?? 0m,
+                    spreadMax60m = snapshot?.SpreadMax60m ?? 0m,
+                    telegramState = snapshot?.TelegramState ?? "QUIET",
+                    panicSuspected = snapshot?.PanicSuspected ?? false,
+                    tvAlertType = snapshot?.TvAlertType ?? "NONE",
+                    pendingQueueDepth = pendingTrades.Count(),
+                    macroBias = macro?.MacroBias ?? "UNKNOWN",
+                    institutionalBias = macro?.InstitutionalBias ?? "UNKNOWN",
+                    cbFlowFlag = macro?.CbFlowFlag ?? "UNKNOWN",
+                    positioningFlag = macro?.PositioningFlag ?? "UNKNOWN",
+                    macroCacheAgeMinutes = macro is null ? -1 : (int)Math.Max(0, (DateTimeOffset.UtcNow - macro.LastRefreshedUtc).TotalMinutes),
+                    activeBlockedHazardWindows = activeHazardCount,
+                    tradingView = tv,
+                    latestNotifications,
+                });
+            })
+            .WithName("GetRuntimeStatus")
+            .WithDescription("Returns live runtime telemetry for MT5 demo/live operation monitoring.");
+
+        monitoring.MapGet(
+            "/macro-cache",
+            async Task<IResult> (IApplicationDbContext db, CancellationToken cancellationToken) =>
+            {
+                var cache = await db.MacroCacheStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+                if (cache is null)
+                {
+                    return TypedResults.NotFound(new { message = "Macro cache not initialized." });
+                }
+
+                return TypedResults.Ok(new
+                {
+                    cache.MacroBias,
+                    cache.InstitutionalBias,
+                    cache.CbFlowFlag,
+                    cache.PositioningFlag,
+                    cache.Source,
+                    cache.LastRefreshedUtc,
+                    cacheAgeMinutes = (int)Math.Max(0, (DateTimeOffset.UtcNow - cache.LastRefreshedUtc).TotalMinutes),
+                });
+            })
+            .WithName("GetMacroCache")
+            .WithDescription("Returns current asynchronous macro/institutional cache state.");
+
+        monitoring.MapGet(
+            "/hazard-windows",
+            async Task<IResult> (IApplicationDbContext db, CancellationToken cancellationToken) =>
+            {
+                var windows = await db.HazardWindows
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.StartUtc)
+                    .Take(100)
+                    .ToListAsync(cancellationToken);
+                return TypedResults.Ok(windows);
+            })
+            .WithName("GetHazardWindows")
+            .WithDescription("Returns configured hazard windows used for expiry veto.");
+
+        monitoring.MapPost(
+            "/hazard-windows",
+            async Task<IResult> (CreateHazardWindowRequest request, IApplicationDbContext db, CancellationToken cancellationToken) =>
+            {
+                if (request.EndUtc <= request.StartUtc)
+                {
+                    return TypedResults.BadRequest(new { error = "EndUtc must be after StartUtc." });
+                }
+
+                var window = HazardWindow.Create(
+                    title: request.Title,
+                    category: request.Category,
+                    startUtc: request.StartUtc,
+                    endUtc: request.EndUtc,
+                    isBlocked: request.IsBlocked);
+                db.HazardWindows.Add(window);
+                await db.SaveChangesAsync(cancellationToken);
+                return TypedResults.Ok(window);
+            })
+            .WithName("CreateHazardWindow")
+            .WithDescription("Creates a blocked hazard window for hard expiry veto enforcement.");
+
+        monitoring.MapGet(
+            "/telegram-channels",
+            async Task<IResult> (IApplicationDbContext db, CancellationToken cancellationToken) =>
+            {
+                var channels = await db.TelegramChannels
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.Weight)
+                    .ThenBy(x => x.ChannelKey)
+                    .Take(200)
+                    .ToListAsync(cancellationToken);
+                return TypedResults.Ok(channels);
+            })
+            .WithName("GetTelegramChannels")
+            .WithDescription("Returns persistent telegram channel registry with dynamic weights.");
+
+        monitoring.MapPost(
+            "/telegram-channels/{channelKey}/outcome/{outcome}",
+            async Task<IResult> (string channelKey, string outcome, IApplicationDbContext db, CancellationToken cancellationToken) =>
+            {
+                var key = channelKey.Trim().ToLowerInvariant();
+                var channel = await db.TelegramChannels.FirstOrDefaultAsync(x => x.ChannelKey == key, cancellationToken);
+                if (channel is null)
+                {
+                    return TypedResults.NotFound(new { message = $"Telegram channel '{channelKey}' not found." });
+                }
+
+                channel.ApplyOutcome(outcome);
+                await db.SaveChangesAsync(cancellationToken);
+                return TypedResults.Ok(channel);
+            })
+            .WithName("UpdateTelegramChannelOutcome")
+            .WithDescription("Applies GOOD/HOLD/BAD_CONTEXT outcome learning to channel weight/profile.");
 
         monitoring.MapGet(
             "/approvals",
@@ -59,3 +200,10 @@ public static class MonitoringEndpoints
         return group;
     }
 }
+
+public sealed record CreateHazardWindowRequest(
+    string Title,
+    string Category,
+    DateTimeOffset StartUtc,
+    DateTimeOffset EndUtc,
+    bool IsBlocked = true);

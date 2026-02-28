@@ -22,8 +22,7 @@ See each project README for run instructions.
 
 ## Documentation
 
-- **Essentials**: [docs/ESSENTIALS.md](docs/ESSENTIALS.md)
-- **E2E Local Test**: [docs/E2E_LOCAL_TEST.md](docs/E2E_LOCAL_TEST.md)
+- **Live Demo Test (XAUUSD)**: [docs/LIVE_XAUUSD_DEMO_TEST.md](docs/LIVE_XAUUSD_DEMO_TEST.md)
 - **AI Provider Decision**: [docs/AI_PROVIDER_DECISION.md](docs/AI_PROVIDER_DECISION.md)
 - **Spec (authoritative)**: [spec/spec_v3.md](spec/spec_v3.md)
 - **Implemented SOP**: [spec/SOP_SPEC_V3_IMPLEMENTATION.md](spec/SOP_SPEC_V3_IMPLEMENTATION.md)

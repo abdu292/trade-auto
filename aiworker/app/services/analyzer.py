@@ -18,7 +18,7 @@ class AnalyzerService:
     def __init__(self) -> None:
         if not AI_ANALYZERS:
             raise RuntimeError(
-                "No AI analyzers configured. Set OPENAI_API_KEY and OPENAI_MODELS in aiworker/.env"
+                "No AI analyzers configured. Grok-only runtime requires either OPENROUTER_API_KEY + GROK_OPENROUTER_MODEL(grok) or GROK_API_KEY for direct transport."
             )
         self._manager = AIProviderManager(AI_ANALYZERS)
         self._telegram_news = TelegramNewsService()
@@ -72,6 +72,15 @@ class AnalyzerService:
             "is_breakout_confirmed": snapshot.isBreakoutConfirmed,
             "is_us_risk_window": snapshot.isUsRiskWindow,
             "is_friday": snapshot.isFriday,
+            "spread": snapshot.spread,
+            "spread_median_60m": snapshot.spreadMedian60m,
+            "spread_max_60m": snapshot.spreadMax60m,
+            "compression_count_m15": snapshot.compressionCountM15,
+            "expansion_count_m15": snapshot.expansionCountM15,
+            "impulse_strength_score": snapshot.impulseStrengthScore,
+            "telegram_state": snapshot.telegramState,
+            "panic_suspected": snapshot.panicSuspected,
+            "tv_alert_type": snapshot.tvAlertType,
         }
 
         telegram_news = await self._telegram_news.collect_news_context(snapshot.symbol)
@@ -79,6 +88,11 @@ class AnalyzerService:
             "impact_tag": telegram_news.impact_tag,
             "risk_tag": telegram_news.risk_tag,
             "direction_bias": telegram_news.direction_bias,
+            "telegram_state": telegram_news.telegram_state,
+            "panic_suspected": telegram_news.panic_suspected,
+            "buy_score": telegram_news.buy_score,
+            "sell_score": telegram_news.sell_score,
+            "dominance": telegram_news.dominance,
             "tags": telegram_news.tags,
             "summary": telegram_news.summary,
             "headlines": telegram_news.headlines,

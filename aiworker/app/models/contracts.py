@@ -48,6 +48,17 @@ class MarketSnapshot(BaseModel):
     isBreakoutConfirmed: bool = False
     isUsRiskWindow: bool = False
     isFriday: bool = False
+    bid: float = 0.0
+    ask: float = 0.0
+    spread: float = 0.0
+    spreadMedian60m: float = 0.0
+    spreadMax60m: float = 0.0
+    compressionCountM15: int = 0
+    expansionCountM15: int = 0
+    impulseStrengthScore: float = 0.0
+    telegramState: str = "QUIET"
+    panicSuspected: bool = False
+    tvAlertType: str = "NONE"
 
 
 class TradeSignal(BaseModel):

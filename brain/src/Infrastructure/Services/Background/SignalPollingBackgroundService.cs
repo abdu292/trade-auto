@@ -1,9 +1,13 @@
 using Brain.Application.Common.Interfaces;
 using Brain.Application.Common.Models;
 using Brain.Application.Common.Services;
+using Brain.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Brain.Infrastructure.Services.Background;
 
@@ -11,6 +15,8 @@ public sealed class SignalPollingBackgroundService(
     IServiceScopeFactory scopeFactory,
     ILogger<SignalPollingBackgroundService> logger) : BackgroundService
 {
+    private static DateTimeOffset _lastArmedAtUtc = DateTimeOffset.MinValue;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -18,14 +24,16 @@ public sealed class SignalPollingBackgroundService(
             using var scope = scopeFactory.CreateScope();
             var marketData = scope.ServiceProvider.GetRequiredService<IMarketDataProvider>();
             var aiWorker = scope.ServiceProvider.GetRequiredService<IAIWorkerClient>();
-            var approvals = scope.ServiceProvider.GetRequiredService<ITradeApprovalStore>();
+            var pendingTrades = scope.ServiceProvider.GetRequiredService<IPendingTradeStore>();
             var ledger = scope.ServiceProvider.GetRequiredService<ITradeLedgerService>();
             var tradingViewStore = scope.ServiceProvider.GetRequiredService<ITradingViewSignalStore>();
+            var db = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
 
             try
             {
                 var snapshot = await marketData.GetSnapshotAsync("XAUUSD", stoppingToken);
                 var regime = RegimeRiskClassifier.Classify(snapshot);
+                var forceWhereToTrade = ShouldForceWhereToTrade(snapshot, regime);
 
                 if (regime.IsBlocked)
                 {
@@ -38,6 +46,11 @@ public sealed class SignalPollingBackgroundService(
                     continue;
                 }
 
+                if (forceWhereToTrade)
+                {
+                    logger.LogInformation("Watch/Waste kill-switch forcing cycle search (no ARMED order for >=25 minutes).");
+                }
+
                 var aiSignal = await aiWorker.AnalyzeAsync(snapshot, stoppingToken);
                 if (tradingViewStore.TryGetLatest(out var tv) && tv is not null)
                 {
@@ -46,10 +59,80 @@ public sealed class SignalPollingBackgroundService(
 
                 var state = ledger.GetState();
                 var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, state);
+                var snapshotHash = ComputeSnapshotHash(snapshot);
 
                 if (!decision.IsTradeAllowed)
                 {
-                    logger.LogInformation("{Status}. Reason={Reason}", decision.Status, decision.Reason);
+                    if (decision.WaterfallRisk == "HIGH")
+                    {
+                        var canceled = pendingTrades.Clear();
+                        if (canceled > 0)
+                        {
+                            logger.LogInformation("Canceled {Count} pending orders due to HIGH waterfall veto.", canceled);
+                        }
+                    }
+
+                    db.DecisionLogs.Add(DecisionLog.Create(
+                        symbol: snapshot.Symbol,
+                        status: decision.Status,
+                        engineState: decision.EngineState,
+                        mode: decision.Mode,
+                        cause: decision.Cause,
+                        waterfallRisk: decision.WaterfallRisk,
+                        telegramState: decision.TelegramState,
+                        railPermissionA: decision.RailPermissionA,
+                        railPermissionB: decision.RailPermissionB,
+                        reason: decision.Reason,
+                        entry: decision.Entry,
+                        tp: decision.Tp,
+                        grams: decision.Grams,
+                        rotationCapThisSession: decision.RotationCapThisSession,
+                        forceWhereToTrade: forceWhereToTrade,
+                        snapshotHash: snapshotHash));
+                    await db.SaveChangesAsync(stoppingToken);
+
+                    logger.LogInformation(
+                        "{Status} ({EngineState}) cause={Cause} waterfall={WaterfallRisk}. Reason={Reason}",
+                        decision.Status,
+                        decision.EngineState,
+                        decision.Cause,
+                        decision.WaterfallRisk,
+                        decision.Reason);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
+                var hazardWindows = await db.HazardWindows
+                    .AsNoTracking()
+                    .Where(x => x.IsActive && x.IsBlocked && x.EndUtc >= snapshot.Timestamp)
+                    .ToListAsync(stoppingToken);
+
+                var intersectsHazard = hazardWindows.Any(x => x.StartUtc <= decision.ExpiryUtc && x.EndUtc >= snapshot.Timestamp);
+                if (intersectsHazard)
+                {
+                    var canceled = pendingTrades.Clear();
+                    logger.LogInformation(
+                        "NO_TRADE due to hazard-window intersection. PendingCanceled={CanceledCount}",
+                        canceled);
+
+                    db.DecisionLogs.Add(DecisionLog.Create(
+                        symbol: snapshot.Symbol,
+                        status: "NO_TRADE",
+                        engineState: "CAPITAL_PROTECTED",
+                        mode: decision.Mode,
+                        cause: decision.Cause,
+                        waterfallRisk: decision.WaterfallRisk,
+                        telegramState: decision.TelegramState,
+                        railPermissionA: decision.RailPermissionA,
+                        railPermissionB: decision.RailPermissionB,
+                        reason: "Expiry intersects active blocked hazard window.",
+                        entry: 0m,
+                        tp: 0m,
+                        grams: 0m,
+                        rotationCapThisSession: 0,
+                        forceWhereToTrade: forceWhereToTrade,
+                        snapshotHash: snapshotHash));
+                    await db.SaveChangesAsync(stoppingToken);
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -79,18 +162,49 @@ public sealed class SignalPollingBackgroundService(
                     Grams: decision.Grams,
                     AlignmentScore: decision.AlignmentScore,
                     Regime: regime.Regime,
-                    RiskTag: regime.RiskTag);
+                    RiskTag: regime.RiskTag,
+                    EngineState: decision.EngineState,
+                    Mode: decision.Mode,
+                    Cause: decision.Cause,
+                    WaterfallRisk: decision.WaterfallRisk,
+                    Bucket: decision.Bucket,
+                    Session: decision.Session,
+                    SizeClass: decision.SizeClass,
+                    TelegramState: decision.TelegramState);
 
-                approvals.Enqueue(pending);
+                pendingTrades.Enqueue(pending);
+                _lastArmedAtUtc = DateTimeOffset.UtcNow;
+
+                db.DecisionLogs.Add(DecisionLog.Create(
+                    symbol: snapshot.Symbol,
+                    status: decision.Status,
+                    engineState: decision.EngineState,
+                    mode: decision.Mode,
+                    cause: decision.Cause,
+                    waterfallRisk: decision.WaterfallRisk,
+                    telegramState: decision.TelegramState,
+                    railPermissionA: decision.RailPermissionA,
+                    railPermissionB: decision.RailPermissionB,
+                    reason: decision.Reason,
+                    entry: decision.Entry,
+                    tp: decision.Tp,
+                    grams: decision.Grams,
+                    rotationCapThisSession: decision.RotationCapThisSession,
+                    forceWhereToTrade: forceWhereToTrade,
+                    snapshotHash: snapshotHash));
+                await db.SaveChangesAsync(stoppingToken);
+
                 logger.LogInformation(
-                    "Queued approval trade {TradeId} {Type} {Symbol} @ {Price} TP={Tp} grams={Grams} regime={Regime} score={Score:0.00}",
+                    "Queued MT5 trade {TradeId} {Type} {Symbol} @ {Price} TP={Tp} grams={Grams} state={State} cause={Cause} session={Session} score={Score:0.00}",
                     pending.Id,
                     pending.Type,
                     pending.Symbol,
                     pending.Price,
                     pending.Tp,
                     pending.Grams,
-                    pending.Regime,
+                    pending.EngineState,
+                    pending.Cause,
+                    pending.Session,
                     pending.AlignmentScore);
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("No MT5 snapshot available yet.", StringComparison.OrdinalIgnoreCase))
@@ -104,6 +218,45 @@ public sealed class SignalPollingBackgroundService(
 
             await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
         }
+    }
+
+    private static bool ShouldForceWhereToTrade(MarketSnapshotContract snapshot, RegimeClassificationContract regime)
+    {
+        if (regime.IsBlocked || regime.IsWaterfall)
+        {
+            return false;
+        }
+
+        var session = (snapshot.Session ?? string.Empty).Trim().ToUpperInvariant();
+        if (session is not ("JAPAN" or "INDIA" or "LONDON" or "NY" or "ASIA" or "EUROPE" or "NEW_YORK"))
+        {
+            return false;
+        }
+
+        if (snapshot.IsUsRiskWindow && snapshot.TelegramImpactTag == "HIGH")
+        {
+            return false;
+        }
+
+        return DateTimeOffset.UtcNow - _lastArmedAtUtc >= TimeSpan.FromMinutes(25);
+    }
+
+    private static string ComputeSnapshotHash(MarketSnapshotContract snapshot)
+    {
+        var payload = string.Join('|',
+            snapshot.Symbol,
+            snapshot.Timestamp.ToUnixTimeSeconds(),
+            snapshot.Session,
+            snapshot.Bid,
+            snapshot.Ask,
+            snapshot.Spread,
+            snapshot.Atr,
+            snapshot.Adr,
+            snapshot.TelegramState,
+            snapshot.TvAlertType);
+
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(bytes);
     }
 
     private static TradeSignalContract MergeTradingView(

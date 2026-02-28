@@ -11,5 +11,11 @@ public interface IApplicationDbContext
     DbSet<RiskProfile> RiskProfiles { get; }
     DbSet<SessionState> SessionStates { get; }
     DbSet<MarketSnapshot> MarketSnapshots { get; }
+    DbSet<MacroCacheState> MacroCacheStates { get; }
+    DbSet<HazardWindow> HazardWindows { get; }
+    DbSet<DecisionLog> DecisionLogs { get; }
+    DbSet<TelegramChannel> TelegramChannels { get; }
+    DbSet<TelegramSignal> TelegramSignals { get; }
+    DbSet<TradingViewAlertLog> TradingViewAlertLogs { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -43,3 +43,7 @@ final notificationsProvider = FutureProvider<List<NotificationFeedItem>>((ref) {
 final approvalsProvider = FutureProvider<List<PendingApproval>>((ref) {
   return ref.watch(brainApiProvider).getApprovals();
 });
+
+final runtimeStatusProvider = FutureProvider<RuntimeStatus>((ref) {
+  return ref.watch(brainApiProvider).getRuntimeStatus();
+});

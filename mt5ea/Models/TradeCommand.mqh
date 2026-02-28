@@ -13,6 +13,14 @@ struct TradeCommand
     double alignmentScore;
     string regime;
     string riskTag;
+    string engineState;
+    string mode;
+    string cause;
+    string waterfallRisk;
+    string bucket;
+    string session;
+    string sizeClass;
+    string telegramState;
 };
 
 #endif

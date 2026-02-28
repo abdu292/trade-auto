@@ -1,15 +1,12 @@
 # AI Provider Decision
 
 ## Decision
-Use a universal one-key platform as the default operating mode.
-
-Chosen default: OpenRouter (single key), with committee models configured through one gateway.
+Use **Grok as the sole live decision engine** for both local and production runtime, with OpenRouter transport now and direct xAI transport available later.
 
 ## Why this decision
-- Lower operational complexity: one billing account, one key, one integration path
-- Easier key rotation and secret management
-- Faster experimentation with model swaps without rewriting providers
-- Better fit for this system because hard safety logic is deterministic in Brain; AI is advisory
+- Exact alignment with `spec/spec_v3.md` live-path statement (Grok drives NEWS/ANALYZE/TABLE).
+- Same behavior between local and production (no runtime mode drift).
+- Simpler operational validation: one live model path, one health parity target.
 
 ## What stays true
 - Safety gates in Brain remain authoritative
@@ -17,25 +14,23 @@ Chosen default: OpenRouter (single key), with committee models configured throug
 - Output discipline remains TABLE or NO TRADE
 
 ## Trade-offs
-- Adds gateway dependency (OpenRouter availability)
-- Slightly less direct provider-level control
-- Potential pricing/routing differences vs direct provider contracts
+- Higher direct dependency on xAI availability for live path.
+- Less model diversity in live runtime (by design for strict parity).
 
-## Fallback Strategy
-- Keep multi-provider mode available for failover or audit comparisons
-- If universal gateway fails, switch mode to multi and use direct provider keys
+## Fallback Strategy (operational emergency only)
+- Keep a documented fallback runbook outside live parity profile.
+- Do not mix fallback providers into normal runtime if strict parity is required.
 
 ## Configuration
-Primary (recommended):
-- AI_PROVIDER_MODE=universal
+Live runtime (local + production):
+- GROK_RUNTIME_TRANSPORT=openrouter
 - OPENROUTER_API_KEY=<your_key>
-- OPENROUTER_MODELS=openai/gpt-4.1-mini,google/gemini-2.0-flash
-- AI_STRATEGY=committee
-- CONSENSUS_MIN_AGREEMENT=1 or 2 (based on latency/risk preference)
+- GROK_OPENROUTER_MODEL=x-ai/grok-2-latest
 
-Fallback:
-- AI_PROVIDER_MODE=multi
-- OPENAI_API_KEY / GROK_API_KEY / PERPLEXITY_API_KEY / GEMINI_API_KEY
+Later (optional direct transport):
+- GROK_RUNTIME_TRANSPORT=direct
+- GROK_API_KEY=<your_key>
+- GROK_MODEL=grok-2-latest
 
 ## Recommended for your use case
-Start with universal mode + two models in committee for stability and speed. Keep multi mode only as emergency fallback, not as daily default.
+Run Grok-only in both local and production so behavior is identical end-to-end. Use OpenRouter transport now for speed, then move to direct xAI key when you are ready, while keeping the same Grok-only live semantics.

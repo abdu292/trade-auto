@@ -5,17 +5,6 @@ from app.ai.providers.base_provider import AIProviderConfig
 
 load_dotenv()
 
-
-def _read_openai_models() -> List[str]:
-    raw = os.getenv("OPENAI_MODELS", "gpt-4.1-mini")
-    return [item.strip() for item in raw.split(",") if item.strip()]
-
-
-def _read_openrouter_models() -> List[str]:
-    raw = os.getenv("OPENROUTER_MODELS", "openai/gpt-4.1-mini,google/gemini-2.0-flash-001")
-    return [item.strip() for item in raw.split(",") if item.strip()]
-
-
 def _read_csv_env(name: str, default: str = "") -> List[str]:
     raw = os.getenv(name, default)
     items = [item.strip() for item in raw.split(",") if item.strip()]
@@ -26,16 +15,15 @@ def _read_csv_env(name: str, default: str = "") -> List[str]:
     return deduped
 
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GROK_MODEL = os.getenv("GROK_MODEL", "grok-2-latest")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-AI_PROVIDER_MODE = os.getenv("AI_PROVIDER_MODE", "universal").lower()
+GROK_OPENROUTER_MODEL = os.getenv("GROK_OPENROUTER_MODEL", "x-ai/grok-2-latest")
+GROK_RUNTIME_TRANSPORT = os.getenv("GROK_RUNTIME_TRANSPORT", "openrouter").strip().lower()
 
-# committee|single
-AI_STRATEGY = os.getenv("AI_STRATEGY", "committee").lower()
-CONSENSUS_MIN_AGREEMENT = int(os.getenv("CONSENSUS_MIN_AGREEMENT", "1"))
+AI_PROVIDER_MODE = "grok-only"
+AI_STRATEGY = "single"
+CONSENSUS_MIN_AGREEMENT = 1
 CONSENSUS_ENTRY_TOLERANCE_PCT = float(os.getenv("CONSENSUS_ENTRY_TOLERANCE_PCT", "0.003"))
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -67,73 +55,41 @@ TELEGRAM_BEARISH_KEYWORDS = _read_csv_env(
 def build_analyzers() -> List[AIProviderConfig]:
     analyzers: List[AIProviderConfig] = []
 
-    if AI_PROVIDER_MODE == "universal" and OPENROUTER_API_KEY:
-        for model in _read_openrouter_models():
-            analyzers.append(
-                AIProviderConfig(
-                    name=f"openrouter:{model}",
-                    provider="openrouter",
-                    api_key=OPENROUTER_API_KEY,
-                    model=model,
-                    temperature=0.2,
-                    max_tokens=450,
-                    timeout=20,
-                )
+    if GROK_RUNTIME_TRANSPORT == "openrouter":
+        if not OPENROUTER_API_KEY:
+            return analyzers
+        if "grok" not in GROK_OPENROUTER_MODEL.lower():
+            return analyzers
+
+        analyzers.append(
+            AIProviderConfig(
+                name=f"grok-via-openrouter:{GROK_OPENROUTER_MODEL}",
+                provider="openrouter",
+                api_key=OPENROUTER_API_KEY,
+                model=GROK_OPENROUTER_MODEL,
+                temperature=0.2,
+                max_tokens=450,
+                timeout=20,
             )
+        )
         return analyzers
 
-    if OPENAI_API_KEY:
-        for model in _read_openai_models():
-            analyzers.append(
-                AIProviderConfig(
-                    name=f"openai:{model}",
-                    provider="openai",
-                    api_key=OPENAI_API_KEY,
-                    model=model,
-                    temperature=0.2,
-                    max_tokens=450,
-                    timeout=20,
-                )
-            )
+    if GROK_RUNTIME_TRANSPORT == "direct":
+        if not GROK_API_KEY:
+            return analyzers
 
-    if GROK_API_KEY:
         analyzers.append(
             AIProviderConfig(
-                name="grok:grok-2-latest",
+                name=f"grok:{GROK_MODEL}",
                 provider="grok",
                 api_key=GROK_API_KEY,
-                model="grok-2-latest",
+                model=GROK_MODEL,
                 temperature=0.2,
                 max_tokens=450,
                 timeout=20,
             )
         )
-
-    if PERPLEXITY_API_KEY:
-        analyzers.append(
-            AIProviderConfig(
-                name="perplexity:sonar-pro",
-                provider="perplexity",
-                api_key=PERPLEXITY_API_KEY,
-                model="sonar-pro",
-                temperature=0.2,
-                max_tokens=450,
-                timeout=20,
-            )
-        )
-
-    if GEMINI_API_KEY:
-        analyzers.append(
-            AIProviderConfig(
-                name="gemini:gemini-2.0-flash",
-                provider="gemini",
-                api_key=GEMINI_API_KEY,
-                model="gemini-2.0-flash",
-                temperature=0.2,
-                max_tokens=450,
-                timeout=20,
-            )
-        )
+        return analyzers
 
     return analyzers
 

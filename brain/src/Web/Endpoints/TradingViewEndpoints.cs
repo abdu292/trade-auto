@@ -1,5 +1,6 @@
 using Brain.Application.Common.Interfaces;
 using Brain.Application.Common.Models;
+using Brain.Domain.Entities;
 using Microsoft.Extensions.Configuration;
 
 namespace Brain.Web.Endpoints;
@@ -16,6 +17,7 @@ public static class TradingViewEndpoints
                      HttpRequest httpRequest,
                      IConfiguration configuration,
                      ITradingViewSignalStore store,
+                     IApplicationDbContext db,
                      ILogger<object> logger) =>
             {
                 var configuredSecret = configuration["TradingView:WebhookSecret"]?.Trim();
@@ -48,6 +50,21 @@ public static class TradingViewEndpoints
                     Notes: request.Notes?.Trim() ?? string.Empty);
 
                 store.Upsert(signal);
+
+                db.TradingViewAlertLogs.Add(TradingViewAlertLog.Create(
+                    symbol: signal.Symbol,
+                    timeframe: signal.Timeframe,
+                    signal: signal.Signal,
+                    confirmationTag: signal.ConfirmationTag,
+                    bias: signal.Bias,
+                    riskTag: signal.RiskTag,
+                    score: signal.Score,
+                    volatility: signal.Volatility,
+                    timestamp: signal.Timestamp,
+                    source: signal.Source,
+                    notes: signal.Notes));
+                db.SaveChangesAsync(httpRequest.HttpContext.RequestAborted).GetAwaiter().GetResult();
+
                 logger.LogInformation(
                     "TradingView webhook stored signal: {Symbol} {Timeframe} {Signal} bias={Bias} risk={Risk} score={Score:0.00}",
                     signal.Symbol,

@@ -78,6 +78,17 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 isBreakoutConfirmed = snapshot.IsBreakoutConfirmed,
                 isUsRiskWindow = snapshot.IsUsRiskWindow,
                 isFriday = snapshot.IsFriday,
+                bid = snapshot.Bid,
+                ask = snapshot.Ask,
+                spread = snapshot.Spread,
+                spreadMedian60m = snapshot.SpreadMedian60m,
+                spreadMax60m = snapshot.SpreadMax60m,
+                compressionCountM15 = snapshot.CompressionCountM15,
+                expansionCountM15 = snapshot.ExpansionCountM15,
+                impulseStrengthScore = snapshot.ImpulseStrengthScore,
+                telegramState = snapshot.TelegramState,
+                panicSuspected = snapshot.PanicSuspected,
+                tvAlertType = snapshot.TvAlertType,
             };
 
             var jsonContent = new StringContent(

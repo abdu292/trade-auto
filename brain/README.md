@@ -12,7 +12,7 @@ Clean Architecture backend with layers:
 - Minimal APIs grouped by feature endpoint modules.
 - MediatR vertical slices (`Trades`, `Strategies`, `Sessions`, `Signals`, `Risk`).
 - EF Core SQL Server with entity configurations and seed data.
-- Mock adapters for AI worker, MT5 bridge, notification, market data.
+- MT5-first runtime endpoints for snapshots, pending trades, and trade status callbacks.
 - Hosted background services for session scheduling and signal polling.
 - Serilog + ProblemDetails + health checks + OpenAPI.
 

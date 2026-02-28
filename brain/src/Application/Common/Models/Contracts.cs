@@ -39,7 +39,18 @@ public sealed record MarketSnapshotContract(
     bool IsLondonNyOverlap = false,
     bool IsBreakoutConfirmed = false,
     bool IsUsRiskWindow = false,
-    bool IsFriday = false);
+    bool IsFriday = false,
+    decimal Bid = 0m,
+    decimal Ask = 0m,
+    decimal Spread = 0m,
+    decimal SpreadMedian60m = 0m,
+    decimal SpreadMax60m = 0m,
+    int CompressionCountM15 = 0,
+    int ExpansionCountM15 = 0,
+    decimal ImpulseStrengthScore = 0m,
+    string TelegramState = "QUIET",
+    bool PanicSuspected = false,
+    string TvAlertType = "NONE");
 
 public sealed record TradeSignalContract(
     string Rail,
@@ -66,14 +77,25 @@ public sealed record RegimeClassificationContract(
 public sealed record DecisionResultContract(
     bool IsTradeAllowed,
     string Status,
+    string EngineState,
+    string Mode,
+    string Cause,
+    string WaterfallRisk,
     string Reason,
+    string Bucket,
     string Rail,
+    string Session,
+    string SizeClass,
     decimal Entry,
     decimal Tp,
     decimal Grams,
     DateTimeOffset ExpiryUtc,
     int MaxLifeSeconds,
-    decimal AlignmentScore);
+    decimal AlignmentScore,
+    string TelegramState,
+    string RailPermissionA,
+    string RailPermissionB,
+    int RotationCapThisSession);
 
 public sealed record LedgerStateContract(
     decimal CashAed,
@@ -127,4 +149,12 @@ public sealed record PendingTradeContract(
     decimal Grams = 0m,
     decimal AlignmentScore = 0m,
     string Regime = "",
-    string RiskTag = "");
+    string RiskTag = "",
+    string EngineState = "ARMED",
+    string Mode = "EXHAUSTION",
+    string Cause = "UNKNOWN",
+    string WaterfallRisk = "LOW",
+    string Bucket = "C1",
+    string Session = "",
+    string SizeClass = "25%",
+    string TelegramState = "QUIET");

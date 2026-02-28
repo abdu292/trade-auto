@@ -194,6 +194,73 @@ class PendingApproval {
       );
 }
 
+class RuntimeStatus {
+  const RuntimeStatus({
+    required this.symbol,
+    required this.session,
+    required this.mt5ServerTime,
+    required this.ksaTime,
+    required this.bid,
+    required this.ask,
+    required this.spread,
+    required this.spreadMedian60m,
+    required this.spreadMax60m,
+    required this.telegramState,
+    required this.panicSuspected,
+    required this.tvAlertType,
+    required this.pendingQueueDepth,
+    required this.macroBias,
+    required this.institutionalBias,
+    required this.cbFlowFlag,
+    required this.positioningFlag,
+    required this.macroCacheAgeMinutes,
+    required this.activeBlockedHazardWindows,
+  });
+
+  final String symbol;
+  final String session;
+  final DateTime? mt5ServerTime;
+  final DateTime? ksaTime;
+  final double bid;
+  final double ask;
+  final double spread;
+  final double spreadMedian60m;
+  final double spreadMax60m;
+  final String telegramState;
+  final bool panicSuspected;
+  final String tvAlertType;
+  final int pendingQueueDepth;
+  final String macroBias;
+  final String institutionalBias;
+  final String cbFlowFlag;
+  final String positioningFlag;
+  final int macroCacheAgeMinutes;
+  final int activeBlockedHazardWindows;
+
+  factory RuntimeStatus.fromJson(Map<String, dynamic> json) => RuntimeStatus(
+        symbol: _readString(json, 'symbol'),
+        session: _readString(json, 'session'),
+        mt5ServerTime: _readNullableDateTime(json, 'mt5ServerTime'),
+        ksaTime: _readNullableDateTime(json, 'ksaTime'),
+        bid: _readDouble(json, 'bid'),
+        ask: _readDouble(json, 'ask'),
+        spread: _readDouble(json, 'spread'),
+        spreadMedian60m: _readDouble(json, 'spreadMedian60m'),
+        spreadMax60m: _readDouble(json, 'spreadMax60m'),
+        telegramState: _readString(json, 'telegramState'),
+        panicSuspected: _readBool(json, 'panicSuspected'),
+        tvAlertType: _readString(json, 'tvAlertType'),
+        pendingQueueDepth: _readInt(json, 'pendingQueueDepth'),
+        macroBias: _readString(json, 'macroBias'),
+        institutionalBias: _readString(json, 'institutionalBias'),
+        cbFlowFlag: _readString(json, 'cbFlowFlag'),
+        positioningFlag: _readString(json, 'positioningFlag'),
+        macroCacheAgeMinutes: _readInt(json, 'macroCacheAgeMinutes'),
+        activeBlockedHazardWindows:
+            _readInt(json, 'activeBlockedHazardWindows'),
+      );
+}
+
 class TradeSignal {
   const TradeSignal({
     required this.id,
@@ -303,6 +370,17 @@ DateTime _readDateTime(Map<String, dynamic> json, String key) {
     return value.toUtc();
   }
   return DateTime.tryParse(value.toString())?.toUtc() ?? DateTime.now().toUtc();
+}
+
+DateTime? _readNullableDateTime(Map<String, dynamic> json, String key) {
+  final value = json[key] ?? json[_pascal(key)];
+  if (value == null) {
+    return null;
+  }
+  if (value is DateTime) {
+    return value.toUtc();
+  }
+  return DateTime.tryParse(value.toString())?.toUtc();
 }
 
 String _pascal(String key) => '${key[0].toUpperCase()}${key.substring(1)}';

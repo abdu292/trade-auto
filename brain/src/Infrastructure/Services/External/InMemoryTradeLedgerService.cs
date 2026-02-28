@@ -8,6 +8,7 @@ public sealed class InMemoryTradeLedgerService : ITradeLedgerService
 {
     private const decimal OunceToGram = 31.1035m;
     private const decimal UsdToAed = 3.674m;
+    private const decimal MinTradeGrams = 100m;
     private const decimal InitialCashAed = 100000m;
 
     private readonly Lock _gate = new();
@@ -67,8 +68,18 @@ public sealed class InMemoryTradeLedgerService : ITradeLedgerService
         lock (_gate)
         {
             var normalizedGrams = Math.Max(0m, grams);
+            if (normalizedGrams < MinTradeGrams)
+            {
+                throw new InvalidOperationException("Buy fill rejected: grams below 100g minimum.");
+            }
+
             var shopBuy = mt5BuyPrice + 0.80m;
             var debit = ToAed(shopBuy, normalizedGrams);
+
+            if (debit > _cashAed)
+            {
+                throw new InvalidOperationException("Buy fill rejected: insufficient ledger cash.");
+            }
 
             _cashAed -= debit;
             _goldGrams += normalizedGrams;

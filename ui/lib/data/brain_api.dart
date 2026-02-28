@@ -54,6 +54,11 @@ class BrainApi {
     return _asList(response.data).map(PendingApproval.fromJson).toList();
   }
 
+  Future<RuntimeStatus> getRuntimeStatus() async {
+    final response = await _dio.get('/api/monitoring/runtime');
+    return RuntimeStatus.fromJson(_asMap(response.data));
+  }
+
   Future<TradeSignal> analyzeSnapshot(AnalyzeSnapshotInput input) async {
     final response =
         await _dio.post('/api/signals/analyze', data: input.toJson());

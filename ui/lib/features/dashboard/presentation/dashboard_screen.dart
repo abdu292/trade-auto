@@ -12,32 +12,15 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final health = ref.watch(healthProvider);
     final ledger = ref.watch(ledgerProvider);
-    final approvals = ref.watch(approvalsProvider);
+    final runtime = ref.watch(runtimeStatusProvider);
     final notifications = ref.watch(notificationsProvider);
 
     Future<void> refresh() async {
       ref
         ..invalidate(healthProvider)
         ..invalidate(ledgerProvider)
-        ..invalidate(approvalsProvider)
+        ..invalidate(runtimeStatusProvider)
         ..invalidate(notificationsProvider);
-    }
-
-    Future<void> mutateApproval(
-        {required String tradeId, required bool approve}) async {
-      final messenger = ScaffoldMessenger.of(context);
-      final api = ref.read(brainApiProvider);
-      try {
-        if (approve) {
-          await api.approveTrade(tradeId);
-        } else {
-          await api.rejectTrade(tradeId);
-        }
-        await refresh();
-      } catch (error) {
-        messenger
-            .showSnackBar(SnackBar(content: Text('Action failed: $error')));
-      }
     }
 
     return RefreshIndicator(
@@ -125,46 +108,53 @@ class DashboardScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Manual Approvals',
+                  Text('Runtime (MT5 Demo/Live)',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  approvals.when(
-                    data: (items) {
-                      if (items.isEmpty) {
-                        return const Text('No pending approvals.');
-                      }
-                      return Column(
-                        children: items
-                            .map(
-                              (item) => ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(
-                                    '${item.symbol} • ${item.type} • ${item.grams.toStringAsFixed(2)}g'),
-                                subtitle: Text(
-                                    'Entry ${item.price.toStringAsFixed(2)} • TP ${item.tp.toStringAsFixed(2)}'),
-                                trailing: Wrap(
-                                  spacing: 4,
-                                  children: [
-                                    FilledButton.tonal(
-                                      onPressed: () => mutateApproval(
-                                          tradeId: item.id, approve: false),
-                                      child: const Text('Reject'),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () => mutateApproval(
-                                          tradeId: item.id, approve: true),
-                                      child: const Text('Approve'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                            .toList(),
+                  runtime.when(
+                    data: (state) {
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _MetricChip(label: 'Symbol', value: state.symbol),
+                          _MetricChip(label: 'Session', value: state.session),
+                          _MetricChip(
+                              label: 'Bid',
+                              value: state.bid.toStringAsFixed(2)),
+                          _MetricChip(
+                              label: 'Ask',
+                              value: state.ask.toStringAsFixed(2)),
+                          _MetricChip(
+                              label: 'Spread',
+                              value: state.spread.toStringAsFixed(3)),
+                          _MetricChip(
+                              label: 'Queue Depth',
+                              value: state.pendingQueueDepth.toString()),
+                          _MetricChip(
+                              label: 'Telegram', value: state.telegramState),
+                          _MetricChip(
+                              label: 'Panic',
+                              value: state.panicSuspected ? 'YES' : 'NO'),
+                          _MetricChip(
+                              label: 'TV Alert', value: state.tvAlertType),
+                            _MetricChip(
+                              label: 'Macro Bias', value: state.macroBias),
+                            _MetricChip(
+                              label: 'Institutional',
+                              value: state.institutionalBias),
+                            _MetricChip(
+                              label: 'Hazard Active',
+                              value:
+                                state.activeBlockedHazardWindows.toString()),
+                            _MetricChip(
+                              label: 'Macro Age (m)',
+                              value: state.macroCacheAgeMinutes.toString()),
+                        ],
                       );
                     },
                     loading: () => const LinearProgressIndicator(),
-                    error: (error, _) => Text('Approvals error: $error'),
+                    error: (error, _) => Text('Runtime error: $error'),
                   ),
                 ],
               ),

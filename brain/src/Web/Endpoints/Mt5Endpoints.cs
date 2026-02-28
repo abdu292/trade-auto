@@ -1,6 +1,8 @@
 using Brain.Application.Common.Interfaces;
 using Brain.Application.Common.Models;
+using Brain.Domain.Entities;
 using Brain.Web.Filters;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -42,6 +44,14 @@ public static class Mt5Endpoints
                     alignmentScore = trade.AlignmentScore,
                     regime = trade.Regime,
                     riskTag = trade.RiskTag,
+                    engineState = trade.EngineState,
+                    mode = trade.Mode,
+                    cause = trade.Cause,
+                    waterfallRisk = trade.WaterfallRisk,
+                    bucket = trade.Bucket,
+                    session = trade.Session,
+                    sizeClass = trade.SizeClass,
+                    telegramState = trade.TelegramState,
                 });
             })
             .WithName("GetPendingTrades")
@@ -95,7 +105,18 @@ public static class Mt5Endpoints
                     IsLondonNyOverlap: request.IsLondonNyOverlap ?? false,
                     IsBreakoutConfirmed: request.IsBreakoutConfirmed ?? false,
                     IsUsRiskWindow: request.IsUsRiskWindow ?? false,
-                    IsFriday: mt5ServerTime.DayOfWeek == DayOfWeek.Friday);
+                    IsFriday: mt5ServerTime.DayOfWeek == DayOfWeek.Friday,
+                    Bid: request.Bid ?? 0m,
+                    Ask: request.Ask ?? 0m,
+                    Spread: request.Spread ?? 0m,
+                    SpreadMedian60m: request.SpreadMedian60m ?? 0m,
+                    SpreadMax60m: request.SpreadMax60m ?? 0m,
+                    CompressionCountM15: request.CompressionCountM15 ?? 0,
+                    ExpansionCountM15: request.ExpansionCountM15 ?? 0,
+                    ImpulseStrengthScore: request.ImpulseStrengthScore ?? 0m,
+                    TelegramState: NormalizeTelegramState(request.TelegramState),
+                    PanicSuspected: request.PanicSuspected ?? false,
+                    TvAlertType: NormalizeTvAlertType(request.TvAlertType));
 
                 snapshotStore.Upsert(snapshot);
                 logger.LogInformation(
@@ -117,6 +138,8 @@ public static class Mt5Endpoints
                 HttpRequest httpRequest,
                 ILogger<object> logger,
                 ITradeLedgerService ledger,
+                ILatestMarketSnapshotStore snapshotStore,
+                IApplicationDbContext db,
                 IWhatsAppService whatsApp,
                 INotificationService notification,
                 CancellationToken cancellationToken) =>
@@ -165,6 +188,20 @@ public static class Mt5Endpoints
                     await whatsApp.SendMessageAsync("ops-whatsapp", buySlip.Message, cancellationToken);
                     await notification.NotifyAsync("BUY SLIP", buySlip.Message, cancellationToken);
 
+                    if (snapshotStore.TryGet(out var latest) && latest is not null)
+                    {
+                        var signal = TelegramSignal.Create(
+                            channelKey: $"consensus:{latest.TelegramState.ToLowerInvariant()}",
+                            direction: latest.TelegramState.Contains("SELL", StringComparison.OrdinalIgnoreCase) ? "SELL" : "BUY",
+                            confidence: 0.5m,
+                            consensusState: latest.TelegramState,
+                            panicSuspected: latest.PanicSuspected,
+                            serverTimeUtc: DateTimeOffset.UtcNow,
+                            rawMessage: $"mt5_status={normalizedStatus};tradeId={tradeId}");
+                        db.TelegramSignals.Add(signal);
+                        await db.SaveChangesAsync(cancellationToken);
+                    }
+
                     return TypedResults.Ok(new
                     {
                         received = true,
@@ -192,6 +229,24 @@ public static class Mt5Endpoints
 
                     await whatsApp.SendMessageAsync("ops-whatsapp", sellSlip.Message, cancellationToken);
                     await notification.NotifyAsync("SELL SLIP", sellSlip.Message, cancellationToken);
+
+                    if (snapshotStore.TryGet(out var latest) && latest is not null)
+                    {
+                        var channelKey = $"consensus:{latest.TelegramState.ToLowerInvariant()}";
+                        var channel = await db.TelegramChannels.FirstOrDefaultAsync(x => x.ChannelKey == channelKey, cancellationToken);
+                        if (channel is null)
+                        {
+                            channel = TelegramChannel.Create(
+                                channelKey: channelKey,
+                                name: $"Consensus {latest.TelegramState}",
+                                type: "MIXED",
+                                weight: 1.0m);
+                            db.TelegramChannels.Add(channel);
+                        }
+
+                        channel.ApplyOutcome("GOOD");
+                        await db.SaveChangesAsync(cancellationToken);
+                    }
 
                     return TypedResults.Ok(new
                     {
@@ -230,6 +285,34 @@ public static class Mt5Endpoints
             "CONFIRM" => "CONFIRM",
             "CONTRADICT" => "CONTRADICT",
             _ => "NEUTRAL",
+        };
+    }
+
+    private static string NormalizeTelegramState(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "STRONG_BUY" => "STRONG_BUY",
+            "BUY" => "BUY",
+            "MIXED" => "MIXED",
+            "SELL" => "SELL",
+            "STRONG_SELL" => "STRONG_SELL",
+            _ => "QUIET",
+        };
+    }
+
+    private static string NormalizeTvAlertType(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "BREAKOUT" => "BREAKOUT",
+            "RETEST_HOLD" => "RETEST_HOLD",
+            "ADR_EXHAUSTION" => "ADR_EXHAUSTION",
+            "RSI_OVERHEAT" => "RSI_OVERHEAT",
+            "SESSION_BREAK" => "SESSION_BREAK",
+            _ => "NONE",
         };
     }
 }
@@ -275,7 +358,18 @@ public sealed record Mt5MarketSnapshotRequest(
     bool? IsPostSpikePullback,
     bool? IsLondonNyOverlap,
     bool? IsBreakoutConfirmed,
-    bool? IsUsRiskWindow);
+    bool? IsUsRiskWindow,
+    decimal? Bid,
+    decimal? Ask,
+    decimal? Spread,
+    decimal? SpreadMedian60m,
+    decimal? SpreadMax60m,
+    int? CompressionCountM15,
+    int? ExpansionCountM15,
+    decimal? ImpulseStrengthScore,
+    string? TelegramState,
+    bool? PanicSuspected,
+    string? TvAlertType);
 
 public sealed record Mt5TimeframeDataRequest(
     string Timeframe,

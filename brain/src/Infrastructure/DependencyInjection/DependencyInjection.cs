@@ -39,6 +39,7 @@ public static class DependencyInjection
 
         services.AddHostedService<SessionSchedulerBackgroundService>();
         services.AddHostedService<SignalPollingBackgroundService>();
+        services.AddHostedService<MacroCacheRefreshBackgroundService>();
 
         return services;
     }

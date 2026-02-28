@@ -24,6 +24,11 @@ class TelegramNewsContext:
     impact_tag: str
     risk_tag: str
     direction_bias: str
+    telegram_state: str
+    panic_suspected: bool
+    buy_score: float
+    sell_score: float
+    dominance: float
     tags: list[str]
     summary: str
     headlines: list[str]
@@ -45,6 +50,11 @@ class TelegramNewsService:
                 impact_tag="LOW",
                 risk_tag="CAUTION",
                 direction_bias="NEUTRAL",
+                telegram_state="QUIET",
+                panic_suspected=False,
+                buy_score=0.0,
+                sell_score=0.0,
+                dominance=0.0,
                 tags=["telegram_not_configured"],
                 summary="Telegram bot token is not configured.",
                 headlines=[],
@@ -131,6 +141,11 @@ class TelegramNewsService:
                 impact_tag="LOW",
                 risk_tag="CAUTION",
                 direction_bias="NEUTRAL",
+                telegram_state="QUIET",
+                panic_suspected=False,
+                buy_score=0.0,
+                sell_score=0.0,
+                dominance=0.0,
                 tags=["telegram_no_recent_posts"],
                 summary="No recent Telegram channel posts in configured lookback window.",
                 headlines=[],
@@ -142,8 +157,16 @@ class TelegramNewsService:
         bullish_hits = self._count_keyword_hits(headlines, TELEGRAM_BULLISH_KEYWORDS)
         bearish_hits = self._count_keyword_hits(headlines, TELEGRAM_BEARISH_KEYWORDS)
 
+        buy_score, sell_score = self._compute_weighted_scores(items)
+        dominance = self._compute_dominance(buy_score, sell_score)
+        telegram_state = self._resolve_consensus_state(buy_score, sell_score, dominance, len(items))
+        panic_suspected = self._detect_panic_sell(items, sell_score, buy_score)
+
         impact_tag = "HIGH" if block_hits > 0 else ("MODERATE" if caution_hits > 0 else "LOW")
         risk_tag = "BLOCK" if impact_tag == "HIGH" else ("CAUTION" if impact_tag == "MODERATE" else "SAFE")
+        if panic_suspected:
+            risk_tag = "BLOCK"
+            impact_tag = "HIGH"
 
         direction_bias = "NEUTRAL"
         if bullish_hits > bearish_hits:
@@ -160,11 +183,15 @@ class TelegramNewsService:
             tags.append("telegram_bullish_gold")
         if bearish_hits > 0:
             tags.append("telegram_bearish_gold")
+        tags.append(f"telegram_state_{telegram_state.lower()}")
+        if panic_suspected:
+            tags.append("telegram_panic_suspected")
 
         summary = (
             f"Telegram ({symbol}) posts={len(headlines)}, "
-            f"impact={impact_tag}, risk={risk_tag}, bullish={bullish_hits}, bearish={bearish_hits}, "
-            f"block={block_hits}, caution={caution_hits}"
+            f"state={telegram_state}, impact={impact_tag}, risk={risk_tag}, "
+            f"buy={buy_score:.2f}, sell={sell_score:.2f}, dominance={dominance:.2f}, "
+            f"panic={panic_suspected}, block={block_hits}, caution={caution_hits}"
         )
 
         return TelegramNewsContext(
@@ -172,11 +199,80 @@ class TelegramNewsService:
             impact_tag=impact_tag,
             risk_tag=risk_tag,
             direction_bias=direction_bias,
+            telegram_state=telegram_state,
+            panic_suspected=panic_suspected,
+            buy_score=buy_score,
+            sell_score=sell_score,
+            dominance=dominance,
             tags=tags,
             summary=summary,
             headlines=headlines,
             items=items,
         )
+
+    @staticmethod
+    def _compute_weighted_scores(items: list[dict[str, str]]) -> tuple[float, float]:
+        buy_score = 0.0
+        sell_score = 0.0
+        for item in items:
+            text = (item.get("text") or "").lower()
+            weight = 1.0
+            if item.get("category") == "HIGH":
+                weight = 1.25
+            elif item.get("category") == "MODERATE":
+                weight = 1.10
+
+            buy_tokens = ("buy", "long", "bullish", "accumulate")
+            sell_tokens = ("sell", "short", "bearish", "dump", "panic")
+            has_buy = any(token in text for token in buy_tokens)
+            has_sell = any(token in text for token in sell_tokens)
+
+            if has_buy and not has_sell:
+                buy_score += weight
+            elif has_sell and not has_buy:
+                sell_score += weight
+
+        return buy_score, sell_score
+
+    @staticmethod
+    def _compute_dominance(buy_score: float, sell_score: float) -> float:
+        total = buy_score + sell_score
+        if total <= 0.0:
+            return 0.0
+        return max(buy_score, sell_score) / (total + 1e-6)
+
+    @staticmethod
+    def _resolve_consensus_state(buy_score: float, sell_score: float, dominance: float, activity: int) -> str:
+        if activity < 2 or (buy_score + sell_score) < 1.5:
+            return "QUIET"
+
+        if buy_score > sell_score:
+            if dominance >= 0.85:
+                return "STRONG_BUY"
+            if dominance >= 0.70:
+                return "BUY"
+
+        if sell_score > buy_score:
+            if dominance >= 0.85:
+                return "STRONG_SELL"
+            if dominance >= 0.70:
+                return "SELL"
+
+        return "MIXED"
+
+    @staticmethod
+    def _detect_panic_sell(items: list[dict[str, str]], sell_score: float, buy_score: float) -> bool:
+        if sell_score < 3.0 or sell_score <= buy_score * 1.8:
+            return False
+
+        panic_tokens = ("panic", "crash", "dump", "waterfall", "liquidation")
+        panic_hits = 0
+        for item in items[-15:]:
+            text = (item.get("text") or "").lower()
+            if any(token in text for token in panic_tokens):
+                panic_hits += 1
+
+        return panic_hits >= 2
 
     @staticmethod
     def _normalize_channel(value: str) -> str:

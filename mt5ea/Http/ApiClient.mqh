@@ -195,6 +195,14 @@ public:
         command.alignmentScore = JsonGetNumber(response, "alignmentScore");
         command.regime = JsonGetString(response, "regime");
         command.riskTag = JsonGetString(response, "riskTag");
+        command.engineState = JsonGetString(response, "engineState");
+        command.mode = JsonGetString(response, "mode");
+        command.cause = JsonGetString(response, "cause");
+        command.waterfallRisk = JsonGetString(response, "waterfallRisk");
+        command.bucket = JsonGetString(response, "bucket");
+        command.session = JsonGetString(response, "session");
+        command.sizeClass = JsonGetString(response, "sizeClass");
+        command.telegramState = JsonGetString(response, "telegramState");
 
         string expiryRaw = JsonGetString(response, "expiry");
         command.expiry = ParseIsoDateTime(expiryRaw);
@@ -206,7 +214,7 @@ public:
         }
 
         if (command.grams <= 0)
-            command.grams = 5.0;
+            command.grams = 100.0;
 
         Print("Pending trade payload: ", response);
         return true;
@@ -259,6 +267,9 @@ public:
         double ma20 = GetMa20Approx(symbol);
         double adr = GetAdr(symbol);
         double volatilityExpansion = (adr > 0.0) ? (atr / adr) : 0.0;
+        double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+        double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+        double spread = (ask > 0.0 && bid > 0.0) ? (ask - bid) : 0.0;
         datetime utcNow = TimeGMT();
         datetime mt5ServerNow = TimeCurrent();
         MqlDateTime mt5Struct;
@@ -267,7 +278,7 @@ public:
         bool isUsRiskWindow = (mt5Struct.hour >= 15 && mt5Struct.hour <= 19);
 
         string payload = StringFormat(
-            "{\"symbol\":\"%s\",\"timeframeData\":[{\"timeframe\":\"M5\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"M15\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"M30\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"H4\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}],\"atr\":%.5f,\"adr\":%.5f,\"ma20\":%.5f,\"session\":\"%s\",\"timestamp\":\"%s\",\"volatilityExpansion\":%.5f,\"mt5ServerTime\":\"%s\",\"mt5ToKsaOffsetMinutes\":50,\"isUsRiskWindow\":%s,\"isFriday\":%s}",
+            "{\"symbol\":\"%s\",\"timeframeData\":[{\"timeframe\":\"M5\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"M15\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"M30\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"H4\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}],\"atr\":%.5f,\"adr\":%.5f,\"ma20\":%.5f,\"session\":\"%s\",\"timestamp\":\"%s\",\"volatilityExpansion\":%.5f,\"mt5ServerTime\":\"%s\",\"mt5ToKsaOffsetMinutes\":50,\"isUsRiskWindow\":%s,\"isFriday\":%s,\"bid\":%.5f,\"ask\":%.5f,\"spread\":%.5f,\"spreadMedian60m\":%.5f,\"spreadMax60m\":%.5f,\"compressionCountM15\":0,\"expansionCountM15\":0,\"impulseStrengthScore\":0.0,\"telegramState\":\"QUIET\",\"panicSuspected\":false,\"tvAlertType\":\"NONE\"}",
             symbol,
             iOpen(symbol, PERIOD_M5, 1), iHigh(symbol, PERIOD_M5, 1), iLow(symbol, PERIOD_M5, 1), iClose(symbol, PERIOD_M5, 1),
             iOpen(symbol, PERIOD_M15, 1), iHigh(symbol, PERIOD_M15, 1), iLow(symbol, PERIOD_M15, 1), iClose(symbol, PERIOD_M15, 1),
@@ -282,7 +293,12 @@ public:
             volatilityExpansion,
             ToIsoUtc(mt5ServerNow),
             isUsRiskWindow ? "true" : "false",
-            isFriday ? "true" : "false"
+            isFriday ? "true" : "false",
+            bid,
+            ask,
+            spread,
+            spread,
+            spread
         );
 
         char postData[];

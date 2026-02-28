@@ -12,6 +12,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<RiskProfile> RiskProfiles => Set<RiskProfile>();
     public DbSet<SessionState> SessionStates => Set<SessionState>();
     public DbSet<MarketSnapshot> MarketSnapshots => Set<MarketSnapshot>();
+    public DbSet<MacroCacheState> MacroCacheStates => Set<MacroCacheState>();
+    public DbSet<HazardWindow> HazardWindows => Set<HazardWindow>();
+    public DbSet<DecisionLog> DecisionLogs => Set<DecisionLog>();
+    public DbSet<TelegramChannel> TelegramChannels => Set<TelegramChannel>();
+    public DbSet<TelegramSignal> TelegramSignals => Set<TelegramSignal>();
+    public DbSet<TradingViewAlertLog> TradingViewAlertLogs => Set<TradingViewAlertLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

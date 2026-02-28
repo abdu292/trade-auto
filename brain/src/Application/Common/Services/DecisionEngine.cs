@@ -6,6 +6,9 @@ public static class DecisionEngine
 {
     private const decimal OunceToGram = 31.1035m;
     private const decimal UsdToAed = 3.674m;
+    private const decimal ShopSpreadUsdPerOz = 0.80m;
+    private const decimal MinTradeGrams = 100m;
+    private const decimal SafetyBufferGrams = 10m;
 
     public static DecisionResultContract Evaluate(
         MarketSnapshotContract snapshot,
@@ -15,119 +18,289 @@ public static class DecisionEngine
     {
         if (!string.Equals(snapshot.Symbol, "XAUUSD", StringComparison.OrdinalIgnoreCase))
         {
-            return NoTrade("Only XAUUSD is permitted.", aiSignal.AlignmentScore);
+            return NoTrade("Only XAUUSD is permitted.", aiSignal.AlignmentScore, snapshot);
         }
 
-        if (regime.IsBlocked)
+        var session = NormalizeSession(snapshot.Session);
+        var waterfallRisk = ResolveWaterfallRisk(snapshot, regime, aiSignal);
+        if (waterfallRisk == "HIGH")
         {
-            return NoTrade($"NO TRADE - HIGH RISK ({regime.Regime})", aiSignal.AlignmentScore);
+            return NoTrade("Waterfall/panic veto triggered.", aiSignal.AlignmentScore, snapshot, engineState: "CAPITAL_PROTECTED", waterfallRisk: waterfallRisk);
         }
 
-        if (string.Equals(aiSignal.SafetyTag, "BLOCK", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(aiSignal.SafetyTag, "BLOCK", StringComparison.OrdinalIgnoreCase) || regime.IsBlocked)
         {
-            return NoTrade("NO TRADE - HIGH RISK (AI safety block)", aiSignal.AlignmentScore);
+            return NoTrade("P1/P2 safety block.", aiSignal.AlignmentScore, snapshot, engineState: "CAPITAL_PROTECTED", waterfallRisk: waterfallRisk);
         }
 
-        if (string.Equals(regime.Regime, "NEWS_SPIKE", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(regime.Regime, "FRIDAY_HIGH_RISK", StringComparison.OrdinalIgnoreCase))
+        var cause = ResolveCause(snapshot, regime, aiSignal);
+        var mode = ResolveMode(snapshot, aiSignal);
+        var telegramState = NormalizeTelegramState(snapshot.TelegramState);
+        var railPermissionA = "ALLOWED";
+        var railPermissionB = "ALLOWED";
+
+        if (waterfallRisk == "MEDIUM")
         {
-            return NoTrade($"NO TRADE - HIGH RISK ({regime.Regime})", aiSignal.AlignmentScore);
+            railPermissionB = "BLOCKED";
+            railPermissionA = "AFTER_STRUCTURE";
+        }
+
+        if (cause is "UNSCHEDULED_GEO_POLICY" or "LIQUIDITY_SHOCK" or "UNKNOWN")
+        {
+            railPermissionB = "BLOCKED";
+            railPermissionA = "AFTER_STRUCTURE";
+        }
+
+        if (telegramState is "SELL" or "STRONG_SELL" or "MIXED")
+        {
+            railPermissionB = "BLOCKED";
+            railPermissionA = "AFTER_STRUCTURE";
+        }
+
+        if (snapshot.PanicSuspected)
+        {
+            railPermissionB = "BLOCKED";
+            railPermissionA = "AFTER_STRUCTURE";
         }
 
         var score = Math.Clamp(aiSignal.AlignmentScore, 0m, 1m);
-        var threshold = string.Equals(regime.RiskTag, "SAFE", StringComparison.OrdinalIgnoreCase) ? 0.62m : 0.72m;
-        if (score < threshold)
+        if (score < 0.62m)
         {
-            return NoTrade("NO TRADE - HIGH RISK (alignment below threshold)", score);
+            return NoTrade("Alignment below threshold.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
         }
 
         var primaryClose = snapshot.TimeframeData
             .FirstOrDefault(tf => string.Equals(tf.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.Close
             ?? snapshot.TimeframeData.First().Close;
 
-        var entryDistance = regime.Regime switch
+        var spikeCatchAllowed = IsSpikeCatchAllowed(snapshot, cause, mode, waterfallRisk, telegramState);
+        var rail = spikeCatchAllowed && railPermissionB == "ALLOWED"
+            ? "BUY_STOP"
+            : "BUY_LIMIT";
+
+        if (rail == "BUY_STOP" && railPermissionB == "BLOCKED")
         {
-            "COMPRESSION" => snapshot.Atr * 0.35m,
-            "POST_SPIKE_PULLBACK" => snapshot.Atr * 0.80m,
-            "EXPANSION" => snapshot.Atr * 0.55m,
-            _ => snapshot.Atr * 0.45m
+            return NoTrade("Rail-B blocked by precedence gates.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
+        }
+
+        var entry = rail == "BUY_STOP"
+            ? primaryClose + (snapshot.Atr * 0.45m)
+            : primaryClose - (snapshot.Atr * (railPermissionA == "AFTER_STRUCTURE" ? 0.95m : 0.55m));
+
+        var tpDistance = session switch
+        {
+            "JAPAN" => Clamp(snapshot.Atr * 0.95m, 6m, 9m),
+            "INDIA" => Clamp(snapshot.Atr * 1.05m, 8m, 12m),
+            "LONDON" => Clamp(snapshot.Atr * 1.10m, 8m, 12m),
+            "NY" => Clamp(snapshot.Atr * 1.20m, 9m, 15m),
+            _ => Clamp(snapshot.Atr, 8m, 12m)
         };
 
-        var rail = regime.Regime == "EXPANSION" ? "BUY_STOP" : "BUY_LIMIT";
-        if (rail == "BUY_STOP" && !snapshot.IsBreakoutConfirmed)
+        var tp = entry + tpDistance;
+        var bucket = "C1";
+        var sizeClass = ResolveSizeClass(telegramState, waterfallRisk, railPermissionA);
+        var bucketCash = ledgerState.DeployableCashAed * 0.80m;
+        var maxGrams = ToMaxAffordableGrams(bucketCash, entry) - SafetyBufferGrams;
+        var sizePct = ParseSizePercent(sizeClass);
+        var gramsFromSizeClass = ToMaxAffordableGrams(bucketCash * sizePct, entry);
+        var grams = Math.Floor(Math.Min(maxGrams, gramsFromSizeClass));
+
+        if (grams < MinTradeGrams)
         {
-            return NoTrade("NO TRADE - HIGH RISK (expansion without breakout confirmation)", score);
+            return NoTrade("Capacity below 100g minimum after spread/buffer.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
         }
 
-        var compressionFloor = snapshot.SessionLow > 0m
-            ? snapshot.SessionLow
-            : snapshot.PreviousDayLow;
-
-        var entry = rail == "BUY_LIMIT"
-            ? primaryClose - entryDistance
-            : primaryClose + (entryDistance * 0.60m);
-
-        if (regime.Regime == "COMPRESSION" && compressionFloor > 0m)
-        {
-            entry = Math.Min(entry, compressionFloor + (snapshot.Atr * 0.20m));
-        }
-
-        if (regime.Regime == "POST_SPIKE_PULLBACK")
-        {
-            var deeperPullback = primaryClose - (snapshot.Atr * 0.95m);
-            entry = Math.Min(entry, deeperPullback);
-        }
-
-        var tpMultiplier = regime.Regime switch
-        {
-            "COMPRESSION" => 1.3m,
-            "POST_SPIKE_PULLBACK" => 1.7m,
-            "EXPANSION" => 1.5m,
-            _ => 1.4m
-        };
-
-        var tp = entry + (snapshot.Atr * tpMultiplier);
-
-        var baseGrams = regime.RiskTag == "SAFE" ? 18m : 9m;
-        var volatilityPenalty = Math.Clamp(snapshot.VolatilityExpansion <= 0 ? 0.15m : snapshot.VolatilityExpansion / 2m, 0.10m, 0.55m);
-        var exposurePenalty = Math.Clamp(ledgerState.OpenExposurePercent / 100m, 0m, 0.70m);
-        var reentryScale = ledgerState.OpenBuyCount <= 0 ? 1m : 1m / (ledgerState.OpenBuyCount + 1m);
-        var riskScale = regime.RiskTag == "SAFE" ? 1.00m : 0.60m;
-
-        var rawGrams = Math.Max(2m, baseGrams * (1m - volatilityPenalty) * (1m - exposurePenalty) * reentryScale * riskScale);
-        var maxAffordableGrams = ToMaxAffordableGrams(ledgerState.DeployableCashAed, entry);
-        var grams = Math.Max(0m, Math.Min(rawGrams, maxAffordableGrams));
-
-        if (grams < 2m)
-        {
-            return NoTrade("NO TRADE - HIGH RISK (insufficient deployable cash for minimum grams)", score);
-        }
-
-        var expiry = snapshot.Timestamp.UtcDateTime.Add(GetSessionExpiry(snapshot.Session));
+        var expiryBand = GetSessionExpiryBand(session);
+        var expiry = snapshot.Timestamp.UtcDateTime.Add(expiryBand.Min);
 
         return new DecisionResultContract(
             IsTradeAllowed: true,
-            Status: "TABLE",
-            Reason: $"{regime.Regime} aligned with AI {aiSignal.SafetyTag}/{aiSignal.DirectionBias}.",
+            Status: "ARMED",
+            EngineState: "ARMED",
+            Mode: mode,
+            Cause: cause,
+            WaterfallRisk: waterfallRisk,
+            Reason: $"P1-P5 gates passed ({session}, {rail}, {sizeClass}).",
+            Bucket: bucket,
             Rail: rail,
+            Session: session,
+            SizeClass: sizeClass,
             Entry: decimal.Round(entry, 2),
             Tp: decimal.Round(tp, 2),
             Grams: decimal.Round(grams, 2),
             ExpiryUtc: new DateTimeOffset(expiry, TimeSpan.Zero),
-            MaxLifeSeconds: (int)GetSessionExpiry(snapshot.Session).TotalSeconds,
-            AlignmentScore: score);
+            MaxLifeSeconds: (int)expiryBand.Max.TotalSeconds,
+            AlignmentScore: score,
+            TelegramState: telegramState,
+            RailPermissionA: railPermissionA,
+            RailPermissionB: railPermissionB,
+            RotationCapThisSession: 2);
     }
 
-    private static TimeSpan GetSessionExpiry(string session) => session.ToUpperInvariant() switch
+    private static (TimeSpan Min, TimeSpan Max) GetSessionExpiryBand(string session) => session.ToUpperInvariant() switch
     {
-        "JAPAN" => TimeSpan.FromHours(6),
-        "INDIA" => TimeSpan.FromHours(6),
-        "ASIA" => TimeSpan.FromHours(5),
-        "EUROPE" => TimeSpan.FromHours(4),
-        "LONDON" => TimeSpan.FromHours(4),
-        "NEW_YORK" => TimeSpan.FromHours(2),
-        _ => TimeSpan.FromHours(4)
+        "JAPAN" => (TimeSpan.FromMinutes(45), TimeSpan.FromMinutes(60)),
+        "INDIA" => (TimeSpan.FromMinutes(45), TimeSpan.FromMinutes(75)),
+        "LONDON" => (TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(55)),
+        "NY" => (TimeSpan.FromMinutes(20), TimeSpan.FromMinutes(45)),
+        _ => (TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(60))
     };
+
+    private static string NormalizeSession(string session)
+    {
+        var normalized = (session ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "ASIA" => "JAPAN",
+            "EUROPE" => "LONDON",
+            "NEW_YORK" => "NY",
+            _ => normalized,
+        };
+    }
+
+    private static string ResolveWaterfallRisk(MarketSnapshotContract snapshot, RegimeClassificationContract regime, TradeSignalContract aiSignal)
+    {
+        var score = 0;
+        if (snapshot.HasImpulseCandles && snapshot.IsExpansion)
+        {
+            score++;
+        }
+        if (snapshot.IsAtrExpanding)
+        {
+            score++;
+        }
+        if (snapshot.RsiH1 > 72m || snapshot.RsiM15 > 75m)
+        {
+            score++;
+        }
+        if (snapshot.SpreadMax60m > 0m && snapshot.SpreadMedian60m > 0m && snapshot.SpreadMax60m >= snapshot.SpreadMedian60m * 2.2m)
+        {
+            score++;
+        }
+        if (snapshot.IsFriday && (NormalizeSession(snapshot.Session) is "LONDON" or "NY") && snapshot.Adr > 0m && snapshot.Atr / snapshot.Adr >= 0.95m)
+        {
+            score++;
+        }
+        if (snapshot.PanicSuspected || snapshot.HasPanicDropSequence)
+        {
+            score++;
+        }
+        if (regime.IsWaterfall || string.Equals(aiSignal.SafetyTag, "BLOCK", StringComparison.OrdinalIgnoreCase))
+        {
+            score++;
+        }
+
+        if (score >= 2)
+        {
+            return "HIGH";
+        }
+
+        return score == 1 ? "MEDIUM" : "LOW";
+    }
+
+    private static string ResolveMode(MarketSnapshotContract snapshot, TradeSignalContract aiSignal)
+    {
+        if (snapshot.IsExpansion && snapshot.HasImpulseCandles && snapshot.RsiH1 <= 73m)
+        {
+            return "IMPULSE";
+        }
+
+        if (string.Equals(aiSignal.Rail, "BUY_STOP", StringComparison.OrdinalIgnoreCase) && snapshot.RsiH1 <= 73m)
+        {
+            return "IMPULSE";
+        }
+
+        return "EXHAUSTION";
+    }
+
+    private static string ResolveCause(MarketSnapshotContract snapshot, RegimeClassificationContract regime, TradeSignalContract aiSignal)
+    {
+        if (snapshot.PanicSuspected || snapshot.HasPanicDropSequence)
+        {
+            return "LIQUIDITY_SHOCK";
+        }
+
+        if (snapshot.IsUsRiskWindow && string.Equals(snapshot.TelegramImpactTag, "HIGH", StringComparison.OrdinalIgnoreCase))
+        {
+            return "SCHEDULED_MACRO";
+        }
+
+        if (snapshot.IsBreakoutConfirmed && snapshot.HasOverlapCandles)
+        {
+            return "TECH_BREAKOUT";
+        }
+
+        if (string.Equals(regime.Regime, "NEWS_SPIKE", StringComparison.OrdinalIgnoreCase))
+        {
+            return "UNSCHEDULED_GEO_POLICY";
+        }
+
+        if (string.Equals(aiSignal.NewsImpactTag, "HIGH", StringComparison.OrdinalIgnoreCase))
+        {
+            return "UNSCHEDULED_GEO_POLICY";
+        }
+
+        return "UNKNOWN";
+    }
+
+    private static bool IsSpikeCatchAllowed(
+        MarketSnapshotContract snapshot,
+        string cause,
+        string mode,
+        string waterfallRisk,
+        string telegramState)
+    {
+        if (mode != "IMPULSE") return false;
+        if (cause is not "TECH_BREAKOUT" and not "SCHEDULED_MACRO") return false;
+        if (waterfallRisk != "LOW") return false;
+        if (snapshot.SpreadMax60m > 0m && snapshot.SpreadMedian60m > 0m && snapshot.SpreadMax60m >= snapshot.SpreadMedian60m * 1.8m) return false;
+        if (snapshot.RsiH1 > 73m) return false;
+        if (telegramState is "SELL" or "STRONG_SELL") return false;
+        if (snapshot.PanicSuspected) return false;
+        if (snapshot.TvAlertType == "ADR_EXHAUSTION" || snapshot.TvAlertType == "RSI_OVERHEAT") return false;
+        if (snapshot.CompressionCountM15 < 3 || !snapshot.IsBreakoutConfirmed) return false;
+        return true;
+    }
+
+    private static string ResolveSizeClass(string telegramState, string waterfallRisk, string railPermissionA)
+    {
+        if (waterfallRisk == "MEDIUM" || railPermissionA == "AFTER_STRUCTURE")
+        {
+            return "25%";
+        }
+
+        return telegramState switch
+        {
+            "STRONG_BUY" => "75%",
+            "BUY" => "50%",
+            _ => "25%",
+        };
+    }
+
+    private static decimal ParseSizePercent(string sizeClass) => sizeClass switch
+    {
+        "25%" => 0.25m,
+        "50%" => 0.50m,
+        "75%" => 0.75m,
+        "100%" => 1.00m,
+        _ => 0.25m,
+    };
+
+    private static string NormalizeTelegramState(string value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "STRONG_BUY" => "STRONG_BUY",
+            "BUY" => "BUY",
+            "MIXED" => "MIXED",
+            "SELL" => "SELL",
+            "STRONG_SELL" => "STRONG_SELL",
+            _ => "QUIET",
+        };
+    }
+
+    private static decimal Clamp(decimal value, decimal min, decimal max) => Math.Min(max, Math.Max(min, value));
 
     private static decimal ToMaxAffordableGrams(decimal deployableCashAed, decimal entryUsdPerOunce)
     {
@@ -136,7 +309,7 @@ public static class DecisionEngine
             return 0m;
         }
 
-        var shopBuy = entryUsdPerOunce + 0.80m;
+        var shopBuy = entryUsdPerOunce + ShopSpreadUsdPerOz;
         var usdPerGram = shopBuy / OunceToGram;
         if (usdPerGram <= 0m)
         {
@@ -147,16 +320,36 @@ public static class DecisionEngine
         return deployableCashAed / aedPerGram;
     }
 
-    private static DecisionResultContract NoTrade(string reason, decimal score) =>
+    private static DecisionResultContract NoTrade(
+        string reason,
+        decimal score,
+        MarketSnapshotContract snapshot,
+        string engineState = "CAPITAL_PROTECTED",
+        string waterfallRisk = "HIGH",
+        string cause = "UNKNOWN",
+        string mode = "EXHAUSTION",
+        string railPermissionA = "BLOCKED",
+        string railPermissionB = "BLOCKED") =>
         new(
             IsTradeAllowed: false,
-            Status: "NO TRADE - HIGH RISK",
+            Status: "NO_TRADE",
+            EngineState: engineState,
+            Mode: mode,
+            Cause: cause,
+            WaterfallRisk: waterfallRisk,
             Reason: reason,
+            Bucket: "C1",
             Rail: string.Empty,
+            Session: NormalizeSession(snapshot.Session),
+            SizeClass: "25%",
             Entry: 0m,
             Tp: 0m,
             Grams: 0m,
             ExpiryUtc: DateTimeOffset.UtcNow,
             MaxLifeSeconds: 0,
-            AlignmentScore: score);
+            AlignmentScore: score,
+            TelegramState: NormalizeTelegramState(snapshot.TelegramState),
+            RailPermissionA: railPermissionA,
+            RailPermissionB: railPermissionB,
+            RotationCapThisSession: 0);
 }
