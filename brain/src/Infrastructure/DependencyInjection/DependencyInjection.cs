@@ -40,7 +40,6 @@ public static class DependencyInjection
         var telegramTargets = (
             configuration["External:Telegram:NotifyChannels"]
             ?? configuration["TELEGRAM_NOTIFY_CHANNELS"]
-            ?? configuration["TELEGRAM_CHANNELS"]
             ?? string.Empty).Trim();
 
         if (!string.IsNullOrWhiteSpace(telegramBotToken) && !string.IsNullOrWhiteSpace(telegramTargets))

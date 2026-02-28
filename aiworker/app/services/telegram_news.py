@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import logging
 import re
 from typing import Any
 
@@ -8,6 +9,11 @@ import httpx
 from app.ai.config import (
     TELEGRAM_BOT_BASE_URL,
     TELEGRAM_BOT_TOKEN,
+    TELEGRAM_READ_MODE,
+    TELEGRAM_API_ID,
+    TELEGRAM_API_HASH,
+    TELEGRAM_SESSION_STRING,
+    TELEGRAM_SESSION_NAME,
     TELEGRAM_CHANNELS,
     TELEGRAM_LOOKBACK_MINUTES,
     TELEGRAM_MAX_UPDATES,
@@ -16,6 +22,8 @@ from app.ai.config import (
     TELEGRAM_BULLISH_KEYWORDS,
     TELEGRAM_BEARISH_KEYWORDS,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -37,7 +45,7 @@ class TelegramNewsContext:
 
 class TelegramNewsService:
     def __init__(self) -> None:
-        self._enabled = bool(TELEGRAM_BOT_TOKEN)
+        self._enabled = self._is_reader_enabled()
 
     @property
     def enabled(self) -> bool:
@@ -55,18 +63,34 @@ class TelegramNewsService:
                 buy_score=0.0,
                 sell_score=0.0,
                 dominance=0.0,
-                tags=["telegram_not_configured"],
-                summary="Telegram bot token is not configured.",
+                tags=["telegram_not_configured", f"telegram_mode_{TELEGRAM_READ_MODE}"],
+                summary=f"Telegram reader is not configured for mode={TELEGRAM_READ_MODE}.",
                 headlines=[],
                 items=[],
             )
 
-        updates = await self._fetch_updates()
-        items = self._extract_recent_items(updates)
+        items = await self._fetch_recent_items()
         headlines = [f"{item['channel']}: {item['text']}" for item in items]
         return self._analyze_headlines(symbol, headlines, items)
 
-    async def _fetch_updates(self) -> list[dict[str, Any]]:
+    @staticmethod
+    def _is_reader_enabled() -> bool:
+        if TELEGRAM_READ_MODE == "client":
+            return TELEGRAM_API_ID > 0 and bool(TELEGRAM_API_HASH)
+        return bool(TELEGRAM_BOT_TOKEN)
+
+    async def _fetch_recent_items(self) -> list[dict[str, str]]:
+        if TELEGRAM_READ_MODE == "client":
+            items = await self._fetch_recent_items_client()
+            if items:
+                return items
+            if TELEGRAM_BOT_TOKEN:
+                logger.warning("Telegram client mode returned no items; falling back to bot getUpdates path.")
+
+        updates = await self._fetch_updates_bot()
+        return self._extract_recent_items_from_updates(updates)
+
+    async def _fetch_updates_bot(self) -> list[dict[str, Any]]:
         endpoint = f"{TELEGRAM_BOT_BASE_URL}/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
         params = {
             "limit": max(1, min(TELEGRAM_MAX_UPDATES, 100)),
@@ -87,7 +111,66 @@ class TelegramNewsService:
 
         return [item for item in result if isinstance(item, dict)]
 
-    def _extract_recent_items(self, updates: list[dict[str, Any]]) -> list[dict[str, str]]:
+    async def _fetch_recent_items_client(self) -> list[dict[str, str]]:
+        try:
+            from telethon import TelegramClient
+            from telethon.sessions import StringSession
+        except Exception:
+            logger.warning("Telethon is not installed. Install dependencies from requirements.txt to use TELEGRAM_READ_MODE=client.")
+            return []
+
+        if TELEGRAM_API_ID <= 0 or not TELEGRAM_API_HASH:
+            return []
+
+        session = StringSession(TELEGRAM_SESSION_STRING) if TELEGRAM_SESSION_STRING else TELEGRAM_SESSION_NAME
+        since = datetime.now(timezone.utc) - timedelta(minutes=max(1, TELEGRAM_LOOKBACK_MINUTES))
+        allowed_channels = {self._normalize_channel(value) for value in TELEGRAM_CHANNELS}
+        per_channel_limit = max(5, min(TELEGRAM_MAX_UPDATES, 50))
+        collected: list[dict[str, str]] = []
+
+        async with TelegramClient(session, TELEGRAM_API_ID, TELEGRAM_API_HASH) as client:
+            if not await client.is_user_authorized():
+                logger.warning(
+                    "Telegram client session is not authorized. Complete first login for TELEGRAM_READ_MODE=client using TELEGRAM_SESSION_STRING or session file."
+                )
+                return []
+
+            for channel in allowed_channels:
+                channel_ref = channel[1:] if channel.startswith("@") else channel
+                try:
+                    entity = await client.get_entity(channel_ref)
+                    messages = await client.get_messages(entity, limit=per_channel_limit)
+                except Exception as ex:
+                    logger.warning("Failed reading channel %s via Telegram client: %s", channel, ex)
+                    continue
+
+                for message in messages:
+                    if not message:
+                        continue
+                    if not message.date:
+                        continue
+
+                    message_dt = message.date.astimezone(timezone.utc)
+                    if message_dt < since:
+                        continue
+
+                    text = (message.message or "").strip()
+                    if not text:
+                        continue
+
+                    compact = self._compact_whitespace(text)
+                    category = self._categorize(compact)
+                    collected.append({
+                        "channel": channel,
+                        "timestamp": message_dt.isoformat(),
+                        "category": category,
+                        "text": compact[:220],
+                    })
+
+        collected.sort(key=lambda item: item["timestamp"])
+        return collected[-25:]
+
+    def _extract_recent_items_from_updates(self, updates: list[dict[str, Any]]) -> list[dict[str, str]]:
         since = datetime.now(timezone.utc) - timedelta(minutes=max(1, TELEGRAM_LOOKBACK_MINUTES))
         allowed_channels = {self._normalize_channel(value) for value in TELEGRAM_CHANNELS}
         items: list[dict[str, str]] = []
@@ -118,12 +201,7 @@ class TelegramNewsService:
                 continue
 
             compact = self._compact_whitespace(text)
-            lowered = compact.lower()
-            category = "LOW"
-            if any(keyword.strip().lower() in lowered for keyword in TELEGRAM_BLOCK_KEYWORDS if keyword.strip()):
-                category = "HIGH"
-            elif any(keyword.strip().lower() in lowered for keyword in TELEGRAM_CAUTION_KEYWORDS if keyword.strip()):
-                category = "MODERATE"
+            category = self._categorize(compact)
 
             items.append({
                 "channel": current_channel,
@@ -133,6 +211,15 @@ class TelegramNewsService:
             })
 
         return items[-25:]
+
+    @staticmethod
+    def _categorize(text: str) -> str:
+        lowered = text.lower()
+        if any(keyword.strip().lower() in lowered for keyword in TELEGRAM_BLOCK_KEYWORDS if keyword.strip()):
+            return "HIGH"
+        if any(keyword.strip().lower() in lowered for keyword in TELEGRAM_CAUTION_KEYWORDS if keyword.strip()):
+            return "MODERATE"
+        return "LOW"
 
     def _analyze_headlines(self, symbol: str, headlines: list[str], items: list[dict[str, str]]) -> TelegramNewsContext:
         if not headlines:

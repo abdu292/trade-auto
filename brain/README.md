@@ -59,4 +59,6 @@ For production, set `Security:ApiKey` via environment/secret store and avoid com
 - Configure either `External:Telegram:*` (preferred) or environment variables:
 	- `TELEGRAM_BOT_TOKEN`
 	- `TELEGRAM_NOTIFY_CHANNELS` (comma-separated `@channel` or `-100...` chat IDs)
+- Outbound notifications use `TELEGRAM_NOTIFY_CHANNELS` only (no fallback to listener channels).
+- Same Telegram bot token can be reused by listener and notifier services, as long as bot permissions are granted in each channel.
 - If Telegram keys are missing, backend automatically falls back to mock notification feed.

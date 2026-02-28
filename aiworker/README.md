@@ -25,7 +25,13 @@ pip install -r requirements.txt
 # (later optional) GROK_API_KEY=...
 # (later optional) GROK_MODEL=grok-2-latest
 # TELEGRAM_BOT_TOKEN=...
-# TELEGRAM_CHANNELS=@channel_one,@channel_two,-1001234567890
+# TELEGRAM_READ_MODE=client
+# TELEGRAM_API_ID=123456
+# TELEGRAM_API_HASH=your_api_hash
+# TELEGRAM_SESSION_NAME=trade_auto_reader
+# (optional) TELEGRAM_SESSION_STRING=...
+# TELEGRAM_LISTEN_CHANNELS=@analysis_channel_one,@analysis_channel_two,-1001234567890
+# TELEGRAM_NOTIFY_CHANNELS=@client_updates_channel
 
 uvicorn app.main:app --reload --port 8001
 ```
@@ -67,8 +73,31 @@ Invoke-RestMethod -Uri "http://localhost:8001/analyze" `
 - `GROK_API_KEY`: required when transport is `direct`
 - `GROK_MODEL`: direct Grok model name (default `grok-2-latest`)
 - `CONSENSUS_ENTRY_TOLERANCE_PCT`: Entry price tolerance (default: 0.003 = 0.3%)
-- `TELEGRAM_CHANNELS`: Comma-separated list of channels/IDs, flexible for adding more later
+- `TELEGRAM_READ_MODE`: `bot` (default, requires bot access) or `client` (MTProto user session)
+- `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`: Required for `TELEGRAM_READ_MODE=client`
+- `TELEGRAM_SESSION_NAME` / `TELEGRAM_SESSION_STRING`: Client session storage for MTProto login
+- `TELEGRAM_LISTEN_CHANNELS`: Comma-separated channels/IDs used for news ingestion and consensus
+- `TELEGRAM_NOTIFY_CHANNELS`: Optional list for outbound notifications (if reused by other services)
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_LOOKBACK_MINUTES`, `TELEGRAM_*_KEYWORDS`: Telegram news ingestion and risk tagging
+
+### Telegram read modes
+
+- `bot` mode: uses `getUpdates`; can only read channels where the bot receives `channel_post` updates.
+- `client` mode: uses Telethon MTProto user session; supports reading public channels by username without bot admin rights.
+
+### Initialize MTProto session (one-time)
+
+```bash
+set TELEGRAM_API_ID=123456
+set TELEGRAM_API_HASH=your_api_hash
+python scripts/init_telegram_session.py
+```
+
+Copy printed `TELEGRAM_SESSION_STRING` into `.env`, then run with:
+
+```bash
+TELEGRAM_READ_MODE=client
+```
 
 ## Spec parity health check
 

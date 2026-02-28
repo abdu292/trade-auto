@@ -15,6 +15,14 @@ def _read_csv_env(name: str, default: str = "") -> List[str]:
     return deduped
 
 
+def _read_int_env(name: str, default: int = 0) -> int:
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 GROK_MODEL = os.getenv("GROK_MODEL", "grok-2-latest")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -28,8 +36,21 @@ CONSENSUS_ENTRY_TOLERANCE_PCT = float(os.getenv("CONSENSUS_ENTRY_TOLERANCE_PCT",
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_BOT_BASE_URL = os.getenv("TELEGRAM_BOT_BASE_URL", "https://api.telegram.org")
-TELEGRAM_CHANNELS = _read_csv_env(
-    "TELEGRAM_CHANNELS",
+TELEGRAM_READ_MODE = os.getenv("TELEGRAM_READ_MODE", "bot").strip().lower()
+TELEGRAM_API_ID = _read_int_env("TELEGRAM_API_ID", 0)
+TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH", "").strip()
+TELEGRAM_SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING", "").strip()
+TELEGRAM_SESSION_NAME = os.getenv("TELEGRAM_SESSION_NAME", "trade_auto_reader").strip() or "trade_auto_reader"
+TELEGRAM_LISTEN_CHANNELS = _read_csv_env(
+    "TELEGRAM_LISTEN_CHANNELS",
+    os.getenv(
+        "TELEGRAM_CHANNELS",
+        "@SmartMoneySmart837,@richard1000pips,@moonforexchannel,@Apexgoldtraders",
+    ),
+)
+TELEGRAM_CHANNELS = TELEGRAM_LISTEN_CHANNELS
+TELEGRAM_NOTIFY_CHANNELS = _read_csv_env(
+    "TELEGRAM_NOTIFY_CHANNELS",
     "@SmartMoneySmart837,@richard1000pips,@moonforexchannel,@Apexgoldtraders",
 )
 TELEGRAM_LOOKBACK_MINUTES = int(os.getenv("TELEGRAM_LOOKBACK_MINUTES", "180"))

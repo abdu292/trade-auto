@@ -86,7 +86,6 @@ public sealed class TelegramNotificationService(
         var raw =
             configuration["External:Telegram:NotifyChannels"]
             ?? configuration["TELEGRAM_NOTIFY_CHANNELS"]
-            ?? configuration["TELEGRAM_CHANNELS"]
             ?? string.Empty;
 
         var values = raw

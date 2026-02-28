@@ -4,3 +4,4 @@ httpx==0.28.1
 pydantic==2.11.7
 openai>=1.0.0
 python-dotenv==1.0.0
+telethon==1.38.1
