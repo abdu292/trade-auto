@@ -25,7 +25,7 @@ Use **Grok as the sole live decision engine** for both local and production runt
 Live runtime (local + production):
 - GROK_RUNTIME_TRANSPORT=openrouter
 - OPENROUTER_API_KEY=<your_key>
-- GROK_OPENROUTER_MODEL=x-ai/grok-2-latest
+- GROK_OPENROUTER_MODEL=x-ai/grok-4.1-fast
 
 Later (optional direct transport):
 - GROK_RUNTIME_TRANSPORT=direct

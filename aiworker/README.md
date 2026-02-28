@@ -20,7 +20,7 @@ pip install -r requirements.txt
 # Create .env with API keys (see AI_INTEGRATION_GUIDE.md)
 # GROK_RUNTIME_TRANSPORT=openrouter
 # OPENROUTER_API_KEY=...
-# GROK_OPENROUTER_MODEL=x-ai/grok-2-latest
+# GROK_OPENROUTER_MODEL=x-ai/grok-4.1-fast
 # (later optional) GROK_RUNTIME_TRANSPORT=direct
 # (later optional) GROK_API_KEY=...
 # (later optional) GROK_MODEL=grok-2-latest
@@ -63,7 +63,7 @@ Invoke-RestMethod -Uri "http://localhost:8001/analyze" `
 **Key environment variables:**
 - `GROK_RUNTIME_TRANSPORT`: `openrouter` (recommended now) or `direct`
 - `OPENROUTER_API_KEY`: required when transport is `openrouter`
-- `GROK_OPENROUTER_MODEL`: must be Grok model id (default `x-ai/grok-2-latest`)
+- `GROK_OPENROUTER_MODEL`: must be Grok model id (default `x-ai/grok-4.1-fast`)
 - `GROK_API_KEY`: required when transport is `direct`
 - `GROK_MODEL`: direct Grok model name (default `grok-2-latest`)
 - `CONSENSUS_ENTRY_TOLERANCE_PCT`: Entry price tolerance (default: 0.003 = 0.3%)

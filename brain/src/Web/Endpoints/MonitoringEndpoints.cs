@@ -29,7 +29,8 @@ public static class MonitoringEndpoints
                 ITradingViewSignalStore tradingViewStore,
                 IPendingTradeStore pendingTrades,
                 INotificationFeedStore feedStore,
-                IApplicationDbContext db) =>
+                IApplicationDbContext db,
+                IMarketSimulationService simulator) =>
             {
                 snapshotStore.TryGet(out var snapshot);
                 tradingViewStore.TryGetLatest(out var tv);
@@ -61,12 +62,57 @@ public static class MonitoringEndpoints
                     positioningFlag = macro?.PositioningFlag ?? "UNKNOWN",
                     macroCacheAgeMinutes = macro is null ? -1 : (int)Math.Max(0, (DateTimeOffset.UtcNow - macro.LastRefreshedUtc).TotalMinutes),
                     activeBlockedHazardWindows = activeHazardCount,
+                    simulation = simulator.GetStatus(),
                     tradingView = tv,
                     latestNotifications,
                 });
             })
             .WithName("GetRuntimeStatus")
             .WithDescription("Returns live runtime telemetry for MT5 demo/live operation monitoring.");
+
+        monitoring.MapGet(
+            "/simulator/status",
+            (IMarketSimulationService simulator) => TypedResults.Ok(simulator.GetStatus()))
+            .WithName("GetSimulatorStatus")
+            .WithDescription("Returns current weekend/off-hours simulator status.");
+
+        monitoring.MapPost(
+            "/simulator/start",
+            (StartMarketSimulationRequest? request, IMarketSimulationService simulator) =>
+            {
+                var payload = new Brain.Application.Common.Models.MarketSimulationStartContract(
+                    StartPrice: request?.StartPrice ?? 2890m,
+                    VolatilityUsd: request?.VolatilityUsd ?? 0.45m,
+                    BaseSpread: request?.BaseSpread ?? 0.18m,
+                    IntervalSeconds: request?.IntervalSeconds ?? 5,
+                    SessionOverride: request?.SessionOverride,
+                    EnableShockEvents: request?.EnableShockEvents ?? true);
+
+                simulator.Start(payload);
+                return TypedResults.Ok(simulator.GetStatus());
+            })
+            .WithName("StartMarketSimulator")
+            .WithDescription("Starts realistic MT5-like snapshot simulation for market-closed testing.");
+
+        monitoring.MapPost(
+            "/simulator/stop",
+            (IMarketSimulationService simulator) =>
+            {
+                simulator.Stop();
+                return TypedResults.Ok(simulator.GetStatus());
+            })
+            .WithName("StopMarketSimulator")
+            .WithDescription("Stops weekend/off-hours market snapshot simulation.");
+
+        monitoring.MapPost(
+            "/simulator/step",
+            (IMarketSimulationService simulator) =>
+            {
+                simulator.StepOnce();
+                return TypedResults.Ok(simulator.GetStatus());
+            })
+            .WithName("StepMarketSimulator")
+            .WithDescription("Generates one simulated MT5 snapshot tick immediately.");
 
         monitoring.MapGet(
             "/macro-cache",
@@ -207,3 +253,11 @@ public sealed record CreateHazardWindowRequest(
     DateTimeOffset StartUtc,
     DateTimeOffset EndUtc,
     bool IsBlocked = true);
+
+public sealed record StartMarketSimulationRequest(
+    decimal? StartPrice,
+    decimal? VolatilityUsd,
+    decimal? BaseSpread,
+    int? IntervalSeconds,
+    string? SessionOverride,
+    bool? EnableShockEvents);

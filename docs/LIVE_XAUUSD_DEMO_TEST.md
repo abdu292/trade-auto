@@ -18,6 +18,10 @@ This is the only test guide to run the system exactly as real trading, but on yo
 - Flutter app running.
 - TradingView webhook enabled (optional but recommended for spec behavior).
 
+AI runtime note (current):
+- Live decision engine is Grok-only semantics.
+- Current transport can be OpenRouter (`GROK_RUNTIME_TRANSPORT=openrouter`) with Grok model id (example: `x-ai/grok-2-latest`).
+
 ## 3) Start services
 From repo root:
 
@@ -141,6 +145,45 @@ Run these endpoints using **Try it out**:
   - Run `POST /api/tradingview/webhook` with the same JSON payload used in TradingView.
   - Then run `GET /api/tradingview/latest` and confirm the payload is stored.
 
+## 7.2 Weekend / market-closed realistic simulation (Swagger)
+
+When MT5 market is closed (Saturday/Sunday), use simulator endpoints that feed the same snapshot path used by the live signal loop.
+
+Open Swagger:
+- `http://127.0.0.1:5000/swagger`
+
+Run:
+
+1. `POST /api/monitoring/simulator/start`
+  - Body example:
+
+```json
+{
+  "startPrice": 2890.0,
+  "volatilityUsd": 0.45,
+  "baseSpread": 0.18,
+  "intervalSeconds": 5,
+  "sessionOverride": "LONDON",
+  "enableShockEvents": true
+}
+```
+
+2. Wait 15-30 seconds, then run:
+  - `GET /api/monitoring/runtime`
+  - `GET /api/monitoring/simulator/status`
+
+3. Verify runtime fields change over time (`bid`, `ask`, `spread`, `session`) and decision loop keeps running.
+
+4. Optional one-tick generation:
+  - `POST /api/monitoring/simulator/step`
+
+5. Stop simulator when done:
+  - `POST /api/monitoring/simulator/stop`
+
+Important:
+- This is realistic for control-flow testing (same backend ingestion + gating path as MT5 snapshot store).
+- It is not a broker-execution substitute for final slippage/liquidity behavior; do final acceptance again with live MT5 market open.
+
 ## 8) Hard pass criteria
 - Only XAUUSD trades created.
 - Only BUY_LIMIT/BUY_STOP pending orders.
@@ -158,13 +201,18 @@ Run these endpoints using **Try it out**:
 
 ## 10) Keys and provider guidance
 Current best practical setup:
-- Use OpenRouter key for primary operation.
-- Keep `AI_PROVIDER_MODE=universal`.
-- Start with 1-2 low-latency models.
+- Keep Grok-only semantics.
+- If using OpenRouter transport now:
+  - `GROK_RUNTIME_TRANSPORT=openrouter`
+  - `OPENROUTER_API_KEY=<key>`
+  - `GROK_OPENROUTER_MODEL=x-ai/grok-2-latest`
+- If using direct xAI transport later:
+  - `GROK_RUNTIME_TRANSPORT=direct`
+  - `GROK_API_KEY=<key>`
+  - `GROK_MODEL=grok-2-latest`
 
 When to buy direct Grok credits:
-- Buy Grok credits only if you want direct xAI failover or A/B comparison.
-- For normal operation now, OpenRouter is enough.
+- Buy direct Grok credits when you want transport independence from OpenRouter and tighter vendor-level control.
 
 Perplexity/Gemini direct keys:
 - Not mandatory for your immediate live demo test.

@@ -18,7 +18,7 @@ def _read_csv_env(name: str, default: str = "") -> List[str]:
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 GROK_MODEL = os.getenv("GROK_MODEL", "grok-2-latest")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-GROK_OPENROUTER_MODEL = os.getenv("GROK_OPENROUTER_MODEL", "x-ai/grok-2-latest")
+GROK_OPENROUTER_MODEL = os.getenv("GROK_OPENROUTER_MODEL", "x-ai/grok-4.1-fast")
 GROK_RUNTIME_TRANSPORT = os.getenv("GROK_RUNTIME_TRANSPORT", "openrouter").strip().lower()
 
 AI_PROVIDER_MODE = "grok-only"

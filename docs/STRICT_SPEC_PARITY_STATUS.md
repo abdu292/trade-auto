@@ -31,7 +31,7 @@ This document maps current implementation to the strict requirements in `spec/sp
 - `AI_PROVIDER_MODE=grok-only` (internal fixed runtime value)
 - `GROK_RUNTIME_TRANSPORT=openrouter`
 - `OPENROUTER_API_KEY=<key>`
-- `GROK_OPENROUTER_MODEL=x-ai/grok-2-latest`
+- `GROK_OPENROUTER_MODEL=x-ai/grok-4.1-fast`
 
 Optional later:
 - `GROK_RUNTIME_TRANSPORT=direct`

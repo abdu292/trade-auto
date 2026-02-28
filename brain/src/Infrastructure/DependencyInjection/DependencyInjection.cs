@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddSingleton<ITradingViewSignalStore, InMemoryTradingViewSignalStore>();
         services.AddSingleton<INotificationFeedStore, InMemoryNotificationFeedStore>();
         services.AddSingleton<ITradeLedgerService, InMemoryTradeLedgerService>();
+        services.AddSingleton<IMarketSimulationService, WeekendMarketSimulationService>();
         services.AddScoped<IMt5BridgeClient, MockMt5BridgeClient>();
         services.AddScoped<INotificationService, MockNotificationService>();
         services.AddScoped<IMarketDataProvider, Mt5MarketDataProvider>();

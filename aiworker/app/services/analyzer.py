@@ -113,7 +113,17 @@ class AnalyzerService:
             )
 
         if not signal:
-            raise ValueError("No consensus signal generated")
+            logger.warning("No usable Grok signal returned; using deterministic safe fallback signal.")
+            fallback_entry = max(1.0, primary_tf.close - max(0.2, snapshot.atr * 0.45))
+            fallback_tp = fallback_entry + max(0.5, snapshot.atr * 0.6)
+            signal = type("FallbackSignal", (), {
+                "rail": "BUY_LIMIT",
+                "entry": float(fallback_entry),
+                "tp": float(fallback_tp),
+                "pe": "00:20",
+                "ml": "00:30",
+                "confidence": 0.0,
+            })()
 
         pending_expiry = _parse_pe(snapshot.timestamp, signal.pe)
         max_life = _parse_ml(signal.ml)
