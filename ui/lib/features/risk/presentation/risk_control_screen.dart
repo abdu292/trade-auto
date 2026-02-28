@@ -3,12 +3,85 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../presentation/app_providers.dart';
 
-class RiskControlScreen extends ConsumerWidget {
+class RiskControlScreen extends ConsumerStatefulWidget {
   const RiskControlScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RiskControlScreen> createState() => _RiskControlScreenState();
+}
+
+class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
+  final TextEditingController _titleController =
+      TextEditingController(text: 'High-impact news');
+
+  String _selectedCategory = 'EVENT';
+  int _selectedDurationMinutes = 60;
+  bool _isCreatingHazard = false;
+
+  static const List<String> _categories = <String>[
+    'EVENT',
+    'NFP',
+    'CPI',
+    'FOMC',
+    'NEWS',
+  ];
+
+  static const List<int> _durationMinutes = <int>[15, 30, 60, 120, 240];
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createHazardWindow() async {
+    if (_isCreatingHazard) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Please enter a title.')),
+      );
+      return;
+    }
+
+    setState(() => _isCreatingHazard = true);
+    try {
+      final now = DateTime.now().toUtc();
+      final end = now.add(Duration(minutes: _selectedDurationMinutes));
+      await ref.read(brainApiProvider).createHazardWindow(
+            title: title,
+            category: _selectedCategory,
+            startUtc: now,
+            endUtc: end,
+          );
+      ref
+        ..invalidate(hazardWindowsProvider)
+        ..invalidate(runtimeStatusProvider);
+      messenger.showSnackBar(
+        SnackBar(
+          content:
+              Text('Hazard block created for $_selectedDurationMinutes minutes.'),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to create hazard block: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isCreatingHazard = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final riskProfiles = ref.watch(riskProfilesProvider);
+    final hazardWindows = ref.watch(hazardWindowsProvider);
 
     Future<void> activate(String id) async {
       final messenger = ScaffoldMessenger.of(context);
@@ -22,7 +95,12 @@ class RiskControlScreen extends ConsumerWidget {
     }
 
     return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(riskProfilesProvider),
+      onRefresh: () async {
+        ref
+          ..invalidate(riskProfilesProvider)
+          ..invalidate(hazardWindowsProvider)
+          ..invalidate(runtimeStatusProvider);
+      },
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -68,6 +146,145 @@ class RiskControlScreen extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text('Error loading risk profiles: $error'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text('Hazard Windows',
+              style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Quick Block',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Use this when major news is expected. Trading will be blocked during this window.',
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Title',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _selectedCategory,
+                          decoration: const InputDecoration(
+                            labelText: 'Category',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: _categories
+                              .map(
+                                (item) => DropdownMenuItem<String>(
+                                  value: item,
+                                  child: Text(item),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() => _selectedCategory = value);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          initialValue: _selectedDurationMinutes,
+                          decoration: const InputDecoration(
+                            labelText: 'Duration',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: _durationMinutes
+                              .map(
+                                (minutes) => DropdownMenuItem<int>(
+                                  value: minutes,
+                                  child: Text('$minutes min'),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() => _selectedDurationMinutes = value);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _isCreatingHazard ? null : _createHazardWindow,
+                      icon: _isCreatingHazard
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.block),
+                      label: Text(_isCreatingHazard
+                          ? 'Creating...'
+                          : 'Create Hazard Block Now'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          hazardWindows.when(
+            data: (items) {
+              if (items.isEmpty) {
+                return const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('No hazard windows created yet.'),
+                  ),
+                );
+              }
+
+              return Column(
+                children: items
+                    .take(20)
+                    .map(
+                      (item) => Card(
+                        child: ListTile(
+                          title: Text(item.title),
+                          subtitle: Text(
+                            '${item.category} • ${item.startUtc.toLocal()} → ${item.endUtc.toLocal()}',
+                          ),
+                          trailing: item.isActive
+                              ? const Chip(label: Text('Active'))
+                              : const Chip(label: Text('Scheduled')),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              );
+            },
+            loading: () => const Padding(
+              padding: EdgeInsets.all(16),
+              child: LinearProgressIndicator(),
+            ),
+            error: (error, _) => Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text('Error loading hazard windows: $error'),
               ),
             ),
           ),

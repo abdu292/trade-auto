@@ -59,6 +59,26 @@ class BrainApi {
     return RuntimeStatus.fromJson(_asMap(response.data));
   }
 
+  Future<List<HazardWindow>> getHazardWindows() async {
+    final response = await _dio.get('/api/monitoring/hazard-windows');
+    return _asList(response.data).map(HazardWindow.fromJson).toList();
+  }
+
+  Future<void> createHazardWindow({
+    required String title,
+    required String category,
+    required DateTime startUtc,
+    required DateTime endUtc,
+  }) async {
+    await _dio.post('/api/monitoring/hazard-windows', data: {
+      'title': title,
+      'category': category,
+      'startUtc': startUtc.toUtc().toIso8601String(),
+      'endUtc': endUtc.toUtc().toIso8601String(),
+      'isBlocked': true,
+    });
+  }
+
   Future<TradeSignal> analyzeSnapshot(AnalyzeSnapshotInput input) async {
     final response =
         await _dio.post('/api/signals/analyze', data: input.toJson());

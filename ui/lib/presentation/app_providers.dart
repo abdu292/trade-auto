@@ -47,3 +47,7 @@ final approvalsProvider = FutureProvider<List<PendingApproval>>((ref) {
 final runtimeStatusProvider = FutureProvider<RuntimeStatus>((ref) {
   return ref.watch(brainApiProvider).getRuntimeStatus();
 });
+
+final hazardWindowsProvider = FutureProvider<List<HazardWindow>>((ref) {
+  return ref.watch(brainApiProvider).getHazardWindows();
+});

@@ -60,6 +60,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         ..invalidate(approvalsProvider)
         ..invalidate(strategiesProvider)
         ..invalidate(riskProfilesProvider)
+        ..invalidate(hazardWindowsProvider)
         ..invalidate(activeTradesProvider)
         ..invalidate(signalsProvider)
         ..invalidate(sessionsProvider);

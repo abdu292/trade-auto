@@ -261,6 +261,36 @@ class RuntimeStatus {
       );
 }
 
+class HazardWindow {
+  const HazardWindow({
+    required this.id,
+    required this.title,
+    required this.category,
+    required this.startUtc,
+    required this.endUtc,
+    required this.isBlocked,
+    required this.isActive,
+  });
+
+  final String id;
+  final String title;
+  final String category;
+  final DateTime startUtc;
+  final DateTime endUtc;
+  final bool isBlocked;
+  final bool isActive;
+
+  factory HazardWindow.fromJson(Map<String, dynamic> json) => HazardWindow(
+        id: _readString(json, 'id'),
+        title: _readString(json, 'title'),
+        category: _readString(json, 'category'),
+        startUtc: _readDateTime(json, 'startUtc'),
+        endUtc: _readDateTime(json, 'endUtc'),
+        isBlocked: _readBool(json, 'isBlocked'),
+        isActive: _readBool(json, 'isActive'),
+      );
+}
+
 class TradeSignal {
   const TradeSignal({
     required this.id,

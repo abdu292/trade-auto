@@ -52,3 +52,11 @@ For production, set `Security:ApiKey` via environment/secret store and avoid com
 - Configure `TradingView:WebhookSecret` in `src/Web/appsettings.Development.json` (or env/secret store in production).
 - Send alerts from TradingView webhook with flexible payload fields: `symbol`, `timeframe`, `signal`, `bias`, `riskTag`, `score`, `volatility`, `timestamp`, `notes`.
 - Latest TradingView signal is merged into decision alignment in polling flow and can strengthen or block trade eligibility.
+
+## Telegram Notifications
+
+- `INotificationService` now supports real Telegram delivery when configured.
+- Configure either `External:Telegram:*` (preferred) or environment variables:
+	- `TELEGRAM_BOT_TOKEN`
+	- `TELEGRAM_NOTIFY_CHANNELS` (comma-separated `@channel` or `-100...` chat IDs)
+- If Telegram keys are missing, backend automatically falls back to mock notification feed.

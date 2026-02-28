@@ -33,7 +33,25 @@ public static class DependencyInjection
         services.AddSingleton<ITradeLedgerService, InMemoryTradeLedgerService>();
         services.AddSingleton<IMarketSimulationService, WeekendMarketSimulationService>();
         services.AddScoped<IMt5BridgeClient, MockMt5BridgeClient>();
-        services.AddScoped<INotificationService, MockNotificationService>();
+        services.AddHttpClient<TelegramNotificationService>()
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
+        var telegramBotToken = (configuration["External:Telegram:BotToken"] ?? configuration["TELEGRAM_BOT_TOKEN"] ?? string.Empty).Trim();
+        var telegramTargets = (
+            configuration["External:Telegram:NotifyChannels"]
+            ?? configuration["TELEGRAM_NOTIFY_CHANNELS"]
+            ?? configuration["TELEGRAM_CHANNELS"]
+            ?? string.Empty).Trim();
+
+        if (!string.IsNullOrWhiteSpace(telegramBotToken) && !string.IsNullOrWhiteSpace(telegramTargets))
+        {
+            services.AddScoped<INotificationService, TelegramNotificationService>();
+        }
+        else
+        {
+            services.AddScoped<INotificationService, MockNotificationService>();
+        }
+
         services.AddScoped<IMarketDataProvider, Mt5MarketDataProvider>();
         services.AddScoped<IWhatsAppService, MockWhatsAppService>();
         services.AddScoped<ICalendarService, MockCalendarService>();
