@@ -2,23 +2,28 @@ using System.Text;
 using System.Text.Json;
 using Brain.Application.Common.Interfaces;
 using Brain.Application.Common.Models;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Brain.Infrastructure.Services.External;
 
 /// <summary>
-/// Real HTTP client for communicating with the AI Worker service at http://localhost:8001
+/// Real HTTP client for communicating with the AI Worker service.
 /// </summary>
 public sealed class HttpAIWorkerClient : IAIWorkerClient
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<HttpAIWorkerClient> _logger;
-    private const string BaseUrl = "http://localhost:8001";
+    private readonly string _baseUrl;
 
-    public HttpAIWorkerClient(HttpClient httpClient, ILogger<HttpAIWorkerClient> logger)
+    public HttpAIWorkerClient(
+        HttpClient httpClient,
+        IConfiguration configuration,
+        ILogger<HttpAIWorkerClient> logger)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _baseUrl = ResolveBaseUrl(configuration);
     }
 
     public async Task<TradeSignalContract> AnalyzeAsync(MarketSnapshotContract snapshot, CancellationToken cancellationToken)
@@ -27,7 +32,8 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         {
             // Log outgoing request
             _logger.LogInformation(
-                "→ [AIWorker] POST /analyze for {Symbol}, session={Session}",
+                "→ [AIWorker] POST {BaseUrl}/analyze for {Symbol}, session={Session}",
+                _baseUrl,
                 snapshot.Symbol,
                 snapshot.Session);
 
@@ -112,7 +118,7 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 "application/json");
 
             var response = await _httpClient.PostAsync(
-                $"{BaseUrl}/analyze",
+                $"{_baseUrl}/analyze",
                 jsonContent,
                 cancellationToken);
 
@@ -162,7 +168,8 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         {
             _logger.LogError(
                 ex,
-                "✗ [AIWorker] HTTP request failed. Is aiworker running on http://localhost:8001?");
+                "✗ [AIWorker] HTTP request failed. Verify External:AIWorkerBaseUrl is reachable: {BaseUrl}",
+                _baseUrl);
             throw;
         }
         catch (TimeoutException ex)
@@ -195,7 +202,7 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 "application/json");
 
             var response = await _httpClient.PostAsync(
-                $"{BaseUrl}/mode",
+                $"{_baseUrl}/mode",
                 jsonContent,
                 cancellationToken);
 
@@ -224,6 +231,17 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
             _logger.LogWarning(ex, "AI worker mode endpoint unavailable; continuing with local mode hints.");
             return null;
         }
+    }
+
+    private static string ResolveBaseUrl(IConfiguration configuration)
+    {
+        var configured = (configuration["External:AIWorkerBaseUrl"] ?? string.Empty).Trim().TrimEnd('/');
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured;
+        }
+
+        return "http://127.0.0.1:8001";
     }
 
     /// <summary>

@@ -8,6 +8,7 @@ FastAPI service providing deterministic XAUUSD signal orchestration for the Brai
 - ✅ **Grok transport selectable**: `openrouter` now, `direct` later
 - ✅ **Hard `NO_TRADE` when committee consensus fails**
 - ✅ **Telegram context enrichment + consensus tags**
+- ✅ **External RSS news enrichment + risk/bias scoring**
 - ✅ **Production Use**: Called by Brain API for market snapshot analysis
 
 ## Run
@@ -41,6 +42,8 @@ pip install -r requirements.txt
 # (optional) TELEGRAM_SESSION_STRING=...
 # TELEGRAM_LISTEN_CHANNELS=@analysis_channel_one,@analysis_channel_two,-1001234567890
 # TELEGRAM_NOTIFY_CHANNELS=@client_updates_channel
+# EXTERNAL_NEWS_ENABLED=true
+# EXTERNAL_NEWS_FEEDS=https://feeds.reuters.com/reuters/commoditiesNews,https://www.investing.com/rss/news_301.rss
 
 uvicorn app.main:app --reload --port 8001
 ```
@@ -96,6 +99,9 @@ For full end-to-end run and test sequence, use:
 - `TELEGRAM_LISTEN_CHANNELS`: Comma-separated channels/IDs used for news ingestion and consensus
 - `TELEGRAM_NOTIFY_CHANNELS`: Optional list for outbound notifications (if reused by other services)
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_LOOKBACK_MINUTES`, `TELEGRAM_*_KEYWORDS`: Telegram news ingestion and risk tagging
+- `EXTERNAL_NEWS_ENABLED`: Enable/disable external RSS news layer
+- `EXTERNAL_NEWS_FEEDS`: Comma-separated RSS feed URLs used for additional news context
+- `EXTERNAL_NEWS_LOOKBACK_MINUTES`, `EXTERNAL_NEWS_MAX_ITEMS`, `EXTERNAL_NEWS_*_KEYWORDS`: external news scoring and risk tagging
 
 ### Telegram read modes
 
