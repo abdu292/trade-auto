@@ -101,7 +101,7 @@ int OnInit()
 
 void OnTick()
 {
-    if (_Symbol != "XAUUSD")
+    if (StringFind(_Symbol, "XAUUSD", 0) != 0)
     {
         return;
     }
@@ -164,7 +164,7 @@ void OnTick()
 
 void OnTradeTransaction(const MqlTradeTransaction &trans, const MqlTradeRequest &request, const MqlTradeResult &result)
 {
-    if (_Symbol != "XAUUSD")
+    if (StringFind(_Symbol, "XAUUSD", 0) != 0)
     {
         return;
     }

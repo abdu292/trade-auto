@@ -125,12 +125,14 @@ public static class MonitoringEndpoints
                 IPendingTradeStore pendingTrades,
                 ITradeApprovalStore approvals,
                 INotificationFeedStore feedStore,
+                ITradingRuntimeSettingsStore runtimeSettings,
                 IConfiguration configuration,
                 IApplicationDbContext db,
                 IMarketSimulationService simulator) =>
             {
                 snapshotStore.TryGet(out var snapshot);
                 tradingViewStore.TryGetLatest(out var tv);
+                var configuredSymbol = runtimeSettings.GetSymbol();
                 var latestNotifications = feedStore.GetLatest(5);
                 var macro = db.MacroCacheStates
                     .AsNoTracking()
@@ -143,7 +145,8 @@ public static class MonitoringEndpoints
 
                 return TypedResults.Ok(new
                 {
-                    symbol = snapshot?.Symbol ?? "XAUUSD",
+                    symbol = snapshot?.Symbol ?? configuredSymbol,
+                    configuredSymbol,
                     mt5ServerTime = snapshot?.Mt5ServerTime,
                     ksaTime = snapshot?.KsaTime,
                     session = snapshot?.Session ?? "UNKNOWN",
@@ -172,6 +175,32 @@ public static class MonitoringEndpoints
             })
             .WithName("GetRuntimeStatus")
             .WithDescription("Returns live runtime telemetry for MT5 demo/live operation monitoring.");
+
+        monitoring.MapGet(
+            "/runtime-settings",
+            IResult (ITradingRuntimeSettingsStore runtimeSettings) =>
+            {
+                var symbol = runtimeSettings.GetSymbol();
+                return TypedResults.Ok(new { symbol });
+            })
+            .WithName("GetRuntimeSettings")
+            .WithDescription("Returns mutable runtime trading settings managed from app UI.");
+
+        monitoring.MapPut(
+            "/runtime-settings",
+            IResult (UpdateRuntimeSettingsRequest request, ITradingRuntimeSettingsStore runtimeSettings) =>
+            {
+                var symbol = (request.Symbol ?? string.Empty).Trim().ToUpperInvariant();
+                if (string.IsNullOrWhiteSpace(symbol))
+                {
+                    return TypedResults.BadRequest(new { error = "symbol is required." });
+                }
+
+                runtimeSettings.SetSymbol(symbol);
+                return TypedResults.Ok(new { symbol = runtimeSettings.GetSymbol() });
+            })
+            .WithName("UpdateRuntimeSettings")
+            .WithDescription("Updates mutable runtime trading settings without server restart.");
 
         monitoring.MapGet(
             "/simulator/status",
@@ -532,6 +561,8 @@ public sealed record StartMarketSimulationRequest(
     string? StrategyProfile);
 
 public sealed record ReplayRunRequest(int? Runs, decimal? StartPrice, string? StrategyProfile);
+
+public sealed record UpdateRuntimeSettingsRequest(string? Symbol);
 
 internal static class ReplayHarnessFactory
 {

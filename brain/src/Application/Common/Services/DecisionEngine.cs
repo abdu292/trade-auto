@@ -21,9 +21,9 @@ public static class DecisionEngine
         LedgerStateContract ledgerState,
         string? strategyProfileName = null)
     {
-        if (!string.Equals(snapshot.Symbol, "XAUUSD", StringComparison.OrdinalIgnoreCase))
+        if (!IsSupportedGoldSymbol(snapshot.Symbol))
         {
-            return NoTrade("Only XAUUSD is permitted.", aiSignal.AlignmentScore, snapshot);
+            return NoTrade("Only XAUUSD-family symbols are permitted.", aiSignal.AlignmentScore, snapshot);
         }
 
         var strategy = NormalizeStrategy(strategyProfileName);
@@ -118,6 +118,7 @@ public static class DecisionEngine
         var tp = entry + tpDistance;
         var bucket = "C1";
         var sizeClass = ResolveSizeClassStandard(telegramState, waterfallRisk, railPermissionA);
+
         var bucketCash = ledgerState.DeployableCashAed * 0.80m;
         var maxGrams = ToMaxAffordableGrams(bucketCash, entry) - SafetyBufferGrams;
         var sizePct = ParseSizePercent(sizeClass);
@@ -154,6 +155,12 @@ public static class DecisionEngine
             RailPermissionA: railPermissionA,
             RailPermissionB: railPermissionB,
             RotationCapThisSession: 2);
+    }
+
+    private static bool IsSupportedGoldSymbol(string? symbol)
+    {
+        var normalized = (symbol ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized.StartsWith("XAUUSD", StringComparison.Ordinal);
     }
 
     private static DecisionResultContract EvaluateWarPremium(

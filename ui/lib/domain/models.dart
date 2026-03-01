@@ -344,6 +344,15 @@ class RuntimeStatus {
       );
 }
 
+    class RuntimeSettings {
+      const RuntimeSettings({required this.symbol});
+
+      final String symbol;
+
+      factory RuntimeSettings.fromJson(Map<String, dynamic> json) =>
+      RuntimeSettings(symbol: _readString(json, 'symbol'));
+    }
+
 class HazardWindow {
   const HazardWindow({
     required this.id,

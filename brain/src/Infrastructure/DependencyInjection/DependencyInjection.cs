@@ -31,6 +31,8 @@ public static class DependencyInjection
         services.AddSingleton<ITradeApprovalStore, InMemoryTradeApprovalStore>();
         services.AddSingleton<ITradingViewSignalStore, InMemoryTradingViewSignalStore>();
         services.AddSingleton<INotificationFeedStore, InMemoryNotificationFeedStore>();
+        services.AddSingleton<ITradingRuntimeSettingsStore>(_ =>
+            new InMemoryTradingRuntimeSettingsStore(configuration["Execution:Symbol"] ?? "XAUUSD"));
         services.AddSingleton<ITradeLedgerService, DurableTradeLedgerService>();
         services.AddSingleton<IMarketSimulationService, WeekendMarketSimulationService>();
         services.AddScoped<IMt5BridgeClient, MockMt5BridgeClient>();

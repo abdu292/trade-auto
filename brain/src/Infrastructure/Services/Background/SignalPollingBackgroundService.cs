@@ -39,11 +39,13 @@ public sealed class SignalPollingBackgroundService(
             var mt5Control = scope.ServiceProvider.GetRequiredService<IMt5ControlStore>();
             var tradingViewStore = scope.ServiceProvider.GetRequiredService<ITradingViewSignalStore>();
             var simulator = scope.ServiceProvider.GetRequiredService<IMarketSimulationService>();
+            var runtimeSettings = scope.ServiceProvider.GetRequiredService<ITradingRuntimeSettingsStore>();
             var db = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
 
             try
             {
-                var snapshot = await marketData.GetSnapshotAsync("XAUUSD", stoppingToken);
+                var symbol = runtimeSettings.GetSymbol();
+                var snapshot = await marketData.GetSnapshotAsync(symbol, stoppingToken);
                 var normalizedSession = MapSessionType(snapshot.Session);
                 var sessionEnabled = await db.SessionStates
                     .AsNoTracking()

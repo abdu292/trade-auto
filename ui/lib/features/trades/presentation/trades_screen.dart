@@ -12,6 +12,7 @@ class TradesScreen extends ConsumerStatefulWidget {
 
 class _TradesScreenState extends ConsumerState<TradesScreen> {
   final Set<String> _busyApprovals = <String>{};
+  bool _isSavingRuntimeSymbol = false;
 
   Future<void> _approveTrade(String tradeId) async {
     if (_busyApprovals.contains(tradeId)) {
@@ -37,6 +38,69 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
     } finally {
       if (mounted) {
         setState(() => _busyApprovals.remove(tradeId));
+      }
+    }
+  }
+
+  Future<void> _editRuntimeSymbol(String currentSymbol) async {
+    if (_isSavingRuntimeSymbol) {
+      return;
+    }
+
+    final controller = TextEditingController(text: currentSymbol);
+    final nextSymbol = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Set Runtime Symbol'),
+        content: TextField(
+          controller: controller,
+          textCapitalization: TextCapitalization.characters,
+          decoration: const InputDecoration(
+            labelText: 'Symbol',
+            hintText: 'e.g. XAUUSD.gram',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext)
+                .pop(controller.text.trim().toUpperCase()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    controller.dispose();
+
+    if (!mounted || nextSymbol == null || nextSymbol.isEmpty) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isSavingRuntimeSymbol = true);
+    try {
+      await ref.read(brainApiProvider).updateRuntimeSymbol(nextSymbol);
+      ref
+        ..invalidate(runtimeSettingsProvider)
+        ..invalidate(runtimeStatusProvider)
+        ..invalidate(activeTradesProvider)
+        ..invalidate(approvalsProvider)
+        ..invalidate(signalsProvider)
+        ..invalidate(notificationsProvider);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Runtime symbol updated to $nextSymbol.')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to update runtime symbol: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingRuntimeSymbol = false);
       }
     }
   }
@@ -73,6 +137,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
     final trades = ref.watch(activeTradesProvider);
     final signals = ref.watch(signalsProvider);
     final runtime = ref.watch(runtimeStatusProvider);
+    final runtimeSettings = ref.watch(runtimeSettingsProvider);
     final approvals = ref.watch(approvalsProvider);
 
     Future<void> refresh() async {
@@ -80,6 +145,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
         ..invalidate(activeTradesProvider)
         ..invalidate(signalsProvider)
         ..invalidate(runtimeStatusProvider)
+        ..invalidate(runtimeSettingsProvider)
         ..invalidate(approvalsProvider)
         ..invalidate(notificationsProvider);
     }
@@ -259,6 +325,28 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
               data: (state) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  runtimeSettings.when(
+                    data: (settings) => Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: _isSavingRuntimeSymbol
+                            ? null
+                            : () => _editRuntimeSymbol(settings.symbol),
+                        icon: _isSavingRuntimeSymbol
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.edit),
+                        label: Text('Symbol: ${settings.symbol}'),
+                      ),
+                    ),
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  ),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,

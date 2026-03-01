@@ -59,6 +59,18 @@ class BrainApi {
     return RuntimeStatus.fromJson(_asMap(response.data));
   }
 
+  Future<RuntimeSettings> getRuntimeSettings() async {
+    final response = await _dio.get('/api/monitoring/runtime-settings');
+    return RuntimeSettings.fromJson(_asMap(response.data));
+  }
+
+  Future<RuntimeSettings> updateRuntimeSymbol(String symbol) async {
+    final response = await _dio.put('/api/monitoring/runtime-settings', data: {
+      'symbol': symbol,
+    });
+    return RuntimeSettings.fromJson(_asMap(response.data));
+  }
+
   Future<AiHealthStatus> getAiHealthStatus() async {
     final response = await _dio.get('/api/monitoring/ai-health');
     return AiHealthStatus.fromJson(_asMap(response.data));
