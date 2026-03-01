@@ -18,6 +18,12 @@ public sealed class SignalPollingBackgroundService(
     ILogger<SignalPollingBackgroundService> logger) : BackgroundService
 {
     private static DateTimeOffset _lastArmedAtUtc = DateTimeOffset.MinValue;
+    private static readonly Lock _transitionGate = new();
+    private static string _lastMode = string.Empty;
+    private static string _lastWaterfallRisk = string.Empty;
+    private const decimal OunceToGram = 31.1035m;
+    private const decimal UsdToAed = 3.674m;
+    private const decimal ShopSpreadUsdPerOz = 0.80m;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -29,6 +35,7 @@ public sealed class SignalPollingBackgroundService(
             var pendingTrades = scope.ServiceProvider.GetRequiredService<IPendingTradeStore>();
             var approvals = scope.ServiceProvider.GetRequiredService<ITradeApprovalStore>();
             var ledger = scope.ServiceProvider.GetRequiredService<ITradeLedgerService>();
+            var mt5Control = scope.ServiceProvider.GetRequiredService<IMt5ControlStore>();
             var tradingViewStore = scope.ServiceProvider.GetRequiredService<ITradingViewSignalStore>();
             var db = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
 
@@ -54,7 +61,18 @@ public sealed class SignalPollingBackgroundService(
                     logger.LogInformation("Watch/Waste kill-switch forcing cycle search (no ARMED order for >=25 minutes).");
                 }
 
+                var modeSignal = await aiWorker.GetModeAsync(snapshot, stoppingToken);
                 var aiSignal = await aiWorker.AnalyzeAsync(snapshot, stoppingToken);
+                if (modeSignal is not null)
+                {
+                    aiSignal = aiSignal with
+                    {
+                        ModeHint = modeSignal.Mode,
+                        ModeConfidence = modeSignal.Confidence,
+                        ModeTtlSeconds = modeSignal.TtlSeconds,
+                        ModeKeywords = modeSignal.Keywords,
+                    };
+                }
                 if (!aiSignal.ConsensusPassed)
                 {
                     var quorumReason = string.IsNullOrWhiteSpace(aiSignal.DisagreementReason)
@@ -98,15 +116,53 @@ public sealed class SignalPollingBackgroundService(
                     aiSignal = MergeTradingView(aiSignal, tv, snapshot, logger);
                 }
 
-                var state = ledger.GetState();
-                var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, state);
+                var activeStrategy = await db.StrategyProfiles
+                    .AsNoTracking()
+                    .Where(x => x.IsActive)
+                    .Select(x => x.Name)
+                    .FirstOrDefaultAsync(stoppingToken)
+                    ?? "Standard";
+
+                var rawState = ledger.GetState();
+                var reservedPendingAed = EstimateReservedPendingAed(pendingTrades.Snapshot());
+                var state = new LedgerStateContract(
+                    CashAed: rawState.CashAed,
+                    GoldGrams: rawState.GoldGrams,
+                    OpenExposurePercent: rawState.OpenExposurePercent,
+                    DeployableCashAed: Math.Max(0m, rawState.DeployableCashAed - reservedPendingAed),
+                    OpenBuyCount: rawState.OpenBuyCount);
+
+                var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, state, activeStrategy);
                 var snapshotHash = ComputeSnapshotHash(snapshot);
+                LogTransitionsIfChanged(db, snapshot, decision, forceWhereToTrade, snapshotHash);
+
+                if (modeSignal is not null)
+                {
+                    db.DecisionLogs.Add(DecisionLog.Create(
+                        symbol: snapshot.Symbol,
+                        status: "MODE_FEED",
+                        engineState: decision.EngineState,
+                        mode: modeSignal.Mode,
+                        cause: "AI_MODE_FEED",
+                        waterfallRisk: decision.WaterfallRisk,
+                        telegramState: snapshot.TelegramState,
+                        railPermissionA: decision.RailPermissionA,
+                        railPermissionB: decision.RailPermissionB,
+                        reason: $"mode={modeSignal.Mode};conf={modeSignal.Confidence:0.00};ttl={modeSignal.TtlSeconds};keywords={string.Join(',', modeSignal.Keywords.Take(5))}",
+                        entry: 0m,
+                        tp: 0m,
+                        grams: 0m,
+                        rotationCapThisSession: 0,
+                        forceWhereToTrade: forceWhereToTrade,
+                        snapshotHash: snapshotHash));
+                }
 
                 if (!decision.IsTradeAllowed)
                 {
                     if (decision.WaterfallRisk == "HIGH")
                     {
                         var canceled = pendingTrades.Clear();
+                        mt5Control.RequestCancelPending("waterfall_high");
                         if (canceled > 0)
                         {
                             logger.LogInformation("Canceled {Count} pending orders due to HIGH waterfall veto.", canceled);
@@ -152,6 +208,7 @@ public sealed class SignalPollingBackgroundService(
                 if (intersectsHazard)
                 {
                     var canceled = pendingTrades.Clear();
+                    mt5Control.RequestCancelPending("hazard_window_intersection");
                     logger.LogInformation(
                         "NO_TRADE due to hazard-window intersection. PendingCanceled={CanceledCount}",
                         canceled);
@@ -188,6 +245,26 @@ public sealed class SignalPollingBackgroundService(
                         "Scale-in blocked by exposure/spacing/risk checks. Symbol={Symbol}, Regime={Regime}",
                         snapshot.Symbol,
                         regime.Regime);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
+                if (string.Equals(activeStrategy, "WarPremium", StringComparison.OrdinalIgnoreCase)
+                    && decision.Rail == "BUY_STOP"
+                    && pendingTrades.Count() > 0)
+                {
+                    logger.LogInformation("WarPremium Rail-B skipped: one pending BUY_STOP already exists.");
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
+                var projectedReservedAed = reservedPendingAed + EstimateOrderReserveAed(decision.Entry, decision.Grams);
+                if (projectedReservedAed > rawState.CashAed)
+                {
+                    logger.LogInformation(
+                        "NO_TRADE due to projected reserve breach. Reserved={Reserved} Cash={Cash}",
+                        projectedReservedAed,
+                        rawState.CashAed);
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -355,6 +432,84 @@ public sealed class SignalPollingBackgroundService(
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
         return Convert.ToHexString(bytes);
+    }
+
+    private static decimal EstimateReservedPendingAed(IReadOnlyCollection<PendingTradeContract> pending)
+    {
+        if (pending.Count == 0)
+        {
+            return 0m;
+        }
+
+        return pending.Sum(item => EstimateOrderReserveAed(item.Price, item.Grams));
+    }
+
+    private static decimal EstimateOrderReserveAed(decimal mt5EntryUsdPerOunce, decimal grams)
+    {
+        if (mt5EntryUsdPerOunce <= 0m || grams <= 0m)
+        {
+            return 0m;
+        }
+
+        var shopBuy = mt5EntryUsdPerOunce + ShopSpreadUsdPerOz;
+        var usdPerGram = shopBuy / OunceToGram;
+        var aedPerGram = usdPerGram * UsdToAed;
+        return grams * aedPerGram;
+    }
+
+    private static void LogTransitionsIfChanged(
+        IApplicationDbContext db,
+        MarketSnapshotContract snapshot,
+        DecisionResultContract decision,
+        bool forceWhereToTrade,
+        string snapshotHash)
+    {
+        lock (_transitionGate)
+        {
+            if (!string.Equals(_lastMode, decision.Mode, StringComparison.Ordinal))
+            {
+                db.DecisionLogs.Add(DecisionLog.Create(
+                    symbol: snapshot.Symbol,
+                    status: "STATE_TRANSITION",
+                    engineState: decision.EngineState,
+                    mode: decision.Mode,
+                    cause: "MODE_CHANGE",
+                    waterfallRisk: decision.WaterfallRisk,
+                    telegramState: decision.TelegramState,
+                    railPermissionA: decision.RailPermissionA,
+                    railPermissionB: decision.RailPermissionB,
+                    reason: $"mode_transition:{_lastMode}->{decision.Mode}",
+                    entry: 0m,
+                    tp: 0m,
+                    grams: 0m,
+                    rotationCapThisSession: 0,
+                    forceWhereToTrade: forceWhereToTrade,
+                    snapshotHash: snapshotHash));
+                _lastMode = decision.Mode;
+            }
+
+            if (!string.Equals(_lastWaterfallRisk, decision.WaterfallRisk, StringComparison.Ordinal))
+            {
+                db.DecisionLogs.Add(DecisionLog.Create(
+                    symbol: snapshot.Symbol,
+                    status: "STATE_TRANSITION",
+                    engineState: decision.EngineState,
+                    mode: decision.Mode,
+                    cause: "WATERFALL_CHANGE",
+                    waterfallRisk: decision.WaterfallRisk,
+                    telegramState: decision.TelegramState,
+                    railPermissionA: decision.RailPermissionA,
+                    railPermissionB: decision.RailPermissionB,
+                    reason: $"waterfall_transition:{_lastWaterfallRisk}->{decision.WaterfallRisk}",
+                    entry: 0m,
+                    tp: 0m,
+                    grams: 0m,
+                    rotationCapThisSession: 0,
+                    forceWhereToTrade: forceWhereToTrade,
+                    snapshotHash: snapshotHash));
+                _lastWaterfallRisk = decision.WaterfallRisk;
+            }
+        }
     }
 
     private static TradeSignalContract MergeTradingView(

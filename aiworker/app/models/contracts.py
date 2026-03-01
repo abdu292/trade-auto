@@ -95,3 +95,7 @@ class TradeSignal(BaseModel):
     requiredAgreement: int = 1
     disagreementReason: str | None = None
     providerVotes: list[str] = Field(default_factory=list)
+    modeHint: str = "UNKNOWN"
+    modeConfidence: float = 0.5
+    modeTtlSeconds: int = 900
+    modeKeywords: list[str] = Field(default_factory=list)

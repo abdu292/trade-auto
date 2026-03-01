@@ -48,6 +48,18 @@ uvicorn app.main:app --reload --port 8001
 
 - `GET /health`
 - `POST /analyze`
+- `POST /mode`
+
+### Mode endpoint
+
+- `POST /mode` returns structured mode payload for backend state machine:
+	- `mode`: `WAR_PREMIUM | DEESCALATION_RISK | UNKNOWN`
+	- `confidence`: `0..1`
+	- `keywords`: matched escalation/de-escalation terms
+	- `ttlSeconds`: mode validity window
+- Transport priority:
+	- Grok via OpenRouter or direct xAI when configured
+	- Safe fallback heuristic when model feed is unavailable
 
 ## Quick Test
 

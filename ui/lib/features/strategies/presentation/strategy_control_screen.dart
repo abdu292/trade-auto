@@ -15,6 +15,9 @@ class StrategyControlScreen extends ConsumerWidget {
       try {
         await ref.read(brainApiProvider).activateStrategy(id);
         ref.invalidate(strategiesProvider);
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Strategy profile updated.')),
+        );
       } catch (error) {
         messenger.showSnackBar(
             SnackBar(content: Text('Failed to activate strategy: $error')));
@@ -40,23 +43,79 @@ class StrategyControlScreen extends ConsumerWidget {
                 );
               }
 
-              return Column(
-                children: items
-                    .map(
-                      (item) => Card(
-                        child: ListTile(
-                          title: Text(item.name),
-                          subtitle: Text(item.description),
-                          trailing: item.isActive
-                              ? const Chip(label: Text('Active'))
-                              : FilledButton(
-                                  onPressed: () => activate(item.id),
-                                  child: const Text('Activate'),
-                                ),
+              final activeItems = items.where((item) => item.isActive).toList();
+              final active = activeItems.isEmpty ? null : activeItems.first;
+              final quickSwitchItems = items
+                  .where(
+                    (item) =>
+                        item.name.toLowerCase() == 'standard' ||
+                        item.name.toLowerCase() == 'warpremium',
+                  )
+                  .toList();
+
+              final children = <Widget>[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Quick Mode Switch',
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
-                      ),
-                    )
-                    .toList(),
+                        const SizedBox(height: 8),
+                        Text(
+                          active == null
+                              ? 'No active profile'
+                              : 'Active: ${active.name}',
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: quickSwitchItems
+                              .map(
+                                (item) => FilledButton.tonal(
+                                  onPressed: item.isActive
+                                      ? null
+                                      : () => activate(item.id),
+                                  child: Text(
+                                    item.isActive
+                                        ? '${item.name} (Active)'
+                                        : item.name,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ];
+
+              children.addAll(
+                items.map(
+                  (item) => Card(
+                    child: ListTile(
+                      title: Text(item.name),
+                      subtitle: Text(item.description),
+                      trailing: item.isActive
+                          ? const Chip(label: Text('Active'))
+                          : FilledButton(
+                              onPressed: () => activate(item.id),
+                              child: const Text('Activate'),
+                            ),
+                    ),
+                  ),
+                ),
+              );
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
               );
             },
             loading: () => const Padding(

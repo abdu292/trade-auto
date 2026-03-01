@@ -149,6 +149,10 @@ class AnalyzerService:
                 requiredAgreement=committee.required_agreement,
                 disagreementReason=committee.disagreement_reason,
                 providerVotes=committee.provider_votes,
+                modeHint=_resolve_mode_hint(snapshot, telegram_news),
+                modeConfidence=_resolve_mode_confidence(snapshot, telegram_news),
+                modeTtlSeconds=_resolve_mode_ttl(snapshot, telegram_news),
+                modeKeywords=_resolve_mode_keywords(telegram_news),
             )
 
         signal = committee.signal
@@ -175,6 +179,10 @@ class AnalyzerService:
             requiredAgreement=committee.required_agreement,
             disagreementReason=committee.disagreement_reason,
             providerVotes=committee.provider_votes,
+            modeHint=_resolve_mode_hint(snapshot, telegram_news),
+            modeConfidence=_resolve_mode_confidence(snapshot, telegram_news),
+            modeTtlSeconds=_resolve_mode_ttl(snapshot, telegram_news),
+            modeKeywords=_resolve_mode_keywords(telegram_news),
         )
 
 
@@ -297,3 +305,73 @@ def _build_summary(snapshot: MarketSnapshot, volatility_expansion: float, telegr
         f"usRisk={snapshot.isUsRiskWindow}, friday={snapshot.isFriday}, overlap={snapshot.isLondonNyOverlap}, "
         f"telegram={telegram_news.summary}"
     )
+
+
+def _resolve_mode_hint(snapshot: MarketSnapshot, telegram_news: TelegramNewsContext) -> str:
+    if snapshot.hasPanicDropSequence or telegram_news.panic_suspected:
+        return "DEESCALATION_RISK"
+
+    state = (telegram_news.telegram_state or "").upper()
+    impact = (telegram_news.impact_tag or "LOW").upper()
+
+    if state in {"SELL", "STRONG_SELL"} and impact in {"MODERATE", "HIGH"}:
+        return "DEESCALATION_RISK"
+
+    if snapshot.isExpansion and snapshot.hasImpulseCandles and state in {"BUY", "STRONG_BUY"}:
+        return "WAR_PREMIUM"
+
+    if state in {"BUY", "STRONG_BUY"} and impact in {"MODERATE", "HIGH"}:
+        return "WAR_PREMIUM"
+
+    return "UNKNOWN"
+
+
+def _resolve_mode_confidence(snapshot: MarketSnapshot, telegram_news: TelegramNewsContext) -> float:
+    mode = _resolve_mode_hint(snapshot, telegram_news)
+    base = 0.55
+    if mode == "UNKNOWN":
+        return 0.45
+
+    if telegram_news.impact_tag == "HIGH":
+        base += 0.20
+    elif telegram_news.impact_tag == "MODERATE":
+        base += 0.10
+
+    if telegram_news.panic_suspected:
+        base += 0.15
+
+    if snapshot.isExpansion and snapshot.hasImpulseCandles:
+        base += 0.08
+
+    return max(0.0, min(1.0, base))
+
+
+def _resolve_mode_ttl(snapshot: MarketSnapshot, telegram_news: TelegramNewsContext) -> int:
+    mode = _resolve_mode_hint(snapshot, telegram_news)
+    if mode == "DEESCALATION_RISK":
+        return 1800
+    if mode == "WAR_PREMIUM":
+        return 1200
+    return 900
+
+
+def _resolve_mode_keywords(telegram_news: TelegramNewsContext) -> list[str]:
+    keywords: list[str] = []
+    for item in telegram_news.items[-5:]:
+        text = (item.get("text") or "").lower()
+        for token in (
+            "ceasefire",
+            "talks",
+            "mediation",
+            "contained",
+            "retaliation",
+            "escalation",
+            "missile",
+            "drone",
+            "hormuz",
+            "shipping",
+            "oil shock",
+        ):
+            if token in text and token not in keywords:
+                keywords.append(token)
+    return keywords

@@ -22,15 +22,15 @@ public static class SeedData
             new
             {
                 Id = MomentumStrategyId,
-                Name = "Momentum",
-                Description = "Default momentum strategy profile.",
+                Name = "Standard",
+                Description = "Baseline production strategy profile.",
                 IsActive = true
             },
             new
             {
                 Id = MeanReversionStrategyId,
-                Name = "Mean Reversion",
-                Description = "Fallback mean reversion profile.",
+                Name = "WarPremium",
+                Description = "War expansion harvest profile with stricter kill-switch behavior.",
                 IsActive = false
             });
 

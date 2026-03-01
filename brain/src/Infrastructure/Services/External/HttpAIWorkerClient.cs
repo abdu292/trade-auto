@@ -145,7 +145,11 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 AgreementCount: result.AgreementCount ?? 1,
                 RequiredAgreement: result.RequiredAgreement ?? 1,
                 DisagreementReason: result.DisagreementReason,
-                ProviderVotes: result.ProviderVotes ?? []);
+                ProviderVotes: result.ProviderVotes ?? [],
+                ModeHint: result.ModeHint ?? "UNKNOWN",
+                ModeConfidence: Convert.ToDecimal(result.ModeConfidence ?? 0.5),
+                ModeTtlSeconds: result.ModeTtlSeconds ?? 900,
+                ModeKeywords: result.ModeKeywords ?? []);
 
             _logger.LogInformation(
                 "← [AIWorker] Analysis complete: {Signal} (confidence={Confidence})",
@@ -165,6 +169,60 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         {
             _logger.LogError(ex, "✗ [AIWorker] Request timeout");
             throw;
+        }
+    }
+
+    public async Task<ModeSignalContract?> GetModeAsync(MarketSnapshotContract snapshot, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var request = new
+            {
+                symbol = snapshot.Symbol,
+                session = snapshot.Session,
+                timestamp = snapshot.Timestamp,
+                telegramState = snapshot.TelegramState,
+                telegramImpactTag = snapshot.TelegramImpactTag,
+                isExpansion = snapshot.IsExpansion,
+                hasImpulseCandles = snapshot.HasImpulseCandles,
+                hasPanicDropSequence = snapshot.HasPanicDropSequence,
+                tvAlertType = snapshot.TvAlertType,
+            };
+
+            var jsonContent = new StringContent(
+                JsonSerializer.Serialize(request),
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await _httpClient.PostAsync(
+                $"{BaseUrl}/mode",
+                jsonContent,
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var result = JsonSerializer.Deserialize<ModeSignalResponse>(responseBody, options);
+            if (result is null)
+            {
+                return null;
+            }
+
+            return new ModeSignalContract(
+                Mode: string.IsNullOrWhiteSpace(result.Mode) ? "UNKNOWN" : result.Mode,
+                Confidence: Convert.ToDecimal(result.Confidence),
+                Keywords: result.Keywords ?? [],
+                TtlSeconds: result.TtlSeconds <= 0 ? 900 : result.TtlSeconds,
+                CapturedAtUtc: result.CapturedAtUtc ?? DateTimeOffset.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "AI worker mode endpoint unavailable; continuing with local mode hints.");
+            return null;
         }
     }
 
@@ -189,5 +247,16 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         int? AgreementCount,
         int? RequiredAgreement,
         string? DisagreementReason,
-        IReadOnlyCollection<string>? ProviderVotes);
+        IReadOnlyCollection<string>? ProviderVotes,
+        string? ModeHint,
+        double? ModeConfidence,
+        int? ModeTtlSeconds,
+        IReadOnlyCollection<string>? ModeKeywords);
+
+    private sealed record ModeSignalResponse(
+        string Mode,
+        double Confidence,
+        IReadOnlyCollection<string>? Keywords,
+        int TtlSeconds,
+        DateTimeOffset? CapturedAtUtc);
 }

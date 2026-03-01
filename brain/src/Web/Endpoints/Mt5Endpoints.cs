@@ -57,6 +57,20 @@ public static class Mt5Endpoints
             .WithName("GetPendingTrades")
             .WithDescription("Fetch pending trade orders for MT5 Expert Advisor");
 
+        mt5Group.MapGet(
+            "/control/cancel-pending/consume",
+            IResult (IMt5ControlStore controlStore) =>
+            {
+                if (!controlStore.TryConsumeCancelPending(out var reason))
+                {
+                    return TypedResults.Ok(new { cancelPending = false, reason = string.Empty });
+                }
+
+                return TypedResults.Ok(new { cancelPending = true, reason });
+            })
+            .WithName("ConsumeCancelPendingControl")
+            .WithDescription("EA consumes kill-switch command to cancel all broker pending orders.");
+
         mt5Group.MapPost(
             "/market-snapshot",
             (Mt5MarketSnapshotRequest request, ILatestMarketSnapshotStore snapshotStore, ILogger<object> logger) =>
@@ -369,9 +383,14 @@ public static class Mt5Endpoints
         return normalized switch
         {
             "BREAKOUT" => "BREAKOUT",
+            "LID_BREAK" => "LID_BREAK",
             "RETEST_HOLD" => "RETEST_HOLD",
+            "SHELF_RECLAIM" => "SHELF_RECLAIM",
             "ADR_EXHAUSTION" => "ADR_EXHAUSTION",
+            "EXHAUSTION" => "EXHAUSTION",
             "RSI_OVERHEAT" => "RSI_OVERHEAT",
+            "RSI_DIVERGENCE" => "RSI_DIVERGENCE",
+            "ADR_EXTREME" => "ADR_EXTREME",
             "SESSION_BREAK" => "SESSION_BREAK",
             _ => "NONE",
         };

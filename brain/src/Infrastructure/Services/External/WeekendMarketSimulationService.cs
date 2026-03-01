@@ -28,6 +28,7 @@ public sealed class WeekendMarketSimulationService(
     private decimal _baseSpread = 0.18m;
     private bool _enableShockEvents = true;
     private string? _sessionOverride;
+    private string _strategyProfile = "Standard";
 
     public MarketSimulationStatusContract GetStatus()
     {
@@ -46,6 +47,7 @@ public sealed class WeekendMarketSimulationService(
                 VolatilityUsd: decimal.Round(_volatilityUsd, 3),
                 BaseSpread: decimal.Round(_baseSpread, 3),
                 EnableShockEvents: _enableShockEvents,
+                StrategyProfile: _strategyProfile,
                 SourceTag: "SIMULATED_MT5");
         }
     }
@@ -61,6 +63,7 @@ public sealed class WeekendMarketSimulationService(
             _baseSpread = Math.Clamp(start.BaseSpread, 0.05m, 2.00m);
             _intervalSeconds = Math.Clamp(start.IntervalSeconds, 1, 30);
             _enableShockEvents = start.EnableShockEvents;
+            _strategyProfile = NormalizeStrategy(start.StrategyProfile);
             _sessionOverride = string.IsNullOrWhiteSpace(start.SessionOverride)
                 ? null
                 : start.SessionOverride.Trim().ToUpperInvariant();
@@ -130,17 +133,19 @@ public sealed class WeekendMarketSimulationService(
             var now = DateTimeOffset.UtcNow;
             _session = _sessionOverride ?? ResolveSession(now);
 
-            var randomPulse = ((decimal)_random.NextDouble() - 0.5m) * 2m * _volatilityUsd;
-            var cyclicalPulse = (decimal)Math.Sin(_tickCount / 22d) * (_volatilityUsd * 0.35m);
+            var profileMultiplier = _strategyProfile == "WARPREMIUM" ? 1.85m : 1.0m;
+            var randomPulse = ((decimal)_random.NextDouble() - 0.5m) * 2m * (_volatilityUsd * profileMultiplier);
+            var cyclicalPulse = (decimal)Math.Sin(_tickCount / 22d) * (_volatilityUsd * 0.35m * profileMultiplier);
             var drift = SessionDrift(_session);
 
             var shock = 0m;
             if (_enableShockEvents && _tickCount > 0 && _tickCount % 90 == 0)
             {
                 var chance = _random.NextDouble();
-                if (chance < 0.22)
+                var threshold = _strategyProfile == "WARPREMIUM" ? 0.40 : 0.22;
+                if (chance < threshold)
                 {
-                    shock = ((decimal)_random.NextDouble() - 0.5m) * (_volatilityUsd * 8m);
+                    shock = ((decimal)_random.NextDouble() - 0.5m) * (_volatilityUsd * (_strategyProfile == "WARPREMIUM" ? 12m : 8m));
                 }
             }
 
@@ -148,31 +153,31 @@ public sealed class WeekendMarketSimulationService(
             _currentMid = Math.Max(1800m, _currentMid + randomPulse + cyclicalPulse + drift + shock);
 
             var spreadNoise = ((decimal)_random.NextDouble() - 0.5m) * (_baseSpread * 0.35m);
-            _lastSpread = Math.Max(0.05m, _baseSpread + spreadNoise + (Math.Abs(shock) > 0 ? _baseSpread * 0.25m : 0m));
+            _lastSpread = Math.Max(
+                0.05m,
+                (_baseSpread * (_strategyProfile == "WARPREMIUM" ? 1.15m : 1.0m))
+                + spreadNoise
+                + (Math.Abs(shock) > 0 ? _baseSpread * (_strategyProfile == "WARPREMIUM" ? 0.45m : 0.25m) : 0m));
             _lastBid = _currentMid - (_lastSpread / 2m);
             _lastAsk = _currentMid + (_lastSpread / 2m);
 
             var move = Math.Abs(_currentMid - previousMid);
-            var atr = Math.Max(4m, Math.Min(25m, (move * 2.2m) + 6m));
+            var atr = Math.Max(4m, Math.Min(40m, (move * 2.2m) + (_strategyProfile == "WARPREMIUM" ? 8m : 6m)));
             var atrExpanding = atr > _lastAtr;
             _lastAtr = atr;
 
             var adr = Math.Max(12m, Math.Min(45m, atr * 2.4m));
-            var isExpansion = atr >= 10m;
-            var isCompression = atr <= 7m;
-            var hasImpulse = move >= Math.Max(0.35m, _volatilityUsd * 1.4m);
-            var panic = shock < -(_volatilityUsd * 2.8m);
+            var isExpansion = atr >= (_strategyProfile == "WARPREMIUM" ? 11m : 10m);
+            var isCompression = atr <= (_strategyProfile == "WARPREMIUM" ? 6m : 7m);
+            var hasImpulse = move >= Math.Max(0.35m, _volatilityUsd * (_strategyProfile == "WARPREMIUM" ? 1.7m : 1.4m));
+            var panic = shock < -(_volatilityUsd * (_strategyProfile == "WARPREMIUM" ? 3.4m : 2.8m));
 
             var rsiH1 = Math.Clamp(52m + ((_currentMid - 2890m) / 2.2m), 28m, 78m);
             var rsiM15 = Math.Clamp(rsiH1 + (((decimal)_random.NextDouble() - 0.5m) * 6m), 25m, 82m);
 
-            var tvAlertType = hasImpulse
-                ? (_currentMid >= previousMid ? "BREAKOUT" : "SESSION_BREAK")
-                : "NONE";
+            var tvAlertType = ResolveTvAlertType(hasImpulse, panic, _currentMid >= previousMid, isExpansion, isCompression);
 
-            var telegramState = _currentMid >= previousMid
-                ? (hasImpulse ? "BUY" : "QUIET")
-                : (panic ? "SELL" : "MIXED");
+            var telegramState = ResolveTelegramState(hasImpulse, panic, _currentMid >= previousMid);
 
             var timeframeData = BuildTimeframes(_currentMid, atr);
             var mt5ServerTime = now;
@@ -213,7 +218,7 @@ public sealed class WeekendMarketSimulationService(
                 HasLiquiditySweep: hasImpulse && ((decimal)_random.NextDouble() > 0.65m),
                 HasPanicDropSequence: panic,
                 IsPostSpikePullback: !hasImpulse && atr > 8m,
-                IsLondonNyOverlap: _session == "LONDON" && now.Hour is >= 12 and <= 14,
+                IsLondonNyOverlap: now.Hour is >= 12 and <= 16,
                 IsBreakoutConfirmed: hasImpulse,
                 IsUsRiskWindow: now.Hour is >= 13 and <= 18,
                 IsFriday: mt5ServerTime.DayOfWeek == DayOfWeek.Friday,
@@ -222,8 +227,8 @@ public sealed class WeekendMarketSimulationService(
                 Spread: decimal.Round(_lastSpread, 4),
                 SpreadMedian60m: decimal.Round(Math.Max(0.05m, _baseSpread), 4),
                 SpreadMax60m: decimal.Round(Math.Max(_lastSpread, _baseSpread * 1.8m), 4),
-                CompressionCountM15: isCompression ? 4 : 1,
-                ExpansionCountM15: isExpansion ? 3 : 1,
+                CompressionCountM15: isCompression ? (_strategyProfile == "WARPREMIUM" ? 5 : 4) : 1,
+                ExpansionCountM15: isExpansion ? (_strategyProfile == "WARPREMIUM" ? 4 : 3) : 1,
                 ImpulseStrengthScore: decimal.Round(Math.Min(1m, move / Math.Max(0.10m, _volatilityUsd)), 4),
                 TelegramState: telegramState,
                 PanicSuspected: panic,
@@ -269,6 +274,40 @@ public sealed class WeekendMarketSimulationService(
         "NY" => 0.04m,
         _ => 0m
     };
+
+    private static string NormalizeStrategy(string value)
+    {
+        var normalized = (value ?? "Standard").Trim().Replace("_", "", StringComparison.Ordinal).Replace(" ", "", StringComparison.Ordinal).ToUpperInvariant();
+        return normalized switch
+        {
+            "WARPREMIUM" => "WARPREMIUM",
+            _ => "STANDARD",
+        };
+    }
+
+    private static string ResolveTvAlertType(bool hasImpulse, bool panic, bool upMove, bool isExpansion, bool isCompression)
+    {
+        if (panic)
+            return "EXHAUSTION";
+        if (hasImpulse && upMove)
+            return "LID_BREAK";
+        if (isCompression && !upMove)
+            return "SHELF_RECLAIM";
+        if (isExpansion && !upMove)
+            return "RSI_OVERHEAT";
+        return "NONE";
+    }
+
+    private static string ResolveTelegramState(bool hasImpulse, bool panic, bool upMove)
+    {
+        if (panic)
+            return "STRONG_SELL";
+        if (hasImpulse && upMove)
+            return "STRONG_BUY";
+        if (upMove)
+            return "BUY";
+        return "MIXED";
+    }
 
     private void StopInternal()
     {

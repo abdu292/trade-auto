@@ -24,6 +24,33 @@ See each project README for run instructions.
 
 - **Live Demo Test (XAUUSD)**: [docs/LIVE_XAUUSD_DEMO_TEST.md](docs/LIVE_XAUUSD_DEMO_TEST.md)
 - **AI Provider Decision**: [docs/AI_PROVIDER_DECISION.md](docs/AI_PROVIDER_DECISION.md)
-- **Spec (authoritative)**: [spec/spec_v3.md](spec/spec_v3.md)
+- **Spec (authoritative)**: [spec/spec_v4_war_premium.md](spec/spec_v4_war_premium.md)
 - **Implemented SOP**: [spec/SOP_SPEC_V3_IMPLEMENTATION.md](spec/SOP_SPEC_V3_IMPLEMENTATION.md)
+- **Strict Parity Status**: [docs/STRICT_SPEC_PARITY_STATUS.md](docs/STRICT_SPEC_PARITY_STATUS.md)
+- **Trader Mode Guide**: [docs/TRADER_MODE_GUIDE.md](docs/TRADER_MODE_GUIDE.md)
+- **Go-Live Checklist**: [docs/GO_LIVE_CHECKLIST.md](docs/GO_LIVE_CHECKLIST.md)
+
+## Strategy Profiles
+
+- Active profile is selected in backend strategy profiles and applied by the decision engine.
+- Current built-in profiles:
+	- Standard (default)
+	- WarPremium
+- Runtime API:
+	- GET [brain/src/Web/Endpoints/StrategyEndpoints.cs](brain/src/Web/Endpoints/StrategyEndpoints.cs)
+	- PUT activate profile by id on `/api/strategies/{id}/activate`
+
+## Simulator Profiles
+
+- Simulator can now generate profile-specific market behavior.
+- Start simulator with selected profile via `/api/monitoring/simulator/start` body:
+	- `strategyProfile: "Standard"` or `strategyProfile: "WarPremium"`
+- Status endpoint includes `strategyProfile` so UI/scripts can verify active simulator behavior.
+
+## Ready-Now Steps
+
+1. Follow [docs/GO_LIVE_CHECKLIST.md](docs/GO_LIVE_CHECKLIST.md) end-to-end.
+2. Keep `Standard` active by default unless war-expansion conditions justify `WarPremium`.
+3. Use UI Strategy page quick switch to move between `Standard` and `WarPremium`.
+4. Verify mode feed (`/mode`) and simulator profile behavior before opening live sessions.
 

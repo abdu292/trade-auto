@@ -23,6 +23,8 @@ public sealed class InMemoryPendingTradeStore : IPendingTradeStore
         return cleared;
     }
 
+    public IReadOnlyCollection<PendingTradeContract> Snapshot() => _queue.ToArray();
+
     public bool TryDequeue(out PendingTradeContract? trade)
     {
         var ok = _queue.TryDequeue(out var item);

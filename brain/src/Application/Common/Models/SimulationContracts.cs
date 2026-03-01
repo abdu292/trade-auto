@@ -6,7 +6,8 @@ public sealed record MarketSimulationStartContract(
     decimal BaseSpread = 0.18m,
     int IntervalSeconds = 5,
     string? SessionOverride = null,
-    bool EnableShockEvents = true);
+    bool EnableShockEvents = true,
+    string StrategyProfile = "Standard");
 
 public sealed record MarketSimulationStatusContract(
     bool IsRunning,
@@ -21,4 +22,5 @@ public sealed record MarketSimulationStatusContract(
     decimal VolatilityUsd,
     decimal BaseSpread,
     bool EnableShockEvents,
+    string StrategyProfile,
     string SourceTag);

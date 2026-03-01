@@ -139,7 +139,8 @@ public static class MonitoringEndpoints
                     BaseSpread: request?.BaseSpread ?? 0.18m,
                     IntervalSeconds: request?.IntervalSeconds ?? 5,
                     SessionOverride: request?.SessionOverride,
-                    EnableShockEvents: request?.EnableShockEvents ?? true);
+                    EnableShockEvents: request?.EnableShockEvents ?? true,
+                    StrategyProfile: request?.StrategyProfile ?? "Standard");
 
                 simulator.Start(payload);
                 return TypedResults.Ok(simulator.GetStatus());
@@ -385,10 +386,11 @@ public static class MonitoringEndpoints
 
                 for (var i = 0; i < runs; i++)
                 {
-                    var snapshot = ReplayHarnessFactory.BuildReplaySnapshot(startPrice, now.AddMinutes(i), i);
+                    var strategyProfile = request?.StrategyProfile ?? "Standard";
+                    var snapshot = ReplayHarnessFactory.BuildReplaySnapshot(startPrice, now.AddMinutes(i), i, strategyProfile);
                     var regime = RegimeRiskClassifier.Classify(snapshot);
                     var aiSignal = ReplayHarnessFactory.BuildReplaySignal(snapshot, i);
-                    var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, ledgerState);
+                    var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, ledgerState, strategyProfile);
 
                     if (!decision.IsTradeAllowed)
                     {
@@ -456,22 +458,24 @@ public sealed record StartMarketSimulationRequest(
     decimal? BaseSpread,
     int? IntervalSeconds,
     string? SessionOverride,
-    bool? EnableShockEvents);
+    bool? EnableShockEvents,
+    string? StrategyProfile);
 
-public sealed record ReplayRunRequest(int? Runs, decimal? StartPrice);
+public sealed record ReplayRunRequest(int? Runs, decimal? StartPrice, string? StrategyProfile);
 
 internal static class ReplayHarnessFactory
 {
-    internal static MarketSnapshotContract BuildReplaySnapshot(decimal startPrice, DateTimeOffset timestamp, int step)
+    internal static MarketSnapshotContract BuildReplaySnapshot(decimal startPrice, DateTimeOffset timestamp, int step, string strategyProfile)
     {
+        var isWar = string.Equals(strategyProfile, "WarPremium", StringComparison.OrdinalIgnoreCase);
         var wave = (decimal)Math.Sin(step / 10d) * 2.2m;
-        var drift = (step % 40 < 20 ? 0.35m : -0.22m);
+        var drift = (step % 40 < 20 ? (isWar ? 0.55m : 0.35m) : (isWar ? -0.35m : -0.22m));
         var close = startPrice + wave + drift;
-        var atr = 6m + Math.Abs(wave);
+        var atr = (isWar ? 8m : 6m) + Math.Abs(wave);
         var adr = Math.Max(14m, atr * 2.4m);
-        var spread = 0.16m + ((step % 9 == 0) ? 0.08m : 0m);
+        var spread = (isWar ? 0.22m : 0.16m) + ((step % 9 == 0) ? (isWar ? 0.16m : 0.08m) : 0m);
         var isExpansion = atr / adr > 0.38m;
-        var panic = step % 47 == 0;
+        var panic = step % (isWar ? 29 : 47) == 0;
 
         return new MarketSnapshotContract(
             Symbol: "XAUUSD",
@@ -499,14 +503,14 @@ internal static class ReplayHarnessFactory
             SpreadMax60m: 0.32m,
             IsExpansion: isExpansion,
             IsAtrExpanding: step % 3 == 0,
-            HasOverlapCandles: step % 5 == 0,
-            HasImpulseCandles: step % 7 == 0,
-            IsBreakoutConfirmed: step % 6 == 0,
+                HasOverlapCandles: step % (isWar ? 4 : 5) == 0,
+                HasImpulseCandles: step % (isWar ? 5 : 7) == 0,
+                IsBreakoutConfirmed: step % (isWar ? 4 : 6) == 0,
             IsUsRiskWindow: step % 9 == 0,
             PanicSuspected: panic,
             HasPanicDropSequence: panic,
-            TelegramState: step % 6 == 0 ? "BUY" : (step % 5 == 0 ? "MIXED" : "QUIET"),
-            TvAlertType: step % 8 == 0 ? "BREAKOUT" : "NONE",
+                TelegramState: step % 6 == 0 ? (isWar ? "STRONG_BUY" : "BUY") : (step % 5 == 0 ? "MIXED" : "QUIET"),
+                TvAlertType: step % 8 == 0 ? (isWar ? "LID_BREAK" : "BREAKOUT") : "NONE",
             ImpulseStrengthScore: Math.Min(1m, atr / 10m));
     }
 

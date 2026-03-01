@@ -8,4 +8,5 @@ public interface IPendingTradeStore
     bool TryDequeue(out PendingTradeContract? trade);
     int Count();
     int Clear();
+    IReadOnlyCollection<PendingTradeContract> Snapshot();
 }

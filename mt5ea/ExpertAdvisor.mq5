@@ -61,6 +61,37 @@ void AddTrackedTrade(string tradeId, ulong orderTicket, double grams)
     g_trades[size] = item;
 }
 
+void CancelAllPendingOrders()
+{
+    CTrade trade;
+    int total = OrdersTotal();
+    int canceled = 0;
+
+    for (int i = total - 1; i >= 0; i--)
+    {
+        ulong ticket = OrderGetTicket(i);
+        if (ticket == 0)
+            continue;
+
+        if (!OrderSelect(ticket))
+            continue;
+
+        string symbol = OrderGetString(ORDER_SYMBOL);
+        long orderType = OrderGetInteger(ORDER_TYPE);
+        if (symbol != _Symbol)
+            continue;
+
+        if (orderType == ORDER_TYPE_BUY_LIMIT || orderType == ORDER_TYPE_BUY_STOP)
+        {
+            if (trade.OrderDelete(ticket))
+                canceled++;
+        }
+    }
+
+    if (canceled > 0)
+        Print("Kill-switch canceled pending orders: ", canceled);
+}
+
 int OnInit()
 {
     g_api.Configure(BrainBaseUrl, BrainApiKey);
@@ -92,6 +123,12 @@ void OnTick()
     }
 
     lastTradePoll = now;
+
+    bool cancelPending = false;
+    if (g_api.ConsumeCancelPendingSignal(cancelPending) && cancelPending)
+    {
+        CancelAllPendingOrders();
+    }
 
     TradeCommand command;
     bool hasCommand = g_api.GetPendingTrade(command);

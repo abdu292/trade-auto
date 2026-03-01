@@ -36,6 +36,41 @@ dotnet run --project src/Web/Web.csproj
 - `/mt5/*` (protected by API key + optional IP allowlist)
 - `/health`
 
+## Strategy Profiles
+
+- `Standard` is the default active profile from seed data.
+- `WarPremium` enables war-expansion rails, stricter kill-switch behavior, and first-leg ban logic.
+- Activate profile:
+	- `GET /api/strategies`
+	- `PUT /api/strategies/{id}/activate`
+
+## War Mode Feed
+
+- Backend consumes AI mode feed (`WAR_PREMIUM`, `DEESCALATION_RISK`, `UNKNOWN`) with confidence/TTL/keywords.
+- If mode feed is unavailable, backend continues with local safety fallbacks (non-blocking).
+- Strategy profile (`Standard`/`WarPremium`) does not change AI transport by itself; AI transport remains controlled by AI worker environment variables (for example `GROK_RUNTIME_TRANSPORT=openrouter`).
+
+## Simulator
+
+- Start simulator: `POST /api/monitoring/simulator/start`
+- Request supports `strategyProfile`:
+	- `Standard`
+	- `WarPremium`
+- Status endpoint `GET /api/monitoring/simulator/status` returns active simulator profile.
+
+Example payload:
+
+```json
+{
+	"startPrice": 2890,
+	"volatilityUsd": 0.45,
+	"baseSpread": 0.18,
+	"intervalSeconds": 5,
+	"enableShockEvents": true,
+	"strategyProfile": "WarPremium"
+}
+```
+
 ## Minimal Security (single-user)
 
 `src/Web/appsettings.Development.json` includes local defaults:

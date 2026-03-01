@@ -85,7 +85,18 @@ public sealed record TradeSignalContract(
     int AgreementCount = 1,
     int RequiredAgreement = 1,
     string? DisagreementReason = null,
-    IReadOnlyCollection<string>? ProviderVotes = null);
+    IReadOnlyCollection<string>? ProviderVotes = null,
+    string ModeHint = "UNKNOWN",
+    decimal ModeConfidence = 0.5m,
+    int ModeTtlSeconds = 900,
+    IReadOnlyCollection<string>? ModeKeywords = null);
+
+public sealed record ModeSignalContract(
+    string Mode,
+    decimal Confidence,
+    IReadOnlyCollection<string> Keywords,
+    int TtlSeconds,
+    DateTimeOffset CapturedAtUtc);
 
 public sealed record RegimeClassificationContract(
     string Regime,

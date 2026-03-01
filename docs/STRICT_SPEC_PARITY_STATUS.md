@@ -1,10 +1,16 @@
-# Strict Spec Parity Status (v3)
+# Strict Spec Parity Status (v4)
 
-This document maps current implementation to the strict requirements in `spec/spec_v3.md` for production go-live decisions.
+This document maps current implementation to the strict requirements in `spec/spec_v4_war_premium.md` for production go-live decisions.
 
 ## Current status summary
 
 - **Implemented and working**
+  - Switchable strategy profiles with active routing in decision engine (`Standard`, `WarPremium`).
+  - Dedicated mode feed endpoint in AI worker (`POST /mode`) returning mode/confidence/keywords/ttl.
+  - WarPremium decision rail support with stateful mode handling and kill-switch pathing.
+  - Simulator profile mode (`strategyProfile`) with WarPremium-biased synthetic market behavior.
+  - MT5 broker pending-order cancel control endpoint + EA consume/delete path.
+  - Reserved pending cash guard to prevent over-allocation when queueing new orders.
   - Deterministic precedence-style gating in backend decision engine.
   - Waterfall high veto + pending cancel behavior.
   - Hazard-window expiry intersection veto.
@@ -21,11 +27,11 @@ This document maps current implementation to the strict requirements in `spec/sp
   - Health endpoint exposes committee parity blockers for readiness checks.
 
 - **Not yet full strict parity (must-do before claiming 100%)**
-  - Macro/institutional cache source is currently heuristic, not full Perplexity-backed external macro feed.
-  - Full 60+ Telegram listener/registry learning lifecycle still requires wider channel onboarding and production tuning.
-  - Cross-asset feed completeness (DXY/US10Y/real yields/XAG) is still partial.
-  - Historical pattern overlay (`pattern_stats`) is not fully integrated into live scoring/rotation-cap logic as strict spec intends.
-  - Backtest/replay harness proving strict success criteria is not fully delivered.
+  - Full lid/shelf micro-structure proof from raw M1/M5 bars is still simplified via current signal flags.
+  - Telegram de-esc/escalation burst logic exists but can be further hardened for strict threshold governance.
+  - Cross-asset feed completeness (DXY/US10Y/real yields/XAG) remains partial.
+  - Historical pattern overlay (`pattern_stats`) is not yet fully integrated into live scoring/rotation-cap logic.
+  - Full backtest/replay report proving strict v4 success criteria is still pending.
 
 ## Production runtime profile (committee target)
 - `AI_PROVIDER_MODE=committee-live`
