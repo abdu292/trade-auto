@@ -17,6 +17,7 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
   String _selectedCategory = 'EVENT';
   int _selectedDurationMinutes = 60;
   bool _isCreatingHazard = false;
+  final Set<String> _disablingHazardIds = <String>{};
 
   static const List<String> _categories = <String>[
     'EVENT',
@@ -74,6 +75,32 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
     } finally {
       if (mounted) {
         setState(() => _isCreatingHazard = false);
+      }
+    }
+  }
+
+  Future<void> _disableHazardWindow(String id) async {
+    if (_disablingHazardIds.contains(id)) {
+      return;
+    }
+
+    setState(() => _disablingHazardIds.add(id));
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(brainApiProvider).disableHazardWindow(id);
+      ref
+        ..invalidate(hazardWindowsProvider)
+        ..invalidate(runtimeStatusProvider);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Hazard window removed.')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to remove hazard window: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _disablingHazardIds.remove(id));
       }
     }
   }
@@ -269,7 +296,28 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
                             '${item.category} • ${item.startUtc.toLocal()} → ${item.endUtc.toLocal()}',
                           ),
                           trailing: item.isActive
-                              ? const Chip(label: Text('Active'))
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Chip(label: Text('Active')),
+                                    const SizedBox(width: 8),
+                                    FilledButton.tonal(
+                                      onPressed:
+                                          _disablingHazardIds.contains(item.id)
+                                              ? null
+                                              : () =>
+                                                  _disableHazardWindow(item.id),
+                                      child: _disablingHazardIds.contains(item.id)
+                                          ? const SizedBox(
+                                              width: 14,
+                                              height: 14,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2),
+                                            )
+                                          : const Text('Remove'),
+                                    ),
+                                  ],
+                                )
                               : const Chip(label: Text('Scheduled')),
                         ),
                       ),

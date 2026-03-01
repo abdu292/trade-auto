@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/network/api_client.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/risk/presentation/risk_control_screen.dart';
 import '../features/sessions/presentation/session_overview_screen.dart';
@@ -27,8 +28,96 @@ class _AppShellState extends ConsumerState<AppShell> {
     'Sessions',
   ];
 
+  Future<void> _openEnvironmentDialog(BuildContext context) async {
+    final selected = ref.read(selectedApiEnvironmentProvider);
+    final effectiveBase = ref.read(effectiveApiBaseUrlProvider);
+
+    ApiEnvironment tempEnvironment = selected;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('API Environment'),
+              content: SizedBox(
+                width: 520,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      DropdownButtonFormField<ApiEnvironment>(
+                        initialValue: tempEnvironment,
+                        decoration: const InputDecoration(
+                          labelText: 'Environment',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: ApiEnvironment.production,
+                            child: Text('Production (default)'),
+                          ),
+                          DropdownMenuItem(
+                            value: ApiEnvironment.local,
+                            child: Text('Local'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setDialogState(() => tempEnvironment = value);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Current effective URL: $effectiveBase',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (saved == true) {
+      ref.read(selectedApiEnvironmentProvider.notifier).state = tempEnvironment;
+
+      ref
+        ..invalidate(healthProvider)
+        ..invalidate(ledgerProvider)
+        ..invalidate(notificationsProvider)
+        ..invalidate(approvalsProvider)
+        ..invalidate(strategiesProvider)
+        ..invalidate(riskProfilesProvider)
+        ..invalidate(hazardWindowsProvider)
+        ..invalidate(activeTradesProvider)
+        ..invalidate(signalsProvider)
+        ..invalidate(sessionsProvider)
+        ..invalidate(runtimeStatusProvider);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final apiEnvironment = ref.watch(selectedApiEnvironmentProvider);
+    final effectiveApiBaseUrl = ref.watch(effectiveApiBaseUrlProvider);
+
     final screens = <Widget>[
       DashboardScreen(isEmergencyPaused: _isEmergencyPaused),
       const StrategyControlScreen(),
@@ -80,6 +169,26 @@ class _AppShellState extends ConsumerState<AppShell> {
       appBar: AppBar(
         title: Text(_navigationLabels[_index]),
         actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Tooltip(
+                message: effectiveApiBaseUrl,
+                child: Chip(
+                  label: Text(
+                    apiEnvironment == ApiEnvironment.production
+                        ? 'Production'
+                        : 'Local',
+                  ),
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: () => _openEnvironmentDialog(context),
+            tooltip: 'API Environment',
+            icon: const Icon(Icons.cloud_sync_outlined),
+          ),
           IconButton(
             onPressed: refreshEverything,
             tooltip: 'Refresh',

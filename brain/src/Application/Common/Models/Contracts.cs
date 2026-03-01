@@ -188,4 +188,12 @@ public sealed record PendingTradeContract(
     string Bucket = "C1",
     string Session = "",
     string SizeClass = "25%",
-    string TelegramState = "QUIET");
+    string TelegramState = "QUIET",
+    bool ConsensusPassed = true,
+    int AgreementCount = 1,
+    int RequiredAgreement = 1,
+    string? DisagreementReason = null,
+    IReadOnlyCollection<string>? ProviderVotes = null,
+    string Summary = "",
+    string ModeHint = "UNKNOWN",
+    decimal ModeConfidence = 0.5m);

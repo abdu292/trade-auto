@@ -164,6 +164,14 @@ class PendingApproval {
     required this.alignmentScore,
     required this.regime,
     required this.riskTag,
+    required this.consensusPassed,
+    required this.agreementCount,
+    required this.requiredAgreement,
+    required this.providerVotes,
+    required this.summary,
+    required this.modeHint,
+    required this.modeConfidence,
+    this.disagreementReason,
   });
 
   final String id;
@@ -177,6 +185,14 @@ class PendingApproval {
   final double alignmentScore;
   final String regime;
   final String riskTag;
+  final bool consensusPassed;
+  final int agreementCount;
+  final int requiredAgreement;
+  final List<String> providerVotes;
+  final String summary;
+  final String modeHint;
+  final double modeConfidence;
+  final String? disagreementReason;
 
   factory PendingApproval.fromJson(Map<String, dynamic> json) =>
       PendingApproval(
@@ -191,7 +207,65 @@ class PendingApproval {
         alignmentScore: _readDouble(json, 'alignmentScore'),
         regime: _readString(json, 'regime'),
         riskTag: _readString(json, 'riskTag'),
+        consensusPassed: _readBool(json, 'consensusPassed'),
+        agreementCount: _readInt(json, 'agreementCount'),
+        requiredAgreement: _readInt(json, 'requiredAgreement'),
+        providerVotes: _readStringList(json, 'providerVotes'),
+        summary: _readString(json, 'summary'),
+        modeHint: _readString(json, 'modeHint'),
+        modeConfidence: _readDouble(json, 'modeConfidence'),
+        disagreementReason: _readNullableString(json, 'disagreementReason'),
       );
+}
+
+class AiProviderCoverage {
+  const AiProviderCoverage({
+    required this.openai,
+    required this.gemini,
+    required this.grok,
+    required this.perplexity,
+    required this.allFourEnabled,
+  });
+
+  final bool openai;
+  final bool gemini;
+  final bool grok;
+  final bool perplexity;
+  final bool allFourEnabled;
+
+  factory AiProviderCoverage.fromJson(Map<String, dynamic> json) =>
+      AiProviderCoverage(
+        openai: _readBool(json, 'openai'),
+        gemini: _readBool(json, 'gemini'),
+        grok: _readBool(json, 'grok'),
+        perplexity: _readBool(json, 'perplexity'),
+        allFourEnabled: _readBool(json, 'allFourEnabled'),
+      );
+}
+
+class AiHealthStatus {
+  const AiHealthStatus({
+    required this.analyzerCount,
+    required this.analyzers,
+    required this.coverage,
+    required this.parityBlockers,
+  });
+
+  final int analyzerCount;
+  final List<String> analyzers;
+  final AiProviderCoverage coverage;
+  final List<String> parityBlockers;
+
+  factory AiHealthStatus.fromJson(Map<String, dynamic> json) {
+    final ai = _readMap(json, 'ai');
+    final coverage = _readMap(ai, 'coverage');
+    return AiHealthStatus(
+      analyzerCount: _readInt(ai, 'analyzerCount'),
+      analyzers: _readStringList(ai, 'analyzers'),
+      coverage: AiProviderCoverage.fromJson(coverage),
+      parityBlockers: _readStringList(ai, 'parityBlockers'),
+    );
+  }
 }
 
 class RuntimeStatus {
@@ -372,6 +446,34 @@ class AnalyzeSnapshotInput {
 String _readString(Map<String, dynamic> json, String key) {
   final value = json[key] ?? json[_pascal(key)] ?? '';
   return value.toString();
+}
+
+String? _readNullableString(Map<String, dynamic> json, String key) {
+  final value = json[key] ?? json[_pascal(key)];
+  if (value == null) {
+    return null;
+  }
+  final text = value.toString();
+  return text.isEmpty ? null : text;
+}
+
+List<String> _readStringList(Map<String, dynamic> json, String key) {
+  final value = json[key] ?? json[_pascal(key)];
+  if (value is List) {
+    return value.map((item) => item.toString()).toList();
+  }
+  return const [];
+}
+
+Map<String, dynamic> _readMap(Map<String, dynamic> json, String key) {
+  final value = json[key] ?? json[_pascal(key)];
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    return value.map((k, v) => MapEntry(k.toString(), v));
+  }
+  return const <String, dynamic>{};
 }
 
 bool _readBool(Map<String, dynamic> json, String key) {

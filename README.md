@@ -15,13 +15,14 @@ See each project README for run instructions.
 
 ## Local Quick Start
 
-1. Run `brain` backend.
-2. Run `aiworker` on port `8001`.
-3. Run Flutter UI with `--dart-define=BRAIN_API_BASE_URL=http://localhost:5000/api`.
+1. Run all backend services with `./start-local.ps1`.
+2. Open Swagger and follow `docs/RUN_AND_TEST_GUIDE.md`.
+3. Run Flutter UI with production/local defines (see `ui/README.md`).
 4. Point MT5 EA `BrainBaseUrl` to backend host.
 
 ## Documentation
 
+- **Start Here (Run + Test)**: [docs/RUN_AND_TEST_GUIDE.md](docs/RUN_AND_TEST_GUIDE.md)
 - **Live Demo Test (XAUUSD)**: [docs/LIVE_XAUUSD_DEMO_TEST.md](docs/LIVE_XAUUSD_DEMO_TEST.md)
 - **AI Provider Decision**: [docs/AI_PROVIDER_DECISION.md](docs/AI_PROVIDER_DECISION.md)
 - **Spec (authoritative)**: [spec/spec_v4_war_premium.md](spec/spec_v4_war_premium.md)
@@ -29,6 +30,7 @@ See each project README for run instructions.
 - **Strict Parity Status**: [docs/STRICT_SPEC_PARITY_STATUS.md](docs/STRICT_SPEC_PARITY_STATUS.md)
 - **Trader Mode Guide**: [docs/TRADER_MODE_GUIDE.md](docs/TRADER_MODE_GUIDE.md)
 - **Go-Live Checklist**: [docs/GO_LIVE_CHECKLIST.md](docs/GO_LIVE_CHECKLIST.md)
+- **Azure Production Setup**: [docs/AZURE_PRODUCTION_SETUP.md](docs/AZURE_PRODUCTION_SETUP.md)
 
 ## Strategy Profiles
 
@@ -53,4 +55,12 @@ See each project README for run instructions.
 2. Keep `Standard` active by default unless war-expansion conditions justify `WarPremium`.
 3. Use UI Strategy page quick switch to move between `Standard` and `WarPremium`.
 4. Verify mode feed (`/mode`) and simulator profile behavior before opening live sessions.
+
+## Mobile Environment Switcher
+
+- Mobile app defaults to **Production** environment.
+- In app header, use cloud-sync icon to switch between:
+	- `Production`
+	- `Local`
+- URLs are configured in app code and switched by environment selection.
 

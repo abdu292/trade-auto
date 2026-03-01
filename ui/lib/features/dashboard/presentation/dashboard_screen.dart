@@ -14,6 +14,7 @@ class DashboardScreen extends ConsumerWidget {
     final health = ref.watch(healthProvider);
     final ledger = ref.watch(ledgerProvider);
     final runtime = ref.watch(runtimeStatusProvider);
+    final aiHealth = ref.watch(aiHealthStatusProvider);
     final notifications = ref.watch(notificationsProvider);
 
     Future<void> refresh() async {
@@ -21,6 +22,7 @@ class DashboardScreen extends ConsumerWidget {
         ..invalidate(healthProvider)
         ..invalidate(ledgerProvider)
         ..invalidate(runtimeStatusProvider)
+        ..invalidate(aiHealthStatusProvider)
         ..invalidate(notificationsProvider);
     }
 
@@ -56,6 +58,76 @@ class DashboardScreen extends ConsumerWidget {
                           : 'Automation is active',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _AnimatedCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('AI Providers',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  aiHealth.when(
+                    data: (status) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _MetricChip(
+                                  label: 'Analyzers',
+                                  value: status.analyzerCount.toString()),
+                              _MetricChip(
+                                  label: 'All 4 Active',
+                                  value: status.coverage.allFourEnabled
+                                      ? 'YES'
+                                      : 'NO'),
+                              _MetricChip(
+                                  label: 'OpenAI',
+                                  value:
+                                      status.coverage.openai ? 'ON' : 'OFF'),
+                              _MetricChip(
+                                  label: 'Gemini',
+                                  value:
+                                      status.coverage.gemini ? 'ON' : 'OFF'),
+                              _MetricChip(
+                                  label: 'Grok',
+                                  value:
+                                      status.coverage.grok ? 'ON' : 'OFF'),
+                              _MetricChip(
+                                  label: 'Perplexity',
+                                  value: status.coverage.perplexity
+                                      ? 'ON'
+                                      : 'OFF'),
+                            ],
+                          ),
+                          if (status.analyzers.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text('Active analyzers: ${status.analyzers.join(', ')}'),
+                          ],
+                          if (status.parityBlockers.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Parity blockers: ${status.parityBlockers.join(' | ')}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: colorScheme.error),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
+                    loading: () => const LinearProgressIndicator(),
+                    error: (error, _) => Text('AI health error: $error'),
                   ),
                 ],
               ),

@@ -15,6 +15,7 @@ Use this checklist to ensure the full stack is ready and predictable before live
   - `CONSENSUS_MIN_AGREEMENT=2`
 - Grok transport (default path):
   - `GROK_RUNTIME_TRANSPORT=openrouter`
+  - `GROK_FORCE_OPENROUTER=true` (default; keeps OpenRouter active for all strategy profiles)
   - `OPENROUTER_API_KEY=<your_key>`
   - `GROK_OPENROUTER_MODEL=x-ai/grok-4.1-fast`
 - Additional analyzers (recommended):
@@ -40,8 +41,15 @@ Use this checklist to ensure the full stack is ready and predictable before live
 2. Confirm active profile (`Standard` by default unless explicitly changed).
 3. Use Quick Mode Switch to test both profiles:
    - Activate `Standard`
-   - Activate `WarPremium`
+  - Activate `WarPremium`
 4. Validate backend state via `GET /api/strategies`.
+
+## 3.1) Mobile Environment Verification
+
+1. In app bar, open API environment switcher (cloud-sync icon).
+2. Confirm default selected environment is `Production`.
+3. Switch to `Local` and back to `Production`.
+4. If needed, set custom URLs for both environments and save.
 
 ## 4) Mode Feed Verification
 

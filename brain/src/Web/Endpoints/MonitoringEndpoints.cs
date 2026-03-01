@@ -4,6 +4,7 @@ using Brain.Application.Common.Services;
 using Brain.Domain.Entities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Brain.Web.Endpoints;
 
@@ -71,6 +72,52 @@ public static class MonitoringEndpoints
             .WithDescription("Returns recent AI committee disagreement telemetry and failure-rate aggregates.");
 
         monitoring.MapGet(
+            "/ai-health",
+            async Task<IResult> (IConfiguration configuration, CancellationToken cancellationToken) =>
+            {
+                var configured = (configuration["External:AIWorkerBaseUrl"] ?? string.Empty).Trim().TrimEnd('/');
+                var candidates = new[]
+                {
+                    configured,
+                    "http://127.0.0.1:8001",
+                    "http://localhost:8001",
+                }
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+
+                var errors = new List<string>();
+                foreach (var baseUrl in candidates)
+                {
+                    try
+                    {
+                        var response = await client.GetAsync($"{baseUrl}/health", cancellationToken);
+                        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            errors.Add($"{baseUrl}: HTTP {(int)response.StatusCode}");
+                            continue;
+                        }
+
+                        var parsed = JsonSerializer.Deserialize<object>(payload);
+                        return TypedResults.Ok(parsed ?? new { status = "unknown" });
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add($"{baseUrl}: {ex.Message}");
+                    }
+                }
+
+                return TypedResults.Problem(
+                    $"AI health check failed. Tried: {string.Join(" | ", errors)}",
+                    statusCode: 502);
+            })
+            .WithName("GetAiWorkerHealth")
+            .WithDescription("Returns proxied AI worker health including active analyzers and provider coverage.");
+
+        monitoring.MapGet(
             "/runtime",
             IResult (
                 ILatestMarketSnapshotStore snapshotStore,
@@ -85,7 +132,10 @@ public static class MonitoringEndpoints
                 snapshotStore.TryGet(out var snapshot);
                 tradingViewStore.TryGetLatest(out var tv);
                 var latestNotifications = feedStore.GetLatest(5);
-                var macro = db.MacroCacheStates.AsNoTracking().FirstOrDefault();
+                var macro = db.MacroCacheStates
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.LastRefreshedUtc)
+                    .FirstOrDefault();
                 var now = DateTimeOffset.UtcNow;
                 var activeHazardCount = db.HazardWindows
                     .AsNoTracking()
@@ -172,7 +222,10 @@ public static class MonitoringEndpoints
             "/macro-cache",
             async Task<IResult> (IApplicationDbContext db, CancellationToken cancellationToken) =>
             {
-                var cache = await db.MacroCacheStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+                var cache = await db.MacroCacheStates
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.LastRefreshedUtc)
+                    .FirstOrDefaultAsync(cancellationToken);
                 if (cache is null)
                 {
                     return TypedResults.NotFound(new { message = "Macro cache not initialized." });
@@ -227,6 +280,23 @@ public static class MonitoringEndpoints
             })
             .WithName("CreateHazardWindow")
             .WithDescription("Creates a blocked hazard window for hard expiry veto enforcement.");
+
+        monitoring.MapPost(
+            "/hazard-windows/{id:guid}/disable",
+            async Task<IResult> (Guid id, IApplicationDbContext db, CancellationToken cancellationToken) =>
+            {
+                var window = await db.HazardWindows.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+                if (window is null)
+                {
+                    return TypedResults.NotFound(new { message = "Hazard window not found." });
+                }
+
+                window.Disable();
+                await db.SaveChangesAsync(cancellationToken);
+                return TypedResults.Ok(new { disabled = true, id = window.Id });
+            })
+            .WithName("DisableHazardWindow")
+            .WithDescription("Disables a hazard window so it no longer blocks trading.");
 
         monitoring.MapGet(
             "/telegram-channels",

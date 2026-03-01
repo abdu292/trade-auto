@@ -2,25 +2,17 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-final dioProvider = Provider<Dio>((ref) {
-  const configuredBase =
-      String.fromEnvironment('BRAIN_API_BASE_URL', defaultValue: '');
-  final baseUrl = _resolveBaseUrl(configuredBase);
+enum ApiEnvironment { production, local }
 
-  return Dio(
-    BaseOptions(
-      baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 15),
-    ),
-  );
+final selectedApiEnvironmentProvider = StateProvider<ApiEnvironment>(
+  (ref) => ApiEnvironment.production,
+);
+
+final productionApiBaseUrlProvider = Provider<String>((ref) {
+  return _stripApiSuffix('https://trade-auto.azuresites.net');
 });
 
-String _resolveBaseUrl(String configuredBase) {
-  if (configuredBase.trim().isNotEmpty) {
-    return _stripApiSuffix(configuredBase.trim());
-  }
-
+final localApiBaseUrlProvider = Provider<String>((ref) {
   if (kIsWeb) {
     return 'http://localhost:5000';
   }
@@ -31,7 +23,30 @@ String _resolveBaseUrl(String configuredBase) {
     default:
       return 'http://localhost:5000';
   }
-}
+});
+
+final effectiveApiBaseUrlProvider = Provider<String>((ref) {
+  final selected = ref.watch(selectedApiEnvironmentProvider);
+  final productionBase = ref.watch(productionApiBaseUrlProvider);
+  final localBase = ref.watch(localApiBaseUrlProvider);
+
+  return switch (selected) {
+    ApiEnvironment.production => productionBase,
+    ApiEnvironment.local => localBase,
+  };
+});
+
+final dioProvider = Provider<Dio>((ref) {
+  final baseUrl = ref.watch(effectiveApiBaseUrlProvider);
+
+  return Dio(
+    BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
+    ),
+  );
+});
 
 String _stripApiSuffix(String baseUrl) {
   var normalized = baseUrl.endsWith('/')

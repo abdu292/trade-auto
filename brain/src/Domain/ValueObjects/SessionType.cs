@@ -2,7 +2,8 @@ namespace Brain.Domain.ValueObjects;
 
 public readonly record struct SessionType
 {
-    public static readonly SessionType Asian = new("Asian");
+    public static readonly SessionType Japan = new("Japan");
+    public static readonly SessionType India = new("India");
     public static readonly SessionType London = new("London");
     public static readonly SessionType NewYork = new("NewYork");
     public static readonly SessionType OffHours = new("OffHours");
@@ -11,13 +12,27 @@ public readonly record struct SessionType
 
     public SessionType(string value)
     {
-        var normalized = value?.Trim() ?? string.Empty;
-        if (normalized is not ("Asian" or "London" or "NewYork" or "OffHours"))
+        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
+        Value = normalized switch
+        {
+            "JAPAN" => "Japan",
+            "INDIA" => "India",
+            "LONDON" => "London",
+            "NY" => "NewYork",
+            "NEWYORK" => "NewYork",
+            "NEW_YORK" => "NewYork",
+            "ASIA" => "Japan",
+            "ASIAN" => "Japan",
+            "EUROPE" => "London",
+            "OFFHOURS" => "OffHours",
+            "OFF_HOURS" => "OffHours",
+            _ => string.Empty,
+        };
+
+        if (string.IsNullOrEmpty(Value))
         {
             throw new ArgumentException("Invalid session type.", nameof(value));
         }
-
-        Value = normalized;
     }
 
     public override string ToString() => Value;

@@ -59,6 +59,11 @@ class BrainApi {
     return RuntimeStatus.fromJson(_asMap(response.data));
   }
 
+  Future<AiHealthStatus> getAiHealthStatus() async {
+    final response = await _dio.get('/api/monitoring/ai-health');
+    return AiHealthStatus.fromJson(_asMap(response.data));
+  }
+
   Future<List<HazardWindow>> getHazardWindows() async {
     final response = await _dio.get('/api/monitoring/hazard-windows');
     return _asList(response.data).map(HazardWindow.fromJson).toList();
@@ -77,6 +82,10 @@ class BrainApi {
       'endUtc': endUtc.toUtc().toIso8601String(),
       'isBlocked': true,
     });
+  }
+
+  Future<void> disableHazardWindow(String id) async {
+    await _dio.post('/api/monitoring/hazard-windows/$id/disable');
   }
 
   Future<TradeSignal> analyzeSnapshot(AnalyzeSnapshotInput input) async {

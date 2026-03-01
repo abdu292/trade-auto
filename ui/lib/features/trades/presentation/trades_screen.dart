@@ -210,6 +210,20 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
                                       label: 'Regime',
                                       value: item.regime,
                                     ),
+                                    _RuntimeChip(
+                                      label: 'Consensus',
+                                      value:
+                                          '${item.agreementCount}/${item.requiredAgreement}',
+                                    ),
+                                    _RuntimeChip(
+                                      label: 'Mode Hint',
+                                      value: item.modeHint,
+                                    ),
+                                    _RuntimeChip(
+                                      label: 'Mode Conf',
+                                      value:
+                                          '${(item.modeConfidence * 100).toStringAsFixed(1)}%',
+                                    ),
                                   ],
                                 ),
                                 const SizedBox(height: 8),
@@ -217,6 +231,50 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
                                   'Expires ${item.expiry.toLocal()}',
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
+                                if (item.summary.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'AI Summary: ${item.summary}',
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ],
+                                if (item.disagreementReason != null &&
+                                    item.disagreementReason!.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Disagreement: ${item.disagreementReason}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .tertiary,
+                                        ),
+                                  ),
+                                ],
+                                if (item.providerVotes.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Provider Votes',
+                                    style:
+                                        Theme.of(context).textTheme.labelLarge,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  ...item.providerVotes.map(
+                                    (vote) => Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 2.0),
+                                      child: Text(
+                                        '- $vote',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 10),
                                 Row(
                                   children: [

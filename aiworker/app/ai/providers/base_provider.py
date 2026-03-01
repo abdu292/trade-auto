@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+import os
 
 @dataclass
 class AIProviderConfig:
@@ -62,10 +65,43 @@ class AIProvider(ABC):
         Parse and validate AI response into structured format
         """
         pass
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _load_master_prompt() -> str:
+        configured = os.getenv("MASTER_PROMPT_PATH", "").strip()
+
+        candidates: list[Path] = []
+        if configured:
+            candidates.append(Path(configured))
+
+        here = Path(__file__).resolve()
+        repo_root = here.parents[4]
+        candidates.extend([
+            repo_root / "spec" / "master_prompt",
+            repo_root / "aiworker" / "master_prompt",
+        ])
+
+        for candidate in candidates:
+            try:
+                if candidate.exists() and candidate.is_file():
+                    text = candidate.read_text(encoding="utf-8").strip()
+                    if text:
+                        return text
+            except Exception:
+                continue
+
+        return ""
     
     def _build_system_prompt(self) -> str:
         """Common system prompt for all providers"""
-        return """You are a gold (XAUUSD) trading AI. Analyze the market data and provide a buy-first pending recommendation.
+        master_prompt = self._load_master_prompt()
+        response_contract = """You are a gold (XAUUSD) trading AI. Analyze the market data and provide a buy-first pending recommendation.
+
+Execution context:
+- Inputs are structured MT5 snapshots plus Telegram/news context.
+- Do not request screenshots.
+- Return only machine-readable JSON.
 
 IMPORTANT: Always respond with ONLY valid JSON in this exact format:
 {
@@ -89,3 +125,8 @@ Rules:
 - If no good setup, respond with: {"signal": null}
 
 DO NOT add any explanation outside the JSON."""
+
+        if not master_prompt:
+            return response_contract
+
+        return f"{master_prompt}\n\n{response_contract}"

@@ -48,6 +48,10 @@ final runtimeStatusProvider = FutureProvider<RuntimeStatus>((ref) {
   return ref.watch(brainApiProvider).getRuntimeStatus();
 });
 
+final aiHealthStatusProvider = FutureProvider<AiHealthStatus>((ref) {
+  return ref.watch(brainApiProvider).getAiHealthStatus();
+});
+
 final hazardWindowsProvider = FutureProvider<List<HazardWindow>>((ref) {
   return ref.watch(brainApiProvider).getHazardWindows();
 });

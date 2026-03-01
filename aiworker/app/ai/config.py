@@ -43,16 +43,24 @@ def _read_weight_map_env(name: str, default: str = "") -> dict[str, float]:
 
 
 GROK_API_KEY = os.getenv("GROK_API_KEY")
-GROK_MODEL = os.getenv("GROK_MODEL", "grok-2-latest")
+GROK_MODEL = os.getenv("GROK_MODEL", "grok-4")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-GROK_OPENROUTER_MODEL = os.getenv("GROK_OPENROUTER_MODEL", "x-ai/grok-4.1-fast")
+GROK_OPENROUTER_MODEL = os.getenv("GROK_OPENROUTER_MODEL", "x-ai/grok-4-fast")
 GROK_RUNTIME_TRANSPORT = os.getenv("GROK_RUNTIME_TRANSPORT", "openrouter").strip().lower()
+GROK_FORCE_OPENROUTER = os.getenv("GROK_FORCE_OPENROUTER", "true").strip().lower() in {"1", "true", "yes", "on"}
+OPENROUTER_MULTI_MODEL_COMMITTEE = os.getenv("OPENROUTER_MULTI_MODEL_COMMITTEE", "true").strip().lower() in {"1", "true", "yes", "on"}
+OPENROUTER_MODEL_OPENAI = os.getenv("OPENROUTER_MODEL_OPENAI", "openai/gpt-5").strip()
+OPENROUTER_MODEL_GEMINI = os.getenv("OPENROUTER_MODEL_GEMINI", "google/gemini-2.5-pro").strip()
+OPENROUTER_MODEL_GROK = os.getenv("OPENROUTER_MODEL_GROK", GROK_OPENROUTER_MODEL).strip()
+OPENROUTER_MODEL_PERPLEXITY = os.getenv("OPENROUTER_MODEL_PERPLEXITY", "perplexity/sonar-pro").strip()
+if GROK_FORCE_OPENROUTER:
+    GROK_RUNTIME_TRANSPORT = "openrouter"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip()
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5").strip()
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "").strip()
-PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "sonar").strip()
+PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "sonar-pro").strip()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro").strip()
 
 AI_PROVIDER_MODE = os.getenv("AI_PROVIDER_MODE", "committee-live").strip().lower()
 AI_STRATEGY = os.getenv("AI_STRATEGY", "committee").strip().lower()
@@ -70,7 +78,7 @@ TELEGRAM_LISTEN_CHANNELS = _read_csv_env(
     "TELEGRAM_LISTEN_CHANNELS",
     os.getenv(
         "TELEGRAM_CHANNELS",
-        "@SmartMoneySmart837,@richard1000pips,@moonforexchannel,@Apexgoldtraders",
+        "@GRAB_PROFIT01,@Goldvvipsignals_TM,@Apexgoldtraders,@Gentle1122,@M3_HASSSNAIN,@richard1000pips,@Sureshotfx_Signals_Freefx,@goldexsignals,@PRO_TRADERS_1,@Traders_Gold_Xauusd,@GHP_Trading_Education,@Bengoldtrader_signalsfx,@GOLD_TRADING225,@ForexExpertz99,@elitegoldanalysis,@Silv_FX,@Eliz_fxac_ademy1,@XAUUSDTradingZoneOffical4x,@goldtradingsetup007,@Ethan_Fx00,@forexbignarplace,@Masterfx786,@Daily_TheFxGold1",
     ),
 )
 TELEGRAM_CHANNELS = TELEGRAM_LISTEN_CHANNELS
@@ -103,10 +111,32 @@ TELEGRAM_TRUSTED_CORE_CHANNELS = _read_csv_env("TELEGRAM_TRUSTED_CORE_CHANNELS",
 def build_analyzers() -> List[AIProviderConfig]:
     analyzers: List[AIProviderConfig] = []
 
-    if GROK_RUNTIME_TRANSPORT == "openrouter" and OPENROUTER_API_KEY and "grok" in GROK_OPENROUTER_MODEL.lower():
+    if OPENROUTER_MULTI_MODEL_COMMITTEE and OPENROUTER_API_KEY:
+        multi_models = [
+            ("openrouter-openai", OPENROUTER_MODEL_OPENAI),
+            ("openrouter-gemini", OPENROUTER_MODEL_GEMINI),
+            ("openrouter-grok", OPENROUTER_MODEL_GROK),
+            ("openrouter-perplexity", OPENROUTER_MODEL_PERPLEXITY),
+        ]
+        for analyzer_name, model_name in multi_models:
+            if not model_name:
+                continue
+            analyzers.append(
+                AIProviderConfig(
+                    name=f"{analyzer_name}:{model_name}",
+                    provider="openrouter",
+                    api_key=OPENROUTER_API_KEY,
+                    model=model_name,
+                    temperature=0.2,
+                    max_tokens=450,
+                    timeout=20,
+                )
+            )
+
+    elif GROK_RUNTIME_TRANSPORT == "openrouter" and OPENROUTER_API_KEY and "grok" in GROK_OPENROUTER_MODEL.lower():
         analyzers.append(
             AIProviderConfig(
-                name=f"grok-via-openrouter:{GROK_OPENROUTER_MODEL}",
+                name=f"openrouter-grok:{GROK_OPENROUTER_MODEL}",
                 provider="openrouter",
                 api_key=OPENROUTER_API_KEY,
                 model=GROK_OPENROUTER_MODEL,
@@ -115,6 +145,7 @@ def build_analyzers() -> List[AIProviderConfig]:
                 timeout=20,
             )
         )
+
     elif GROK_RUNTIME_TRANSPORT == "direct" and GROK_API_KEY:
         analyzers.append(
             AIProviderConfig(

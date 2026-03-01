@@ -28,7 +28,7 @@ public sealed class WeekendMarketSimulationService(
     private decimal _baseSpread = 0.18m;
     private bool _enableShockEvents = true;
     private string? _sessionOverride;
-    private string _strategyProfile = "Standard";
+    private string _strategyProfile = "STANDARD";
 
     public MarketSimulationStatusContract GetStatus()
     {
@@ -259,11 +259,13 @@ public sealed class WeekendMarketSimulationService(
 
     private static string ResolveSession(DateTimeOffset now)
     {
-        var hour = now.Hour;
-        if (hour is >= 0 and < 4) return "JAPAN";
-        if (hour is >= 4 and < 8) return "INDIA";
-        if (hour is >= 8 and < 14) return "LONDON";
-        return "NY";
+        var ksa = now.ToOffset(TimeSpan.FromHours(3));
+        var minuteOfDay = (ksa.Hour * 60) + ksa.Minute;
+
+        if (minuteOfDay is >= 120 and < 360) return "JAPAN";
+        if (minuteOfDay is >= 360 and < 690) return "INDIA";
+        if (minuteOfDay is >= 690 and < 930) return "LONDON";
+        return "NEW_YORK";
     }
 
     private static decimal SessionDrift(string session) => session switch

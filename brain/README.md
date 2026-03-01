@@ -48,7 +48,8 @@ dotnet run --project src/Web/Web.csproj
 
 - Backend consumes AI mode feed (`WAR_PREMIUM`, `DEESCALATION_RISK`, `UNKNOWN`) with confidence/TTL/keywords.
 - If mode feed is unavailable, backend continues with local safety fallbacks (non-blocking).
-- Strategy profile (`Standard`/`WarPremium`) does not change AI transport by itself; AI transport remains controlled by AI worker environment variables (for example `GROK_RUNTIME_TRANSPORT=openrouter`).
+- Strategy profile (`Standard`/`WarPremium`) does not change AI transport by itself; AI transport remains controlled by AI worker environment variables.
+- AI worker defaults to OpenRouter transport (`GROK_FORCE_OPENROUTER=true`), so both profiles use the same Grok transport path unless explicitly disabled.
 
 ## Simulator
 

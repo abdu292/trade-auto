@@ -92,11 +92,17 @@ private:
         MqlDateTime dt;
         TimeToStruct(utcNow, dt);
 
-        if (dt.hour >= 0 && dt.hour < 8)
-            return "ASIA";
-        if (dt.hour >= 8 && dt.hour < 16)
-            return "EUROPE";
-        if (dt.hour >= 16 && dt.hour < 22)
+        // Convert UTC to KSA (UTC+3) and map to operating sessions:
+        // Japan: 02:00-05:59, India: 06:00-11:29, London: 11:30-15:29, New York: 15:30-01:59
+        int ksaMinutes = dt.hour * 60 + dt.min + 180;
+        while (ksaMinutes >= 1440)
+            ksaMinutes -= 1440;
+
+        if (ksaMinutes >= 120 && ksaMinutes < 360)
+            return "JAPAN";
+        if (ksaMinutes >= 360 && ksaMinutes < 690)
+            return "INDIA";
+        if (ksaMinutes >= 690 && ksaMinutes < 930)
             return "LONDON";
         return "NEW_YORK";
     }

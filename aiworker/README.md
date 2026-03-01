@@ -21,6 +21,7 @@ pip install -r requirements.txt
 # AI_STRATEGY=committee
 # CONSENSUS_MIN_AGREEMENT=2
 # GROK_RUNTIME_TRANSPORT=openrouter
+# GROK_FORCE_OPENROUTER=true
 # OPENROUTER_API_KEY=...
 # GROK_OPENROUTER_MODEL=x-ai/grok-4.1-fast
 # OPENAI_API_KEY=...
@@ -63,26 +64,16 @@ uvicorn app.main:app --reload --port 8001
 
 ## Quick Test
 
-```powershell
-# Check health
-Invoke-RestMethod http://localhost:8001/health
+Use Swagger UI for testing:
 
-# Analyze market snapshot
-$snapshot = @{
-	symbol = "XAUUSD"
-	timeframeData = @(
-		@{ timeframe="M5"; open=1.08500; high=1.08550; low=1.08480; 
-		   close=1.08530; atr=0.00045; adr=0.00120; ma20=1.08490 },
-		@{ timeframe="H1"; open=1.08400; high=1.08600; low=1.08350; 
-		   close=1.08530; atr=0.00150; adr=0.00120; ma20=1.08450 }
-	)
-}
+- Open `http://127.0.0.1:8001/docs`
+- Test endpoints in this order:
+  1. `GET /health`
+  2. `POST /mode`
+  3. `POST /analyze`
 
-Invoke-RestMethod -Uri "http://localhost:8001/analyze" `
-	-Method POST `
-	-Body ($snapshot | ConvertTo-Json -Depth 5) `
-	-ContentType "application/json"
-```
+For full end-to-end run and test sequence, use:
+- [docs/RUN_AND_TEST_GUIDE.md](../docs/RUN_AND_TEST_GUIDE.md)
 
 ## Configuration
 
@@ -90,6 +81,7 @@ Invoke-RestMethod -Uri "http://localhost:8001/analyze" `
 - `AI_STRATEGY`: `committee` (recommended) or `single`
 - `CONSENSUS_MIN_AGREEMENT`: minimum agreeing analyzers required in committee mode
 - `GROK_RUNTIME_TRANSPORT`: `openrouter` (recommended now) or `direct`
+- `GROK_FORCE_OPENROUTER`: when `true` (default), OpenRouter is enforced for Grok path across all strategy profiles
 - `OPENROUTER_API_KEY`: required when transport is `openrouter`
 - `GROK_OPENROUTER_MODEL`: must be Grok model id (default `x-ai/grok-4.1-fast`)
 - `GROK_API_KEY`: required when transport is `direct`

@@ -2,6 +2,7 @@ using Brain.Application.Common.Interfaces;
 using Brain.Application.Common.Models;
 using Brain.Application.Common.Services;
 using Brain.Domain.Entities;
+using Brain.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,6 +43,22 @@ public sealed class SignalPollingBackgroundService(
             try
             {
                 var snapshot = await marketData.GetSnapshotAsync("XAUUSD", stoppingToken);
+                var normalizedSession = MapSessionType(snapshot.Session);
+                var sessionEnabled = await db.SessionStates
+                    .AsNoTracking()
+                    .Where(x => x.Session == normalizedSession)
+                    .Select(x => (bool?)x.IsEnabled)
+                    .FirstOrDefaultAsync(stoppingToken);
+                if (sessionEnabled == false)
+                {
+                    logger.LogInformation(
+                        "NO_TRADE due to disabled session. SnapshotSession={SnapshotSession} MappedSession={MappedSession}",
+                        snapshot.Session,
+                        normalizedSession.Value);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
                 var regime = RegimeRiskClassifier.Classify(snapshot);
                 var forceWhereToTrade = ShouldForceWhereToTrade(snapshot, regime);
 
@@ -288,7 +305,15 @@ public sealed class SignalPollingBackgroundService(
                     Bucket: decision.Bucket,
                     Session: decision.Session,
                     SizeClass: decision.SizeClass,
-                    TelegramState: decision.TelegramState);
+                    TelegramState: decision.TelegramState,
+                    ConsensusPassed: aiSignal.ConsensusPassed,
+                    AgreementCount: aiSignal.AgreementCount,
+                    RequiredAgreement: aiSignal.RequiredAgreement,
+                    DisagreementReason: aiSignal.DisagreementReason,
+                    ProviderVotes: aiSignal.ProviderVotes,
+                    Summary: aiSignal.Summary,
+                    ModeHint: aiSignal.ModeHint,
+                    ModeConfidence: aiSignal.ModeConfidence);
 
                 var executionMode = ResolveExecutionMode(configuration["Execution:Mode"]);
                 var hybridSessions = ResolveHybridAutoSessions(configuration["Execution:HybridAutoSessions"]);
@@ -375,13 +400,7 @@ public sealed class SignalPollingBackgroundService(
 
     private static ExecutionMode ResolveExecutionMode(string? value)
     {
-        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
-        return normalized switch
-        {
-            "MANUAL" => ExecutionMode.Manual,
-            "HYBRID" => ExecutionMode.Hybrid,
-            _ => ExecutionMode.Auto,
-        };
+        return ExecutionMode.Manual;
     }
 
     private static HashSet<string> ResolveHybridAutoSessions(string? value)
@@ -414,6 +433,22 @@ public sealed class SignalPollingBackgroundService(
 
         var normalizedSession = (session ?? string.Empty).Trim().ToUpperInvariant();
         return hybridAutoSessions.Contains(normalizedSession);
+    }
+
+    private static SessionType MapSessionType(string? snapshotSession)
+    {
+        var value = (snapshotSession ?? string.Empty).Trim().ToUpperInvariant();
+        return value switch
+        {
+            "JAPAN" => SessionType.Japan,
+            "INDIA" => SessionType.India,
+            "ASIA" => SessionType.Japan,
+            "LONDON" => SessionType.London,
+            "EUROPE" => SessionType.London,
+            "NY" => SessionType.NewYork,
+            "NEW_YORK" => SessionType.NewYork,
+            _ => SessionType.OffHours,
+        };
     }
 
     private static string ComputeSnapshotHash(MarketSnapshotContract snapshot)
