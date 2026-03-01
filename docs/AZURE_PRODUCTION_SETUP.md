@@ -51,8 +51,16 @@ App Service must be able to pull your GHCR image.
 
 ### Option A (simplest): make package public
 
-- In GitHub -> Packages -> `trade-auto-brain-ai` -> set visibility to **Public**.
-- No registry credentials needed in App Service.
+- Push one successful run of `.github/workflows/deploy-single-appservice.yml` first (this creates the GHCR package).
+- Open package page directly: `https://github.com/users/abdu292/packages/container/trade-auto-brain-ai`
+- Open package settings directly: `https://github.com/users/abdu292/packages/container/trade-auto-brain-ai/settings`
+- In **Danger Zone** -> **Change package visibility** -> select **Public** -> confirm.
+- No registry credentials needed in App Service once package is public.
+
+If you do not see any package:
+- Confirm workflow push step succeeded for `ghcr.io/abdu292/trade-auto-brain-ai` in Actions logs.
+- Ensure you are signed in as `abdu292` (or account with package admin rights).
+- If still missing, open `https://github.com/users/abdu292/packages` and verify package type filter includes **Container**.
 
 ### Option B: keep package private
 
