@@ -9,7 +9,7 @@ final selectedApiEnvironmentProvider = StateProvider<ApiEnvironment>(
 );
 
 final productionApiBaseUrlProvider = Provider<String>((ref) {
-  return _stripApiSuffix('https://trade-auto.azuresites.net');
+  return _stripApiSuffix('https://trade-auto.azurewebsites.net');
 });
 
 final localApiBaseUrlProvider = Provider<String>((ref) {

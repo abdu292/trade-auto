@@ -33,7 +33,7 @@ flutter run
 - App defaults to **Production** environment.
 - Tap cloud-sync icon in app bar to switch between `Production` and `Local`.
 - Base URLs are configured in app code:
-	- Production: `https://trade-auto.azuresites.net`
+	- Production: `https://trade-auto.azurewebsites.net`
 	- Local: `http://10.0.2.2:5000` (Android) / `http://localhost:5000` (desktop/web)
 
 ## Demo-account realtime test

@@ -41,7 +41,7 @@ Download publish profile from Azure Portal:
 Then configure GitHub repository secrets:
 
 1. `AZURE_WEBAPP_NAME`
-   - Value: your App Service name (example: `trade-auto-prod`)
+   - Value: your App Service name (example: `trade-auto`)
 2. `AZURE_WEBAPP_PUBLISH_PROFILE`
    - Value: full XML content of downloaded publish profile file
 
@@ -119,7 +119,7 @@ Azure SQL connection string template:
 
 ## 7) Verification checklist
 
-Run against your one App Service URL `https://<app>.azurewebsites.net`:
+Run against your one App Service URL `https://trade-auto.azurewebsites.net`:
 
 1. `GET /health`
 2. `GET /api/monitoring/ai-health`
