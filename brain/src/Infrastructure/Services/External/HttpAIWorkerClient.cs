@@ -55,8 +55,23 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 atrM15 = snapshot.AtrM15,
                 previousDayHigh = snapshot.PreviousDayHigh,
                 previousDayLow = snapshot.PreviousDayLow,
+                weeklyHigh = snapshot.WeeklyHigh,
+                weeklyLow = snapshot.WeeklyLow,
+                dayOpen = snapshot.DayOpen,
+                weekOpen = snapshot.WeekOpen,
                 sessionHigh = snapshot.SessionHigh,
                 sessionLow = snapshot.SessionLow,
+                sessionHighJapan = snapshot.SessionHighJapan,
+                sessionLowJapan = snapshot.SessionLowJapan,
+                sessionHighIndia = snapshot.SessionHighIndia,
+                sessionLowIndia = snapshot.SessionLowIndia,
+                sessionHighLondon = snapshot.SessionHighLondon,
+                sessionLowLondon = snapshot.SessionLowLondon,
+                sessionHighNy = snapshot.SessionHighNy,
+                sessionLowNy = snapshot.SessionLowNy,
+                ema50H1 = snapshot.Ema50H1,
+                ema200H1 = snapshot.Ema200H1,
+                adrUsedPct = snapshot.AdrUsedPct,
                 session = snapshot.Session,
                 timestamp = snapshot.Timestamp,
                 volatilityExpansion = snapshot.VolatilityExpansion,
@@ -125,7 +140,12 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 NewsImpactTag: result.NewsImpactTag ?? "LOW",
                 TvConfirmationTag: result.TvConfirmationTag ?? "NEUTRAL",
                 NewsTags: result.NewsTags ?? ["unknown_news_state"],
-                Summary: result.Summary ?? "No AI summary provided.");
+                Summary: result.Summary ?? "No AI summary provided.",
+                ConsensusPassed: result.ConsensusPassed ?? true,
+                AgreementCount: result.AgreementCount ?? 1,
+                RequiredAgreement: result.RequiredAgreement ?? 1,
+                DisagreementReason: result.DisagreementReason,
+                ProviderVotes: result.ProviderVotes ?? []);
 
             _logger.LogInformation(
                 "← [AIWorker] Analysis complete: {Signal} (confidence={Confidence})",
@@ -164,5 +184,10 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         string? NewsImpactTag,
         string? TvConfirmationTag,
         IReadOnlyCollection<string>? NewsTags,
-        string? Summary);
+        string? Summary,
+        bool? ConsensusPassed,
+        int? AgreementCount,
+        int? RequiredAgreement,
+        string? DisagreementReason,
+        IReadOnlyCollection<string>? ProviderVotes);
 }

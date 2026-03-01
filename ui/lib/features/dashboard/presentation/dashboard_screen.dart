@@ -146,6 +146,15 @@ class DashboardScreen extends ConsumerWidget {
                           _MetricChip(
                               label: 'Queue Depth',
                               value: state.pendingQueueDepth.toString()),
+                            _MetricChip(
+                              label: 'Approval Queue',
+                              value: state.approvalQueueDepth.toString()),
+                            _MetricChip(
+                              label: 'Execution Mode',
+                              value: state.executionMode.toUpperCase()),
+                            _MetricChip(
+                              label: 'Hybrid Auto',
+                              value: state.hybridAutoSessions),
                           _MetricChip(
                               label: 'Telegram', value: state.telegramState),
                           _MetricChip(
@@ -237,6 +246,7 @@ class _MetricChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Chip(
+      visualDensity: VisualDensity.compact,
       label: Text('$label: $value'),
     );
   }

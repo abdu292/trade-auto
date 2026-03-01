@@ -1,6 +1,7 @@
 import logging
 from typing import Optional, Dict, List, Tuple
 import asyncio
+from dataclasses import dataclass
 from app.ai.providers.base_provider import AIProvider, TradeSignal, AIProviderConfig
 from app.ai.providers.openai_provider import OpenAIProvider
 from app.ai.providers.openrouter_provider import OpenRouterProvider
@@ -9,6 +10,16 @@ from app.ai.providers.perplexity_provider import PerplexityProvider
 from app.ai.providers.gemini_provider import GeminiProvider
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class CommitteeDecision:
+    signal: Optional[TradeSignal]
+    consensus_passed: bool
+    agreement_count: int
+    required_agreement: int
+    disagreement_reason: Optional[str]
+    provider_votes: List[str]
 
 
 class AIProviderManager:
@@ -57,23 +68,48 @@ class AIProviderManager:
         market_context: dict,
         min_agreement: int,
         entry_tolerance_pct: float,
-    ) -> Optional[TradeSignal]:
+    ) -> CommitteeDecision:
         if not self.provider_names:
             logger.warning("No analyzers configured")
-            return None
+            return CommitteeDecision(
+                signal=None,
+                consensus_passed=False,
+                agreement_count=0,
+                required_agreement=max(1, min_agreement),
+                disagreement_reason="No analyzers configured",
+                provider_votes=[],
+            )
 
         tasks = [self._analyze_one(name, market_context) for name in self.provider_names]
         results = await asyncio.gather(*tasks)
         votes = [result for result in results if result is not None]
+        vote_descriptions = [
+            f"{analyzer_name}:{signal.rail}@{signal.entry:.2f}|c={signal.confidence:.2f}"
+            for analyzer_name, signal in votes
+        ]
 
         if not votes:
             logger.warning("No analyzer returned a usable signal")
-            return None
+            return CommitteeDecision(
+                signal=None,
+                consensus_passed=False,
+                agreement_count=0,
+                required_agreement=max(1, min_agreement),
+                disagreement_reason="No analyzer returned a usable signal",
+                provider_votes=vote_descriptions,
+            )
 
         if len(votes) == 1:
             single = votes[0][1]
             logger.info("Single analyzer available; using %s @ %s", single.rail, single.entry)
-            return single
+            return CommitteeDecision(
+                signal=single,
+                consensus_passed=max(1, min_agreement) <= 1,
+                agreement_count=1,
+                required_agreement=max(1, min_agreement),
+                disagreement_reason=None if max(1, min_agreement) <= 1 else "Insufficient analyzers for required committee agreement",
+                provider_votes=vote_descriptions,
+            )
 
         grouped: Dict[str, List[TradeSignal]] = {}
         for analyzer_name, signal in votes:
@@ -94,14 +130,24 @@ class AIProviderManager:
 
         if len(agreeing) < min_agreement:
             logger.warning("Committee disagreement: rail=%s votes=%s agreeing=%s required=%s", best_rail, len(rail_group), len(agreeing), min_agreement)
-            return None
+            return CommitteeDecision(
+                signal=None,
+                consensus_passed=False,
+                agreement_count=len(agreeing),
+                required_agreement=max(1, min_agreement),
+                disagreement_reason=(
+                    f"Committee disagreement on {best_rail}: agreeing={len(agreeing)} required={max(1, min_agreement)}"
+                ),
+                provider_votes=vote_descriptions,
+            )
 
         avg_entry = sum(item.entry for item in agreeing) / len(agreeing)
         avg_tp = sum(item.tp for item in agreeing) / len(agreeing)
         avg_sl = sum(item.sl for item in agreeing) / len(agreeing)
         avg_conf = sum(item.confidence for item in agreeing) / len(agreeing)
 
-        return TradeSignal(
+        return CommitteeDecision(
+            signal=TradeSignal(
             rail=best_rail,
             entry=avg_entry,
             tp=avg_tp,
@@ -110,4 +156,10 @@ class AIProviderManager:
             ml=anchor.ml,
             confidence=avg_conf,
             reasoning=f"committee:{len(agreeing)}/{len(votes)}",
+            ),
+            consensus_passed=True,
+            agreement_count=len(agreeing),
+            required_agreement=max(1, min_agreement),
+            disagreement_reason=None,
+            provider_votes=vote_descriptions,
         )

@@ -21,6 +21,8 @@ from app.ai.config import (
     TELEGRAM_CAUTION_KEYWORDS,
     TELEGRAM_BULLISH_KEYWORDS,
     TELEGRAM_BEARISH_KEYWORDS,
+    TELEGRAM_CHANNEL_WEIGHTS,
+    TELEGRAM_TRUSTED_CORE_CHANNELS,
 )
 
 logger = logging.getLogger(__name__)
@@ -301,6 +303,10 @@ class TelegramNewsService:
     def _compute_weighted_scores(items: list[dict[str, str]]) -> tuple[float, float]:
         buy_score = 0.0
         sell_score = 0.0
+        trusted_core = {
+            TelegramNewsService._normalize_channel(channel)
+            for channel in TELEGRAM_TRUSTED_CORE_CHANNELS
+        }
         for item in items:
             text = (item.get("text") or "").lower()
             weight = 1.0
@@ -308,6 +314,12 @@ class TelegramNewsService:
                 weight = 1.25
             elif item.get("category") == "MODERATE":
                 weight = 1.10
+
+            channel = TelegramNewsService._normalize_channel(item.get("channel") or "")
+            channel_weight = TELEGRAM_CHANNEL_WEIGHTS.get(channel, 1.0)
+            if channel in trusted_core:
+                channel_weight = max(channel_weight, 1.5)
+            weight *= channel_weight
 
             buy_tokens = ("buy", "long", "bullish", "accumulate")
             sell_tokens = ("sell", "short", "bearish", "dump", "panic")

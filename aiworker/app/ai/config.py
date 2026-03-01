@@ -23,15 +23,40 @@ def _read_int_env(name: str, default: int = 0) -> int:
         return default
 
 
+def _read_weight_map_env(name: str, default: str = "") -> dict[str, float]:
+    mapping: dict[str, float] = {}
+    for item in _read_csv_env(name, default):
+        if "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        channel_key = key.strip().lower()
+        if not channel_key:
+            continue
+        if not channel_key.startswith("@") and not channel_key.startswith("-100"):
+            channel_key = f"@{channel_key}"
+        try:
+            weight = float(value.strip())
+        except ValueError:
+            continue
+        mapping[channel_key] = max(0.3, min(3.0, weight))
+    return mapping
+
+
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 GROK_MODEL = os.getenv("GROK_MODEL", "grok-2-latest")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 GROK_OPENROUTER_MODEL = os.getenv("GROK_OPENROUTER_MODEL", "x-ai/grok-4.1-fast")
 GROK_RUNTIME_TRANSPORT = os.getenv("GROK_RUNTIME_TRANSPORT", "openrouter").strip().lower()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip()
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "").strip()
+PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "sonar").strip()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
 
-AI_PROVIDER_MODE = "grok-only"
-AI_STRATEGY = "single"
-CONSENSUS_MIN_AGREEMENT = 1
+AI_PROVIDER_MODE = os.getenv("AI_PROVIDER_MODE", "committee-live").strip().lower()
+AI_STRATEGY = os.getenv("AI_STRATEGY", "committee").strip().lower()
+CONSENSUS_MIN_AGREEMENT = _read_int_env("CONSENSUS_MIN_AGREEMENT", 2)
 CONSENSUS_ENTRY_TOLERANCE_PCT = float(os.getenv("CONSENSUS_ENTRY_TOLERANCE_PCT", "0.003"))
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -71,17 +96,14 @@ TELEGRAM_BEARISH_KEYWORDS = _read_csv_env(
     "TELEGRAM_BEARISH_KEYWORDS",
     "gold selloff,strong dollar,long dxy,bearish gold",
 )
+TELEGRAM_CHANNEL_WEIGHTS = _read_weight_map_env("TELEGRAM_CHANNEL_WEIGHTS", "")
+TELEGRAM_TRUSTED_CORE_CHANNELS = _read_csv_env("TELEGRAM_TRUSTED_CORE_CHANNELS", "")
 
 
 def build_analyzers() -> List[AIProviderConfig]:
     analyzers: List[AIProviderConfig] = []
 
-    if GROK_RUNTIME_TRANSPORT == "openrouter":
-        if not OPENROUTER_API_KEY:
-            return analyzers
-        if "grok" not in GROK_OPENROUTER_MODEL.lower():
-            return analyzers
-
+    if GROK_RUNTIME_TRANSPORT == "openrouter" and OPENROUTER_API_KEY and "grok" in GROK_OPENROUTER_MODEL.lower():
         analyzers.append(
             AIProviderConfig(
                 name=f"grok-via-openrouter:{GROK_OPENROUTER_MODEL}",
@@ -93,12 +115,7 @@ def build_analyzers() -> List[AIProviderConfig]:
                 timeout=20,
             )
         )
-        return analyzers
-
-    if GROK_RUNTIME_TRANSPORT == "direct":
-        if not GROK_API_KEY:
-            return analyzers
-
+    elif GROK_RUNTIME_TRANSPORT == "direct" and GROK_API_KEY:
         analyzers.append(
             AIProviderConfig(
                 name=f"grok:{GROK_MODEL}",
@@ -110,7 +127,57 @@ def build_analyzers() -> List[AIProviderConfig]:
                 timeout=20,
             )
         )
-        return analyzers
+
+    if OPENAI_API_KEY:
+        analyzers.append(
+            AIProviderConfig(
+                name=f"openai:{OPENAI_MODEL}",
+                provider="openai",
+                api_key=OPENAI_API_KEY,
+                model=OPENAI_MODEL,
+                temperature=0.2,
+                max_tokens=450,
+                timeout=20,
+            )
+        )
+
+    if PERPLEXITY_API_KEY:
+        analyzers.append(
+            AIProviderConfig(
+                name=f"perplexity:{PERPLEXITY_MODEL}",
+                provider="perplexity",
+                api_key=PERPLEXITY_API_KEY,
+                model=PERPLEXITY_MODEL,
+                temperature=0.2,
+                max_tokens=450,
+                timeout=20,
+            )
+        )
+
+    if GEMINI_API_KEY:
+        analyzers.append(
+            AIProviderConfig(
+                name=f"gemini:{GEMINI_MODEL}",
+                provider="gemini",
+                api_key=GEMINI_API_KEY,
+                model=GEMINI_MODEL,
+                temperature=0.2,
+                max_tokens=450,
+                timeout=20,
+            )
+        )
+
+    preferred_order = _read_csv_env("AI_ANALYZER_ORDER", "")
+    if preferred_order:
+        ordered: List[AIProviderConfig] = []
+        leftovers = analyzers.copy()
+        for provider_name in preferred_order:
+            for analyzer in list(leftovers):
+                if analyzer.provider.lower() == provider_name.lower() or analyzer.name.lower().startswith(provider_name.lower() + ":"):
+                    ordered.append(analyzer)
+                    leftovers.remove(analyzer)
+        ordered.extend(leftovers)
+        analyzers = ordered
 
     return analyzers
 

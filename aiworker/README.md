@@ -4,9 +4,9 @@ FastAPI service providing deterministic XAUUSD signal orchestration for the Brai
 
 ## Features
 
-- ✅ **Grok-only live decision engine** (spec-aligned)
+- ✅ **Committee live decision engine** with strict quorum gating
 - ✅ **Grok transport selectable**: `openrouter` now, `direct` later
-- ✅ **Single-analyzer deterministic runtime path**
+- ✅ **Hard `NO_TRADE` when committee consensus fails**
 - ✅ **Telegram context enrichment + consensus tags**
 - ✅ **Production Use**: Called by Brain API for market snapshot analysis
 
@@ -18,9 +18,17 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # Create .env with API keys (see AI_INTEGRATION_GUIDE.md)
+# AI_STRATEGY=committee
+# CONSENSUS_MIN_AGREEMENT=2
 # GROK_RUNTIME_TRANSPORT=openrouter
 # OPENROUTER_API_KEY=...
 # GROK_OPENROUTER_MODEL=x-ai/grok-4.1-fast
+# OPENAI_API_KEY=...
+# OPENAI_MODEL=gpt-4.1-mini
+# GEMINI_API_KEY=...
+# GEMINI_MODEL=gemini-2.0-flash
+# PERPLEXITY_API_KEY=... (optional)
+# PERPLEXITY_MODEL=sonar (optional)
 # (later optional) GROK_RUNTIME_TRANSPORT=direct
 # (later optional) GROK_API_KEY=...
 # (later optional) GROK_MODEL=grok-2-latest
@@ -67,11 +75,16 @@ Invoke-RestMethod -Uri "http://localhost:8001/analyze" `
 ## Configuration
 
 **Key environment variables:**
+- `AI_STRATEGY`: `committee` (recommended) or `single`
+- `CONSENSUS_MIN_AGREEMENT`: minimum agreeing analyzers required in committee mode
 - `GROK_RUNTIME_TRANSPORT`: `openrouter` (recommended now) or `direct`
 - `OPENROUTER_API_KEY`: required when transport is `openrouter`
 - `GROK_OPENROUTER_MODEL`: must be Grok model id (default `x-ai/grok-4.1-fast`)
 - `GROK_API_KEY`: required when transport is `direct`
 - `GROK_MODEL`: direct Grok model name (default `grok-2-latest`)
+- `OPENAI_API_KEY`, `OPENAI_MODEL`: OpenAI analyzer settings
+- `GEMINI_API_KEY`, `GEMINI_MODEL`: Gemini analyzer settings
+- `PERPLEXITY_API_KEY`, `PERPLEXITY_MODEL`: Perplexity analyzer settings
 - `CONSENSUS_ENTRY_TOLERANCE_PCT`: Entry price tolerance (default: 0.003 = 0.3%)
 - `TELEGRAM_READ_MODE`: `bot` (default, requires bot access) or `client` (MTProto user session)
 - `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`: Required for `TELEGRAM_READ_MODE=client`
@@ -108,8 +121,8 @@ Invoke-RestMethod http://localhost:8001/health | ConvertTo-Json -Depth 8
 ```
 
 Expected:
-- `ai.analyzerCount = 1`
-- `ai.liveDecisionEngine = grok`
+- `ai.analyzerCount >= 2`
+- `ai.liveDecisionEngine = committee`
 - `ai.transport = openrouter` or `direct`
-- `ai.analyzers[0]` contains `grok`
+- `ai.strategy = committee`
 - `ai.parityBlockers = []`

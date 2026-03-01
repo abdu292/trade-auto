@@ -63,6 +63,8 @@ await using (var scope = app.Services.CreateAsyncScope())
 			_ = await dbContext.HazardWindows.AsNoTracking().Take(1).ToListAsync();
 			_ = await dbContext.TelegramChannels.AsNoTracking().Take(1).ToListAsync();
 			_ = await dbContext.MacroCacheStates.AsNoTracking().Take(1).ToListAsync();
+			_ = await dbContext.LedgerAccounts.AsNoTracking().Take(1).ToListAsync();
+			_ = await dbContext.LedgerPositions.AsNoTracking().Take(1).ToListAsync();
 		}
 		catch (SqlException ex) when (ex.Number == 208)
 		{

@@ -18,7 +18,7 @@ class AnalyzerService:
     def __init__(self) -> None:
         if not AI_ANALYZERS:
             raise RuntimeError(
-                "No AI analyzers configured. Grok-only runtime requires either OPENROUTER_API_KEY + GROK_OPENROUTER_MODEL(grok) or GROK_API_KEY for direct transport."
+                "No AI analyzers configured. Configure at least one analyzer API key and model in environment."
             )
         self._manager = AIProviderManager(AI_ANALYZERS)
         self._telegram_news = TelegramNewsService()
@@ -52,8 +52,23 @@ class AnalyzerService:
             "atr_m15": snapshot.atrM15,
             "previous_day_high": snapshot.previousDayHigh,
             "previous_day_low": snapshot.previousDayLow,
+            "weekly_high": snapshot.weeklyHigh,
+            "weekly_low": snapshot.weeklyLow,
+            "day_open": snapshot.dayOpen,
+            "week_open": snapshot.weekOpen,
             "session_high": snapshot.sessionHigh,
             "session_low": snapshot.sessionLow,
+            "session_high_japan": snapshot.sessionHighJapan,
+            "session_low_japan": snapshot.sessionLowJapan,
+            "session_high_india": snapshot.sessionHighIndia,
+            "session_low_india": snapshot.sessionLowIndia,
+            "session_high_london": snapshot.sessionHighLondon,
+            "session_low_london": snapshot.sessionLowLondon,
+            "session_high_ny": snapshot.sessionHighNy,
+            "session_low_ny": snapshot.sessionLowNy,
+            "ema50_h1": snapshot.ema50H1,
+            "ema200_h1": snapshot.ema200H1,
+            "adr_used_pct": snapshot.adrUsedPct,
             "session": snapshot.session,
             "timestamp": snapshot.timestamp.isoformat(),
             "volatility_expansion": volatility_expansion,
@@ -99,31 +114,44 @@ class AnalyzerService:
             "items": telegram_news.items,
         }
 
-        if AI_STRATEGY == "single":
-            signal = await self._manager.analyze_with_committee(
-                market_context,
-                min_agreement=1,
-                entry_tolerance_pct=CONSENSUS_ENTRY_TOLERANCE_PCT,
+        min_agreement = 1 if AI_STRATEGY == "single" else max(2, CONSENSUS_MIN_AGREEMENT)
+        committee = await self._manager.analyze_with_committee(
+            market_context,
+            min_agreement=min_agreement,
+            entry_tolerance_pct=CONSENSUS_ENTRY_TOLERANCE_PCT,
+        )
+
+        if not committee.consensus_passed or committee.signal is None:
+            logger.warning(
+                "Consensus failed: required=%s agreed=%s reason=%s",
+                committee.required_agreement,
+                committee.agreement_count,
+                committee.disagreement_reason,
             )
-        else:
-            signal = await self._manager.analyze_with_committee(
-                market_context,
-                min_agreement=CONSENSUS_MIN_AGREEMENT,
-                entry_tolerance_pct=CONSENSUS_ENTRY_TOLERANCE_PCT,
+            return TradeSignal(
+                rail="NO_TRADE",
+                entry=0.0,
+                tp=0.0,
+                pe=snapshot.timestamp + timedelta(minutes=5),
+                ml=300,
+                confidence=0.0,
+                safetyTag="BLOCK",
+                directionBias="NEUTRAL",
+                alignmentScore=0.0,
+                newsImpactTag=_resolve_news_impact_tag(snapshot, telegram_news),
+                tvConfirmationTag=_resolve_tv_confirmation(snapshot),
+                newsTags=_resolve_news_tags(snapshot, volatility_expansion, telegram_news),
+                summary=(
+                    f"AI consensus failed: {committee.disagreement_reason or 'insufficient agreement'}"
+                ),
+                consensusPassed=False,
+                agreementCount=committee.agreement_count,
+                requiredAgreement=committee.required_agreement,
+                disagreementReason=committee.disagreement_reason,
+                providerVotes=committee.provider_votes,
             )
 
-        if not signal:
-            logger.warning("No usable Grok signal returned; using deterministic safe fallback signal.")
-            fallback_entry = max(1.0, primary_tf.close - max(0.2, snapshot.atr * 0.45))
-            fallback_tp = fallback_entry + max(0.5, snapshot.atr * 0.6)
-            signal = type("FallbackSignal", (), {
-                "rail": "BUY_LIMIT",
-                "entry": float(fallback_entry),
-                "tp": float(fallback_tp),
-                "pe": "00:20",
-                "ml": "00:30",
-                "confidence": 0.0,
-            })()
+        signal = committee.signal
 
         pending_expiry = _parse_pe(snapshot.timestamp, signal.pe)
         max_life = _parse_ml(signal.ml)
@@ -142,6 +170,11 @@ class AnalyzerService:
             tvConfirmationTag=_resolve_tv_confirmation(snapshot),
             newsTags=_resolve_news_tags(snapshot, volatility_expansion, telegram_news),
             summary=_build_summary(snapshot, volatility_expansion, telegram_news),
+            consensusPassed=committee.consensus_passed,
+            agreementCount=committee.agreement_count,
+            requiredAgreement=committee.required_agreement,
+            disagreementReason=committee.disagreement_reason,
+            providerVotes=committee.provider_votes,
         )
 
 

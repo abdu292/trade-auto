@@ -15,6 +15,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<MacroCacheState> MacroCacheStates => Set<MacroCacheState>();
     public DbSet<HazardWindow> HazardWindows => Set<HazardWindow>();
     public DbSet<DecisionLog> DecisionLogs => Set<DecisionLog>();
+    public DbSet<LedgerAccount> LedgerAccounts => Set<LedgerAccount>();
+    public DbSet<LedgerPosition> LedgerPositions => Set<LedgerPosition>();
     public DbSet<TelegramChannel> TelegramChannels => Set<TelegramChannel>();
     public DbSet<TelegramSignal> TelegramSignals => Set<TelegramSignal>();
     public DbSet<TradingViewAlertLog> TradingViewAlertLogs => Set<TradingViewAlertLog>();

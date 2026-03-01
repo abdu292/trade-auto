@@ -14,6 +14,8 @@ public interface IApplicationDbContext
     DbSet<MacroCacheState> MacroCacheStates { get; }
     DbSet<HazardWindow> HazardWindows { get; }
     DbSet<DecisionLog> DecisionLogs { get; }
+    DbSet<LedgerAccount> LedgerAccounts { get; }
+    DbSet<LedgerPosition> LedgerPositions { get; }
     DbSet<TelegramChannel> TelegramChannels { get; }
     DbSet<TelegramSignal> TelegramSignals { get; }
     DbSet<TradingViewAlertLog> TradingViewAlertLogs { get; }

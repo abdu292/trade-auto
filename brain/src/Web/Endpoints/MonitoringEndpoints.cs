@@ -1,5 +1,8 @@
 using Brain.Application.Common.Interfaces;
+using Brain.Application.Common.Models;
+using Brain.Application.Common.Services;
 using Brain.Domain.Entities;
+using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 
 namespace Brain.Web.Endpoints;
@@ -23,12 +26,59 @@ public static class MonitoringEndpoints
             .WithDescription("Returns mock outbound notifications (WhatsApp + mobile app feed).");
 
         monitoring.MapGet(
+            "/ai-quorum",
+            async Task<IResult> (IApplicationDbContext db, CancellationToken cancellationToken) =>
+            {
+                var fromUtc = DateTimeOffset.UtcNow.AddHours(-24);
+                var recent = await db.DecisionLogs
+                    .AsNoTracking()
+                    .Where(x => x.CreatedAtUtc >= fromUtc)
+                    .ToListAsync(cancellationToken);
+
+                var total = recent.Count;
+                var quorumFailed = recent.Where(x => x.Cause == "AI_QUORUM_FAILED").ToList();
+                var noTradeCount = recent.Count(x => x.Status == "NO_TRADE");
+
+                var examples = quorumFailed
+                    .OrderByDescending(x => x.CreatedAtUtc)
+                    .Take(10)
+                    .Select(x => new
+                    {
+                        x.CreatedAtUtc,
+                        x.Symbol,
+                        x.Status,
+                        x.Cause,
+                        x.Reason,
+                        x.SnapshotHash,
+                    })
+                    .ToList();
+
+                return TypedResults.Ok(new
+                {
+                    windowHours = 24,
+                    totals = new
+                    {
+                        decisions = total,
+                        noTrade = noTradeCount,
+                        quorumFailures = quorumFailed.Count,
+                        quorumFailureRate = total == 0 ? 0m : Math.Round((decimal)quorumFailed.Count / total, 4),
+                        quorumShareOfNoTrade = noTradeCount == 0 ? 0m : Math.Round((decimal)quorumFailed.Count / noTradeCount, 4),
+                    },
+                    recentFailures = examples,
+                });
+            })
+            .WithName("GetAiQuorumTelemetry")
+            .WithDescription("Returns recent AI committee disagreement telemetry and failure-rate aggregates.");
+
+        monitoring.MapGet(
             "/runtime",
             IResult (
                 ILatestMarketSnapshotStore snapshotStore,
                 ITradingViewSignalStore tradingViewStore,
                 IPendingTradeStore pendingTrades,
+                ITradeApprovalStore approvals,
                 INotificationFeedStore feedStore,
+                IConfiguration configuration,
                 IApplicationDbContext db,
                 IMarketSimulationService simulator) =>
             {
@@ -56,6 +106,9 @@ public static class MonitoringEndpoints
                     panicSuspected = snapshot?.PanicSuspected ?? false,
                     tvAlertType = snapshot?.TvAlertType ?? "NONE",
                     pendingQueueDepth = pendingTrades.Count(),
+                    approvalQueueDepth = approvals.GetPending(200).Count,
+                    executionMode = (configuration["Execution:Mode"] ?? "auto").Trim().ToLowerInvariant(),
+                    hybridAutoSessions = (configuration["Execution:HybridAutoSessions"] ?? "JAPAN,INDIA").Trim(),
                     macroBias = macro?.MacroBias ?? "UNKNOWN",
                     institutionalBias = macro?.InstitutionalBias ?? "UNKNOWN",
                     cbFlowFlag = macro?.CbFlowFlag ?? "UNKNOWN",
@@ -189,6 +242,76 @@ public static class MonitoringEndpoints
             .WithName("GetTelegramChannels")
             .WithDescription("Returns persistent telegram channel registry with dynamic weights.");
 
+        monitoring.MapGet(
+            "/telegram-consensus",
+            async Task<IResult> (IApplicationDbContext db, int lookbackMinutes, CancellationToken cancellationToken) =>
+            {
+                var minutes = lookbackMinutes <= 0 ? 5 : Math.Min(180, lookbackMinutes);
+                var since = DateTimeOffset.UtcNow.AddMinutes(-minutes);
+
+                var signals = await db.TelegramSignals
+                    .AsNoTracking()
+                    .Where(x => x.ServerTimeUtc >= since)
+                    .OrderByDescending(x => x.ServerTimeUtc)
+                    .ToListAsync(cancellationToken);
+                var channels = await db.TelegramChannels
+                    .AsNoTracking()
+                    .ToDictionaryAsync(x => x.ChannelKey, x => x, cancellationToken);
+
+                decimal buyScore = 0m;
+                decimal sellScore = 0m;
+
+                foreach (var signal in signals)
+                {
+                    var key = signal.ChannelKey.Trim().ToLowerInvariant();
+                    var weight = channels.TryGetValue(key, out var channel) ? Math.Max(0.3m, channel.Weight) : 1.0m;
+                    var direction = signal.Direction.Trim().ToUpperInvariant();
+                    if (direction == "BUY") buyScore += weight;
+                    if (direction == "SELL") sellScore += weight;
+                }
+
+                var total = buyScore + sellScore;
+                var dominance = total <= 0m ? 0m : Math.Round(Math.Max(buyScore, sellScore) / total, 4);
+                var state = "QUIET";
+                if (signals.Count >= 2 && total >= 1.5m)
+                {
+                    if (buyScore > sellScore)
+                    {
+                        state = dominance >= 0.85m ? "STRONG_BUY" : (dominance >= 0.70m ? "BUY" : "MIXED");
+                    }
+                    else if (sellScore > buyScore)
+                    {
+                        state = dominance >= 0.85m ? "STRONG_SELL" : (dominance >= 0.70m ? "SELL" : "MIXED");
+                    }
+                    else
+                    {
+                        state = "MIXED";
+                    }
+                }
+
+                return TypedResults.Ok(new
+                {
+                    lookbackMinutes = minutes,
+                    signalCount = signals.Count,
+                    buyScore,
+                    sellScore,
+                    dominance,
+                    state,
+                    topSignals = signals.Take(20).Select(x => new
+                    {
+                        x.ChannelKey,
+                        x.Direction,
+                        x.Confidence,
+                        x.ConsensusState,
+                        x.PanicSuspected,
+                        x.ServerTimeUtc,
+                        channelWeight = channels.TryGetValue(x.ChannelKey, out var channel) ? channel.Weight : 1.0m,
+                    }),
+                });
+            })
+            .WithName("GetTelegramConsensusTelemetry")
+            .WithDescription("Returns weighted telegram consensus score from persisted signals and channel weights.");
+
         monitoring.MapPost(
             "/telegram-channels/{channelKey}/outcome/{outcome}",
             async Task<IResult> (string channelKey, string outcome, IApplicationDbContext db, CancellationToken cancellationToken) =>
@@ -243,6 +366,79 @@ public static class MonitoringEndpoints
             .WithName("RejectTrade")
             .WithDescription("Rejects a queued trade and removes it from the manual approval queue.");
 
+        monitoring.MapPost(
+            "/replay/run",
+            IResult (ReplayRunRequest? request, ITradeLedgerService ledger) =>
+            {
+                var runs = Math.Clamp(request?.Runs ?? 120, 20, 2000);
+                var startPrice = request?.StartPrice ?? 2890m;
+                var now = DateTimeOffset.UtcNow;
+                var ledgerState = ledger.GetState();
+
+                var noTrade = 0;
+                var armed = 0;
+                var buyLimit = 0;
+                var buyStop = 0;
+                var blockedByWaterfall = 0;
+                var blockedByAlignment = 0;
+                var blockedByCapacity = 0;
+
+                for (var i = 0; i < runs; i++)
+                {
+                    var snapshot = ReplayHarnessFactory.BuildReplaySnapshot(startPrice, now.AddMinutes(i), i);
+                    var regime = RegimeRiskClassifier.Classify(snapshot);
+                    var aiSignal = ReplayHarnessFactory.BuildReplaySignal(snapshot, i);
+                    var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, ledgerState);
+
+                    if (!decision.IsTradeAllowed)
+                    {
+                        noTrade++;
+                        if (decision.WaterfallRisk == "HIGH")
+                        {
+                            blockedByWaterfall++;
+                        }
+
+                        if (decision.Reason.Contains("Alignment", StringComparison.OrdinalIgnoreCase))
+                        {
+                            blockedByAlignment++;
+                        }
+
+                        if (decision.Reason.Contains("Capacity", StringComparison.OrdinalIgnoreCase))
+                        {
+                            blockedByCapacity++;
+                        }
+
+                        continue;
+                    }
+
+                    armed++;
+                    if (decision.Rail == "BUY_LIMIT") buyLimit++;
+                    if (decision.Rail == "BUY_STOP") buyStop++;
+                }
+
+                return TypedResults.Ok(new
+                {
+                    runs,
+                    startPrice,
+                    summary = new
+                    {
+                        armed,
+                        noTrade,
+                        armedRate = runs == 0 ? 0m : Math.Round((decimal)armed / runs, 4),
+                        buyLimit,
+                        buyStop,
+                    },
+                    blockers = new
+                    {
+                        waterfall = blockedByWaterfall,
+                        alignment = blockedByAlignment,
+                        capacity = blockedByCapacity,
+                    },
+                });
+            })
+            .WithName("RunReplayHarness")
+            .WithDescription("Runs a deterministic replay batch against DecisionEngine and returns gating outcome metrics.");
+
         return group;
     }
 }
@@ -261,3 +457,80 @@ public sealed record StartMarketSimulationRequest(
     int? IntervalSeconds,
     string? SessionOverride,
     bool? EnableShockEvents);
+
+public sealed record ReplayRunRequest(int? Runs, decimal? StartPrice);
+
+internal static class ReplayHarnessFactory
+{
+    internal static MarketSnapshotContract BuildReplaySnapshot(decimal startPrice, DateTimeOffset timestamp, int step)
+    {
+        var wave = (decimal)Math.Sin(step / 10d) * 2.2m;
+        var drift = (step % 40 < 20 ? 0.35m : -0.22m);
+        var close = startPrice + wave + drift;
+        var atr = 6m + Math.Abs(wave);
+        var adr = Math.Max(14m, atr * 2.4m);
+        var spread = 0.16m + ((step % 9 == 0) ? 0.08m : 0m);
+        var isExpansion = atr / adr > 0.38m;
+        var panic = step % 47 == 0;
+
+        return new MarketSnapshotContract(
+            Symbol: "XAUUSD",
+            TimeframeData:
+            [
+                new TimeframeDataContract("M5", close - 0.8m, close + 0.6m, close - 1.1m, close),
+                new TimeframeDataContract("M15", close - 1.3m, close + 0.9m, close - 1.9m, close),
+                new TimeframeDataContract("H1", close - 2.2m, close + 1.8m, close - 2.6m, close),
+            ],
+            Atr: atr,
+            Adr: adr,
+            Ma20: close - 0.5m,
+            Ma20H1: close - 0.9m,
+            Ma20H4: close - 1.5m,
+            Session: (step % 4) switch { 0 => "JAPAN", 1 => "INDIA", 2 => "LONDON", _ => "NY" },
+            Timestamp: timestamp,
+            Mt5ServerTime: timestamp,
+            KsaTime: timestamp.AddMinutes(50),
+            RsiH1: 58m + (step % 8),
+            RsiM15: 54m + (step % 10),
+            Bid: close - (spread / 2m),
+            Ask: close + (spread / 2m),
+            Spread: spread,
+            SpreadMedian60m: 0.16m,
+            SpreadMax60m: 0.32m,
+            IsExpansion: isExpansion,
+            IsAtrExpanding: step % 3 == 0,
+            HasOverlapCandles: step % 5 == 0,
+            HasImpulseCandles: step % 7 == 0,
+            IsBreakoutConfirmed: step % 6 == 0,
+            IsUsRiskWindow: step % 9 == 0,
+            PanicSuspected: panic,
+            HasPanicDropSequence: panic,
+            TelegramState: step % 6 == 0 ? "BUY" : (step % 5 == 0 ? "MIXED" : "QUIET"),
+            TvAlertType: step % 8 == 0 ? "BREAKOUT" : "NONE",
+            ImpulseStrengthScore: Math.Min(1m, atr / 10m));
+    }
+
+    internal static TradeSignalContract BuildReplaySignal(MarketSnapshotContract snapshot, int step)
+    {
+        var confidence = 0.62m + ((step % 5) * 0.05m);
+        return new TradeSignalContract(
+            Rail: step % 4 == 0 ? "BUY_STOP" : "BUY_LIMIT",
+            Entry: snapshot.TimeframeData.First().Close,
+            Tp: snapshot.TimeframeData.First().Close + 9m,
+            Pe: snapshot.Timestamp.AddMinutes(30),
+            Ml: 1800,
+            Confidence: Math.Min(0.93m, confidence),
+            SafetyTag: snapshot.PanicSuspected ? "BLOCK" : "SAFE",
+            DirectionBias: "BULLISH",
+            AlignmentScore: Math.Min(0.95m, confidence),
+            NewsImpactTag: snapshot.PanicSuspected ? "HIGH" : "LOW",
+            TvConfirmationTag: snapshot.TvAlertType == "BREAKOUT" ? "CONFIRM" : "NEUTRAL",
+            NewsTags: ["replay_harness"],
+            Summary: "Deterministic replay signal",
+            ConsensusPassed: true,
+            AgreementCount: 2,
+            RequiredAgreement: 2,
+            DisagreementReason: null,
+            ProviderVotes: ["replay:grok", "replay:openai"]);
+    }
+}

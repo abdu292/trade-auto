@@ -3,6 +3,7 @@ from app.ai.config import (
     AI_ANALYZERS,
     AI_PROVIDER_MODE,
     AI_STRATEGY,
+    CONSENSUS_MIN_AGREEMENT,
     GROK_RUNTIME_TRANSPORT,
     TELEGRAM_READ_MODE,
     TELEGRAM_API_ID,
@@ -19,12 +20,12 @@ router = APIRouter(tags=["Health"])
 async def health() -> dict[str, object]:
     analyzers = [analyzer.name for analyzer in AI_ANALYZERS]
     parity_blockers: list[str] = []
-    if len(analyzers) != 1:
-        parity_blockers.append("live engine requires exactly one analyzer")
-    if not analyzers or not ("grok" in analyzers[0].lower()):
-        parity_blockers.append("live engine requires Grok as the sole analyzer")
-    if AI_STRATEGY != "single":
-        parity_blockers.append("live engine requires AI_STRATEGY=single")
+    if len(analyzers) < 2:
+        parity_blockers.append("committee live mode requires at least two analyzers")
+    if AI_STRATEGY != "committee":
+        parity_blockers.append("committee live mode requires AI_STRATEGY=committee")
+    if CONSENSUS_MIN_AGREEMENT < 2:
+        parity_blockers.append("committee live mode requires CONSENSUS_MIN_AGREEMENT>=2")
 
     return {
         "status": "ok",
@@ -32,7 +33,8 @@ async def health() -> dict[str, object]:
             "providerMode": AI_PROVIDER_MODE,
             "transport": GROK_RUNTIME_TRANSPORT,
             "strategy": AI_STRATEGY,
-            "liveDecisionEngine": "grok",
+            "minAgreement": CONSENSUS_MIN_AGREEMENT,
+            "liveDecisionEngine": "committee",
             "parityBlockers": parity_blockers,
             "analyzerCount": len(AI_ANALYZERS),
             "analyzers": analyzers,

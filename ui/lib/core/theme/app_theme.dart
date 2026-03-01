@@ -19,8 +19,16 @@ class AppTheme {
         scrolledUnderElevation: 0,
         elevation: 0,
         backgroundColor: base.colorScheme.surface,
+        titleTextStyle: base.textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: base.colorScheme.onSurface,
+        ),
       ),
       textTheme: base.textTheme.copyWith(
+        headlineSmall: base.textTheme.headlineSmall?.copyWith(
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.3,
+        ),
         titleLarge: base.textTheme.titleLarge?.copyWith(
           fontWeight: FontWeight.w700,
           letterSpacing: -0.2,
@@ -29,7 +37,15 @@ class AppTheme {
           fontWeight: FontWeight.w600,
         ),
       ),
-      cardTheme: const CardThemeData(margin: EdgeInsets.zero),
+      cardTheme: CardThemeData(
+        margin: EdgeInsets.zero,
+        elevation: 0,
+        color: base.colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: base.colorScheme.outlineVariant),
+        ),
+      ),
       chipTheme: base.chipTheme.copyWith(
         side: BorderSide(color: base.colorScheme.outlineVariant),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -47,6 +63,18 @@ class AppTheme {
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          side: BorderSide(color: base.colorScheme.outlineVariant),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      ),
+      listTileTheme: ListTileThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: base.colorScheme.surfaceContainerLow,
@@ -86,8 +114,16 @@ class AppTheme {
         scrolledUnderElevation: 0,
         elevation: 0,
         backgroundColor: base.colorScheme.surface,
+        titleTextStyle: base.textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: base.colorScheme.onSurface,
+        ),
       ),
       textTheme: base.textTheme.copyWith(
+        headlineSmall: base.textTheme.headlineSmall?.copyWith(
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.3,
+        ),
         titleLarge: base.textTheme.titleLarge?.copyWith(
           fontWeight: FontWeight.w700,
           letterSpacing: -0.2,
@@ -96,7 +132,15 @@ class AppTheme {
           fontWeight: FontWeight.w600,
         ),
       ),
-      cardTheme: const CardThemeData(margin: EdgeInsets.zero),
+      cardTheme: CardThemeData(
+        margin: EdgeInsets.zero,
+        elevation: 0,
+        color: base.colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: base.colorScheme.outlineVariant),
+        ),
+      ),
       chipTheme: base.chipTheme.copyWith(
         side: BorderSide(color: base.colorScheme.outlineVariant),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -114,6 +158,18 @@ class AppTheme {
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          side: BorderSide(color: base.colorScheme.outlineVariant),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      ),
+      listTileTheme: ListTileThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: base.colorScheme.surfaceContainerLow,

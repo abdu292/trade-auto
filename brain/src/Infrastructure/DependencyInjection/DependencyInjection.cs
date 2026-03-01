@@ -30,7 +30,7 @@ public static class DependencyInjection
         services.AddSingleton<ITradeApprovalStore, InMemoryTradeApprovalStore>();
         services.AddSingleton<ITradingViewSignalStore, InMemoryTradingViewSignalStore>();
         services.AddSingleton<INotificationFeedStore, InMemoryNotificationFeedStore>();
-        services.AddSingleton<ITradeLedgerService, InMemoryTradeLedgerService>();
+        services.AddSingleton<ITradeLedgerService, DurableTradeLedgerService>();
         services.AddSingleton<IMarketSimulationService, WeekendMarketSimulationService>();
         services.AddScoped<IMt5BridgeClient, MockMt5BridgeClient>();
         services.AddHttpClient<TelegramNotificationService>()

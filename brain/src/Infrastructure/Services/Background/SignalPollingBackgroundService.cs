@@ -3,6 +3,7 @@ using Brain.Application.Common.Models;
 using Brain.Application.Common.Services;
 using Brain.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -13,6 +14,7 @@ namespace Brain.Infrastructure.Services.Background;
 
 public sealed class SignalPollingBackgroundService(
     IServiceScopeFactory scopeFactory,
+    IConfiguration configuration,
     ILogger<SignalPollingBackgroundService> logger) : BackgroundService
 {
     private static DateTimeOffset _lastArmedAtUtc = DateTimeOffset.MinValue;
@@ -25,6 +27,7 @@ public sealed class SignalPollingBackgroundService(
             var marketData = scope.ServiceProvider.GetRequiredService<IMarketDataProvider>();
             var aiWorker = scope.ServiceProvider.GetRequiredService<IAIWorkerClient>();
             var pendingTrades = scope.ServiceProvider.GetRequiredService<IPendingTradeStore>();
+            var approvals = scope.ServiceProvider.GetRequiredService<ITradeApprovalStore>();
             var ledger = scope.ServiceProvider.GetRequiredService<ITradeLedgerService>();
             var tradingViewStore = scope.ServiceProvider.GetRequiredService<ITradingViewSignalStore>();
             var db = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
@@ -52,6 +55,44 @@ public sealed class SignalPollingBackgroundService(
                 }
 
                 var aiSignal = await aiWorker.AnalyzeAsync(snapshot, stoppingToken);
+                if (!aiSignal.ConsensusPassed)
+                {
+                    var quorumReason = string.IsNullOrWhiteSpace(aiSignal.DisagreementReason)
+                        ? "AI committee did not reach required agreement."
+                        : aiSignal.DisagreementReason;
+                    var votesSummary = aiSignal.ProviderVotes is null || aiSignal.ProviderVotes.Count == 0
+                        ? "votes=none"
+                        : $"votes={string.Join(';', aiSignal.ProviderVotes.Take(3))}";
+                    var loggedReason = $"{quorumReason} (agree={aiSignal.AgreementCount}/{aiSignal.RequiredAgreement}; {votesSummary})";
+
+                    db.DecisionLogs.Add(DecisionLog.Create(
+                        symbol: snapshot.Symbol,
+                        status: "NO_TRADE",
+                        engineState: "CAPITAL_PROTECTED",
+                        mode: "EXHAUSTION",
+                        cause: "AI_QUORUM_FAILED",
+                        waterfallRisk: "LOW",
+                        telegramState: snapshot.TelegramState,
+                        railPermissionA: "BLOCKED",
+                        railPermissionB: "BLOCKED",
+                        reason: loggedReason.Length > 390 ? loggedReason[..390] : loggedReason,
+                        entry: 0m,
+                        tp: 0m,
+                        grams: 0m,
+                        rotationCapThisSession: 0,
+                        forceWhereToTrade: forceWhereToTrade,
+                        snapshotHash: ComputeSnapshotHash(snapshot)));
+                    await db.SaveChangesAsync(stoppingToken);
+
+                    logger.LogInformation(
+                        "NO_TRADE due to AI quorum failure. Agreement={Agreement}/{Required}. Reason={Reason}",
+                        aiSignal.AgreementCount,
+                        aiSignal.RequiredAgreement,
+                        loggedReason);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
                 if (tradingViewStore.TryGetLatest(out var tv) && tv is not null)
                 {
                     aiSignal = MergeTradingView(aiSignal, tv, snapshot, logger);
@@ -172,7 +213,19 @@ public sealed class SignalPollingBackgroundService(
                     SizeClass: decision.SizeClass,
                     TelegramState: decision.TelegramState);
 
-                pendingTrades.Enqueue(pending);
+                var executionMode = ResolveExecutionMode(configuration["Execution:Mode"]);
+                var hybridSessions = ResolveHybridAutoSessions(configuration["Execution:HybridAutoSessions"]);
+                var directToMt5 = ShouldQueueToMt5(executionMode, pending.Session, hybridSessions);
+
+                if (directToMt5)
+                {
+                    pendingTrades.Enqueue(pending);
+                }
+                else
+                {
+                    approvals.Enqueue(pending);
+                }
+
                 _lastArmedAtUtc = DateTimeOffset.UtcNow;
 
                 db.DecisionLogs.Add(DecisionLog.Create(
@@ -195,7 +248,7 @@ public sealed class SignalPollingBackgroundService(
                 await db.SaveChangesAsync(stoppingToken);
 
                 logger.LogInformation(
-                    "Queued MT5 trade {TradeId} {Type} {Symbol} @ {Price} TP={Tp} grams={Grams} state={State} cause={Cause} session={Session} score={Score:0.00}",
+                    "Trade {TradeId} {Type} {Symbol} @ {Price} TP={Tp} grams={Grams} state={State} cause={Cause} session={Session} score={Score:0.00} routed={Route} mode={Mode}",
                     pending.Id,
                     pending.Type,
                     pending.Symbol,
@@ -205,7 +258,9 @@ public sealed class SignalPollingBackgroundService(
                     pending.EngineState,
                     pending.Cause,
                     pending.Session,
-                    pending.AlignmentScore);
+                        pending.AlignmentScore,
+                        directToMt5 ? "MT5_PENDING" : "APPROVAL_QUEUE",
+                        executionMode.ToString().ToUpperInvariant());
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("No MT5 snapshot available yet.", StringComparison.OrdinalIgnoreCase))
             {
@@ -239,6 +294,49 @@ public sealed class SignalPollingBackgroundService(
         }
 
         return DateTimeOffset.UtcNow - _lastArmedAtUtc >= TimeSpan.FromMinutes(25);
+    }
+
+    private static ExecutionMode ResolveExecutionMode(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "MANUAL" => ExecutionMode.Manual,
+            "HYBRID" => ExecutionMode.Hybrid,
+            _ => ExecutionMode.Auto,
+        };
+    }
+
+    private static HashSet<string> ResolveHybridAutoSessions(string? value)
+    {
+        var raw = string.IsNullOrWhiteSpace(value) ? "JAPAN,INDIA" : value;
+        var sessions = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(x => x.ToUpperInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (sessions.Count == 0)
+        {
+            sessions.Add("JAPAN");
+            sessions.Add("INDIA");
+        }
+
+        return sessions;
+    }
+
+    private static bool ShouldQueueToMt5(ExecutionMode mode, string session, HashSet<string> hybridAutoSessions)
+    {
+        if (mode == ExecutionMode.Auto)
+        {
+            return true;
+        }
+
+        if (mode == ExecutionMode.Manual)
+        {
+            return false;
+        }
+
+        var normalizedSession = (session ?? string.Empty).Trim().ToUpperInvariant();
+        return hybridAutoSessions.Contains(normalizedSession);
     }
 
     private static string ComputeSnapshotHash(MarketSnapshotContract snapshot)
@@ -361,4 +459,11 @@ public sealed class SignalPollingBackgroundService(
                 : $"{aiSignal.Summary} | TV:{tradingView.Signal}/{tradingView.Bias}/{tradingView.RiskTag}",
         };
     }
+}
+
+internal enum ExecutionMode
+{
+    Auto,
+    Manual,
+    Hybrid,
 }

@@ -83,8 +83,23 @@ public static class Mt5Endpoints
                     AtrM15: request.AtrM15 ?? request.Atr,
                     PreviousDayHigh: request.PreviousDayHigh ?? 0m,
                     PreviousDayLow: request.PreviousDayLow ?? 0m,
+                    WeeklyHigh: request.WeeklyHigh ?? 0m,
+                    WeeklyLow: request.WeeklyLow ?? 0m,
+                    DayOpen: request.DayOpen ?? 0m,
+                    WeekOpen: request.WeekOpen ?? 0m,
                     SessionHigh: request.SessionHigh ?? 0m,
                     SessionLow: request.SessionLow ?? 0m,
+                    SessionHighJapan: request.SessionHighJapan ?? 0m,
+                    SessionLowJapan: request.SessionLowJapan ?? 0m,
+                    SessionHighIndia: request.SessionHighIndia ?? 0m,
+                    SessionLowIndia: request.SessionLowIndia ?? 0m,
+                    SessionHighLondon: request.SessionHighLondon ?? 0m,
+                    SessionLowLondon: request.SessionLowLondon ?? 0m,
+                    SessionHighNy: request.SessionHighNy ?? 0m,
+                    SessionLowNy: request.SessionLowNy ?? 0m,
+                    Ema50H1: request.Ema50H1 ?? 0m,
+                    Ema200H1: request.Ema200H1 ?? 0m,
+                    AdrUsedPct: request.AdrUsedPct ?? 0m,
                     Session: request.Session,
                     Timestamp: request.Timestamp,
                     VolatilityExpansion: volatilityExpansion,
@@ -199,6 +214,20 @@ public static class Mt5Endpoints
                             serverTimeUtc: DateTimeOffset.UtcNow,
                             rawMessage: $"mt5_status={normalizedStatus};tradeId={tradeId}");
                         db.TelegramSignals.Add(signal);
+
+                        var consensusKey = $"consensus:{latest.TelegramState.ToLowerInvariant()}";
+                        var consensusChannel = await db.TelegramChannels.FirstOrDefaultAsync(x => x.ChannelKey == consensusKey, cancellationToken);
+                        if (consensusChannel is null)
+                        {
+                            consensusChannel = TelegramChannel.Create(
+                                channelKey: consensusKey,
+                                name: $"Consensus {latest.TelegramState}",
+                                type: "MIXED",
+                                weight: 1.0m);
+                            db.TelegramChannels.Add(consensusChannel);
+                        }
+                        consensusChannel.TouchActive();
+
                         await db.SaveChangesAsync(cancellationToken);
                     }
 
@@ -232,19 +261,37 @@ public static class Mt5Endpoints
 
                     if (snapshotStore.TryGet(out var latest) && latest is not null)
                     {
-                        var channelKey = $"consensus:{latest.TelegramState.ToLowerInvariant()}";
-                        var channel = await db.TelegramChannels.FirstOrDefaultAsync(x => x.ChannelKey == channelKey, cancellationToken);
-                        if (channel is null)
+                        var signalWindowStart = DateTimeOffset.UtcNow.AddHours(-6);
+                        var sourceChannelKeys = await db.TelegramSignals
+                            .AsNoTracking()
+                            .Where(x => x.ServerTimeUtc >= signalWindowStart)
+                            .OrderByDescending(x => x.ServerTimeUtc)
+                            .Select(x => x.ChannelKey)
+                            .Distinct()
+                            .Take(40)
+                            .ToListAsync(cancellationToken);
+
+                        var consensusKey = $"consensus:{latest.TelegramState.ToLowerInvariant()}";
+                        if (!sourceChannelKeys.Contains(consensusKey))
                         {
-                            channel = TelegramChannel.Create(
-                                channelKey: channelKey,
-                                name: $"Consensus {latest.TelegramState}",
-                                type: "MIXED",
-                                weight: 1.0m);
-                            db.TelegramChannels.Add(channel);
+                            sourceChannelKeys.Add(consensusKey);
                         }
 
-                        channel.ApplyOutcome("GOOD");
+                        foreach (var key in sourceChannelKeys)
+                        {
+                            var channel = await db.TelegramChannels.FirstOrDefaultAsync(x => x.ChannelKey == key, cancellationToken);
+                            if (channel is null)
+                            {
+                                channel = TelegramChannel.Create(
+                                    channelKey: key,
+                                    name: key,
+                                    type: key.StartsWith("consensus:", StringComparison.OrdinalIgnoreCase) ? "MIXED" : "INTRADAY",
+                                    weight: 1.0m);
+                                db.TelegramChannels.Add(channel);
+                            }
+
+                            channel.ApplyOutcome("GOOD");
+                        }
                         await db.SaveChangesAsync(cancellationToken);
                     }
 
@@ -254,6 +301,20 @@ public static class Mt5Endpoints
                         slip = sellSlip,
                         ledger = ledger.GetState(),
                     });
+                }
+
+                if (normalizedStatus is "FAILED" or "REJECTED_RISK_GUARD" or "CANCELED" or "CANCELLED")
+                {
+                    if (snapshotStore.TryGet(out var latest) && latest is not null)
+                    {
+                        var channelKey = $"consensus:{latest.TelegramState.ToLowerInvariant()}";
+                        var channel = await db.TelegramChannels.FirstOrDefaultAsync(x => x.ChannelKey == channelKey, cancellationToken);
+                        if (channel is not null)
+                        {
+                            channel.ApplyOutcome("BAD_CONTEXT");
+                            await db.SaveChangesAsync(cancellationToken);
+                        }
+                    }
                 }
 
                 logger.LogInformation(
@@ -339,8 +400,23 @@ public sealed record Mt5MarketSnapshotRequest(
     decimal? AtrM15,
     decimal? PreviousDayHigh,
     decimal? PreviousDayLow,
+    decimal? WeeklyHigh,
+    decimal? WeeklyLow,
+    decimal? DayOpen,
+    decimal? WeekOpen,
     decimal? SessionHigh,
     decimal? SessionLow,
+    decimal? SessionHighJapan,
+    decimal? SessionLowJapan,
+    decimal? SessionHighIndia,
+    decimal? SessionLowIndia,
+    decimal? SessionHighLondon,
+    decimal? SessionLowLondon,
+    decimal? SessionHighNy,
+    decimal? SessionLowNy,
+    decimal? Ema50H1,
+    decimal? Ema200H1,
+    decimal? AdrUsedPct,
     string Session,
     DateTimeOffset Timestamp,
     decimal? VolatilityExpansion,

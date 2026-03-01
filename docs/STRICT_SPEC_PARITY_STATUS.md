@@ -14,11 +14,11 @@ This document maps current implementation to the strict requirements in `spec/sp
   - Runtime monitoring endpoints for macro cache/hazards/telegram channels.
   - MT5 payload/response fields expanded for rail/cause/waterfall/session/size class.
 
-- **Implemented now for strict live AI parity**
-  - AI worker live runtime is now fixed to **Grok-only analyzer semantics**.
-  - Live strategy is fixed to `single` (no committee in live path).
-  - Grok transport supports OpenRouter now, with optional direct xAI later.
-  - Health endpoint exposes parity blockers for readiness checks.
+- **Implemented now for committee live AI parity (Phase 1 start)**
+  - AI worker now supports live **committee analyzer semantics** with configurable providers.
+  - Live strategy target is `committee` with quorum threshold (`CONSENSUS_MIN_AGREEMENT`).
+  - Brain enforces hard `NO_TRADE` when AI quorum fails (`AI_QUORUM_FAILED`).
+  - Health endpoint exposes committee parity blockers for readiness checks.
 
 - **Not yet full strict parity (must-do before claiming 100%)**
   - Macro/institutional cache source is currently heuristic, not full Perplexity-backed external macro feed.
@@ -27,13 +27,21 @@ This document maps current implementation to the strict requirements in `spec/sp
   - Historical pattern overlay (`pattern_stats`) is not fully integrated into live scoring/rotation-cap logic as strict spec intends.
   - Backtest/replay harness proving strict success criteria is not fully delivered.
 
-## Production runtime profile (spec-aligned)
-- `AI_PROVIDER_MODE=grok-only` (internal fixed runtime value)
+## Production runtime profile (committee target)
+- `AI_PROVIDER_MODE=committee-live`
+- `AI_STRATEGY=committee`
+- `CONSENSUS_MIN_AGREEMENT=2`
 - `GROK_RUNTIME_TRANSPORT=openrouter`
 - `OPENROUTER_API_KEY=<key>`
 - `GROK_OPENROUTER_MODEL=x-ai/grok-4.1-fast`
+- `OPENAI_API_KEY=<key>`
+- `OPENAI_MODEL=gpt-4.1-mini`
+- `GEMINI_API_KEY=<key>`
+- `GEMINI_MODEL=gemini-2.0-flash`
+- optional: `PERPLEXITY_API_KEY=<key>`
+- optional: `PERPLEXITY_MODEL=sonar`
 
-Optional later:
+Optional Grok direct transport:
 - `GROK_RUNTIME_TRANSPORT=direct`
 - `GROK_API_KEY=<key>`
 - `GROK_MODEL=grok-2-latest`
@@ -41,7 +49,7 @@ Optional later:
 ## Go-live gate checklist for strict parity claim
 
 Before declaring "full strict spec parity":
-1. AI health confirms Grok-only live path with no parity blockers.
+1. AI health confirms committee live path (`AI_STRATEGY=committee`) with no parity blockers.
 2. TradingView webhook alerts verified end-to-end in runtime and decision logs.
 3. Hazard-window veto verified under active blocked window.
 4. Macro cache switched from heuristic to external async macro feed (Perplexity-style enrichment).
@@ -50,5 +58,5 @@ Before declaring "full strict spec parity":
 
 ## Key purchase guidance
 
-- For strict parity, **Grok API key is mandatory**.
-- Perplexity key is recommended when upgrading macro cache from heuristic to external source quality.
+- For committee parity, **Grok API key + at least one additional model key are required**.
+- Perplexity key remains recommended when upgrading macro cache from heuristic to external source quality.

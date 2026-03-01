@@ -209,6 +209,9 @@ class RuntimeStatus {
     required this.panicSuspected,
     required this.tvAlertType,
     required this.pendingQueueDepth,
+    required this.approvalQueueDepth,
+    required this.executionMode,
+    required this.hybridAutoSessions,
     required this.macroBias,
     required this.institutionalBias,
     required this.cbFlowFlag,
@@ -230,6 +233,9 @@ class RuntimeStatus {
   final bool panicSuspected;
   final String tvAlertType;
   final int pendingQueueDepth;
+  final int approvalQueueDepth;
+  final String executionMode;
+  final String hybridAutoSessions;
   final String macroBias;
   final String institutionalBias;
   final String cbFlowFlag;
@@ -251,6 +257,9 @@ class RuntimeStatus {
         panicSuspected: _readBool(json, 'panicSuspected'),
         tvAlertType: _readString(json, 'tvAlertType'),
         pendingQueueDepth: _readInt(json, 'pendingQueueDepth'),
+        approvalQueueDepth: _readInt(json, 'approvalQueueDepth'),
+        executionMode: _readString(json, 'executionMode'),
+        hybridAutoSessions: _readString(json, 'hybridAutoSessions'),
         macroBias: _readString(json, 'macroBias'),
         institutionalBias: _readString(json, 'institutionalBias'),
         cbFlowFlag: _readString(json, 'cbFlowFlag'),

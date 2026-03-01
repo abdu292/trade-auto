@@ -18,7 +18,12 @@ public sealed class MockAIWorkerClient : IAIWorkerClient
             DirectionBias: "BULLISH",
             AlignmentScore: 0.76m,
             NewsTags: ["no_high_impact_news"],
-            Summary: "Mock AI alignment supports buy-first accumulation.");
+            Summary: "Mock AI alignment supports buy-first accumulation.",
+            ConsensusPassed: true,
+            AgreementCount: 2,
+            RequiredAgreement: 2,
+            DisagreementReason: null,
+            ProviderVotes: ["mock-grok:BUY_LIMIT@entry", "mock-openai:BUY_LIMIT@entry"]);
 
         return Task.FromResult(result);
     }

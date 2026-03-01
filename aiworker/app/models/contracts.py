@@ -25,8 +25,23 @@ class MarketSnapshot(BaseModel):
     atrM15: float = 0.0
     previousDayHigh: float = 0.0
     previousDayLow: float = 0.0
+    weeklyHigh: float = 0.0
+    weeklyLow: float = 0.0
+    dayOpen: float = 0.0
+    weekOpen: float = 0.0
     sessionHigh: float = 0.0
     sessionLow: float = 0.0
+    sessionHighJapan: float = 0.0
+    sessionLowJapan: float = 0.0
+    sessionHighIndia: float = 0.0
+    sessionLowIndia: float = 0.0
+    sessionHighLondon: float = 0.0
+    sessionLowLondon: float = 0.0
+    sessionHighNy: float = 0.0
+    sessionLowNy: float = 0.0
+    ema50H1: float = 0.0
+    ema200H1: float = 0.0
+    adrUsedPct: float = 0.0
     session: str
     timestamp: datetime
     volatilityExpansion: float | None = None
@@ -73,5 +88,10 @@ class TradeSignal(BaseModel):
     alignmentScore: float = 0.5
     newsImpactTag: str = "LOW"
     tvConfirmationTag: str = "NEUTRAL"
-    newsTags: list[str] = []
+    newsTags: list[str] = Field(default_factory=list)
     summary: str = ""
+    consensusPassed: bool = True
+    agreementCount: int = 1
+    requiredAgreement: int = 1
+    disagreementReason: str | None = None
+    providerVotes: list[str] = Field(default_factory=list)

@@ -11,17 +11,76 @@ class TradesScreen extends ConsumerStatefulWidget {
 }
 
 class _TradesScreenState extends ConsumerState<TradesScreen> {
+  final Set<String> _busyApprovals = <String>{};
+
+  Future<void> _approveTrade(String tradeId) async {
+    if (_busyApprovals.contains(tradeId)) {
+      return;
+    }
+
+    setState(() => _busyApprovals.add(tradeId));
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(brainApiProvider).approveTrade(tradeId);
+      ref
+        ..invalidate(approvalsProvider)
+        ..invalidate(activeTradesProvider)
+        ..invalidate(runtimeStatusProvider)
+        ..invalidate(notificationsProvider);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Trade placed to MT5 queue.')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to place trade: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _busyApprovals.remove(tradeId));
+      }
+    }
+  }
+
+  Future<void> _rejectTrade(String tradeId) async {
+    if (_busyApprovals.contains(tradeId)) {
+      return;
+    }
+
+    setState(() => _busyApprovals.add(tradeId));
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(brainApiProvider).rejectTrade(tradeId);
+      ref
+        ..invalidate(approvalsProvider)
+        ..invalidate(runtimeStatusProvider)
+        ..invalidate(notificationsProvider);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Trade rejected.')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to reject trade: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _busyApprovals.remove(tradeId));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final trades = ref.watch(activeTradesProvider);
     final signals = ref.watch(signalsProvider);
     final runtime = ref.watch(runtimeStatusProvider);
+    final approvals = ref.watch(approvalsProvider);
 
     Future<void> refresh() async {
       ref
         ..invalidate(activeTradesProvider)
         ..invalidate(signalsProvider)
         ..invalidate(runtimeStatusProvider)
+        ..invalidate(approvalsProvider)
         ..invalidate(notificationsProvider);
     }
 
@@ -36,20 +95,166 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
               data: (state) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Symbol ${state.symbol} • Session ${state.session}'),
-                  const SizedBox(height: 4),
-                  Text(
-                      'Bid ${state.bid.toStringAsFixed(2)} • Ask ${state.ask.toStringAsFixed(2)} • Spread ${state.spread.toStringAsFixed(3)}'),
-                  const SizedBox(height: 4),
-                  Text(
-                      'Queue ${state.pendingQueueDepth} • Telegram ${state.telegramState} • TV ${state.tvAlertType}'),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Macro ${state.macroBias}/${state.institutionalBias} • Hazard ${state.activeBlockedHazardWindows} • CacheAge ${state.macroCacheAgeMinutes}m'),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _RuntimeChip(label: 'Symbol', value: state.symbol),
+                      _RuntimeChip(label: 'Session', value: state.session),
+                      _RuntimeChip(
+                        label: 'Execution',
+                        value: state.executionMode.toUpperCase(),
+                      ),
+                      _RuntimeChip(
+                        label: 'Auto Sessions',
+                        value: state.hybridAutoSessions,
+                      ),
+                      _RuntimeChip(
+                        label: 'Pending Queue',
+                        value: state.pendingQueueDepth.toString(),
+                      ),
+                      _RuntimeChip(
+                        label: 'Approval Queue',
+                        value: state.approvalQueueDepth.toString(),
+                      ),
+                      _RuntimeChip(
+                        label: 'Bid',
+                        value: state.bid.toStringAsFixed(2),
+                      ),
+                      _RuntimeChip(
+                        label: 'Ask',
+                        value: state.ask.toStringAsFixed(2),
+                      ),
+                      _RuntimeChip(
+                        label: 'Spread',
+                        value: state.spread.toStringAsFixed(3),
+                      ),
+                      _RuntimeChip(label: 'Telegram', value: state.telegramState),
+                      _RuntimeChip(label: 'TV', value: state.tvAlertType),
+                      _RuntimeChip(
+                        label: 'Macro',
+                        value: '${state.macroBias}/${state.institutionalBias}',
+                      ),
+                      _RuntimeChip(
+                        label: 'Hazards',
+                        value: state.activeBlockedHazardWindows.toString(),
+                      ),
+                      _RuntimeChip(
+                        label: 'Cache Age',
+                        value: '${state.macroCacheAgeMinutes}m',
+                      ),
+                    ],
+                  ),
                 ],
               ),
               loading: () => const LinearProgressIndicator(),
               error: (error, _) => Text('Runtime error: $error'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _SectionCard(
+            title: 'Pending Trade Approvals',
+            subtitle:
+                'Review each suggestion. Do nothing to leave pending, or press Place to execute.',
+            child: approvals.when(
+              data: (items) {
+                if (items.isEmpty) {
+                  return const Text('No pending approvals.');
+                }
+                return Column(
+                  children: items
+                      .map(
+                        (item) => Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${item.symbol} • ${item.type}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleSmall,
+                                      ),
+                                    ),
+                                    Chip(label: Text(item.riskTag)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    _RuntimeChip(
+                                        label: 'Entry',
+                                        value: item.price.toStringAsFixed(2)),
+                                    _RuntimeChip(
+                                        label: 'TP',
+                                        value: item.tp.toStringAsFixed(2)),
+                                    _RuntimeChip(
+                                        label: 'Grams',
+                                        value: item.grams.toStringAsFixed(2)),
+                                    _RuntimeChip(
+                                        label: 'Max Life',
+                                        value: '${item.ml}s'),
+                                    _RuntimeChip(
+                                      label: 'Confidence',
+                                      value:
+                                          '${(item.alignmentScore * 100).toStringAsFixed(1)}%',
+                                    ),
+                                    _RuntimeChip(
+                                      label: 'Regime',
+                                      value: item.regime,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Expires ${item.expiry.toLocal()}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    FilledButton.icon(
+                                      onPressed: _busyApprovals.contains(item.id)
+                                          ? null
+                                          : () => _approveTrade(item.id),
+                                      icon: _busyApprovals.contains(item.id)
+                                          ? const SizedBox(
+                                              width: 14,
+                                              height: 14,
+                                              child:
+                                                  CircularProgressIndicator(
+                                                      strokeWidth: 2),
+                                            )
+                                          : const Icon(Icons.send),
+                                      label: const Text('Place'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
+                                      onPressed: _busyApprovals.contains(item.id)
+                                          ? null
+                                          : () => _rejectTrade(item.id),
+                                      icon: const Icon(Icons.close),
+                                      label: const Text('Reject'),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => Text('Approvals error: $error'),
             ),
           ),
           const SizedBox(height: 12),
@@ -114,25 +319,55 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
 }
 
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({required this.title, required this.child});
+  const _SectionCard({
+    required this.title,
+    required this.child,
+    this.subtitle,
+  });
 
   final String title;
   final Widget child;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: Theme.of(context).textTheme.titleMedium),
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
+            ],
             const SizedBox(height: 8),
             child,
           ],
         ),
       ),
+    );
+  }
+}
+
+class _RuntimeChip extends StatelessWidget {
+  const _RuntimeChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      label: Text('$label: $value'),
     );
   }
 }

@@ -135,6 +135,52 @@ private:
         return sum / bars;
     }
 
+    double GetEmaApprox(string symbol, ENUM_TIMEFRAMES timeframe, int period, int bars)
+    {
+        if (period <= 1)
+            return iClose(symbol, timeframe, 1);
+
+        int count = MathMax(period + 1, bars);
+        double k = 2.0 / (period + 1.0);
+        double ema = iClose(symbol, timeframe, count);
+        if (ema <= 0.0)
+            ema = iClose(symbol, timeframe, 1);
+
+        for (int i = count - 1; i >= 1; i--)
+        {
+            double closeValue = iClose(symbol, timeframe, i);
+            if (closeValue <= 0.0)
+                continue;
+            ema = (closeValue * k) + (ema * (1.0 - k));
+        }
+
+        return ema;
+    }
+
+    void GetHighLow(string symbol, ENUM_TIMEFRAMES timeframe, int startShift, int barsCount, double &highest, double &lowest)
+    {
+        highest = 0.0;
+        lowest = 0.0;
+
+        for (int i = startShift; i < startShift + barsCount; i++)
+        {
+            double h = iHigh(symbol, timeframe, i);
+            double l = iLow(symbol, timeframe, i);
+            if (h <= 0.0 || l <= 0.0)
+                continue;
+
+            if (highest <= 0.0 || h > highest)
+                highest = h;
+            if (lowest <= 0.0 || l < lowest)
+                lowest = l;
+        }
+
+        if (highest <= 0.0)
+            highest = SymbolInfoDouble(symbol, SYMBOL_ASK);
+        if (lowest <= 0.0)
+            lowest = SymbolInfoDouble(symbol, SYMBOL_BID);
+    }
+
 public:
     void Configure(string baseUrl, string apiKey = "")
     {
@@ -265,11 +311,34 @@ public:
 
         double atr = GetAtrApprox(symbol);
         double ma20 = GetMa20Approx(symbol);
+        double ema50H1 = GetEmaApprox(symbol, PERIOD_H1, 50, 120);
+        double ema200H1 = GetEmaApprox(symbol, PERIOD_H1, 200, 260);
         double adr = GetAdr(symbol);
+        double adrUsedPct = (adr > 0.0) ? ((atr / adr) * 100.0) : 0.0;
         double volatilityExpansion = (adr > 0.0) ? (atr / adr) : 0.0;
         double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
         double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
         double spread = (ask > 0.0 && bid > 0.0) ? (ask - bid) : 0.0;
+        double previousDayHigh = iHigh(symbol, PERIOD_D1, 1);
+        double previousDayLow = iLow(symbol, PERIOD_D1, 1);
+        double weeklyHigh = iHigh(symbol, PERIOD_W1, 1);
+        double weeklyLow = iLow(symbol, PERIOD_W1, 1);
+        double dayOpen = iOpen(symbol, PERIOD_D1, 0);
+        double weekOpen = iOpen(symbol, PERIOD_W1, 0);
+        double sessionHigh = iHigh(symbol, PERIOD_H1, 0);
+        double sessionLow = iLow(symbol, PERIOD_H1, 0);
+        double sessionHighJapan = 0.0;
+        double sessionLowJapan = 0.0;
+        double sessionHighIndia = 0.0;
+        double sessionLowIndia = 0.0;
+        double sessionHighLondon = 0.0;
+        double sessionLowLondon = 0.0;
+        double sessionHighNy = 0.0;
+        double sessionLowNy = 0.0;
+        GetHighLow(symbol, PERIOD_M15, 48, 32, sessionHighJapan, sessionLowJapan);
+        GetHighLow(symbol, PERIOD_M15, 32, 16, sessionHighIndia, sessionLowIndia);
+        GetHighLow(symbol, PERIOD_M15, 16, 16, sessionHighLondon, sessionLowLondon);
+        GetHighLow(symbol, PERIOD_M15, 0, 16, sessionHighNy, sessionLowNy);
         datetime utcNow = TimeGMT();
         datetime mt5ServerNow = TimeCurrent();
         MqlDateTime mt5Struct;
@@ -278,7 +347,7 @@ public:
         bool isUsRiskWindow = (mt5Struct.hour >= 15 && mt5Struct.hour <= 19);
 
         string payload = StringFormat(
-            "{\"symbol\":\"%s\",\"timeframeData\":[{\"timeframe\":\"M5\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"M15\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"M30\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"H4\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}],\"atr\":%.5f,\"adr\":%.5f,\"ma20\":%.5f,\"session\":\"%s\",\"timestamp\":\"%s\",\"volatilityExpansion\":%.5f,\"mt5ServerTime\":\"%s\",\"mt5ToKsaOffsetMinutes\":50,\"isUsRiskWindow\":%s,\"isFriday\":%s,\"bid\":%.5f,\"ask\":%.5f,\"spread\":%.5f,\"spreadMedian60m\":%.5f,\"spreadMax60m\":%.5f,\"compressionCountM15\":0,\"expansionCountM15\":0,\"impulseStrengthScore\":0.0,\"telegramState\":\"QUIET\",\"panicSuspected\":false,\"tvAlertType\":\"NONE\"}",
+            "{\"symbol\":\"%s\",\"timeframeData\":[{\"timeframe\":\"M5\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"M15\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"M30\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"H4\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}],\"atr\":%.5f,\"adr\":%.5f,\"ma20\":%.5f,\"ema50H1\":%.5f,\"ema200H1\":%.5f,\"adrUsedPct\":%.5f,\"previousDayHigh\":%.5f,\"previousDayLow\":%.5f,\"weeklyHigh\":%.5f,\"weeklyLow\":%.5f,\"dayOpen\":%.5f,\"weekOpen\":%.5f,\"sessionHigh\":%.5f,\"sessionLow\":%.5f,\"sessionHighJapan\":%.5f,\"sessionLowJapan\":%.5f,\"sessionHighIndia\":%.5f,\"sessionLowIndia\":%.5f,\"sessionHighLondon\":%.5f,\"sessionLowLondon\":%.5f,\"sessionHighNy\":%.5f,\"sessionLowNy\":%.5f,\"session\":\"%s\",\"timestamp\":\"%s\",\"volatilityExpansion\":%.5f,\"mt5ServerTime\":\"%s\",\"mt5ToKsaOffsetMinutes\":50,\"isUsRiskWindow\":%s,\"isFriday\":%s,\"bid\":%.5f,\"ask\":%.5f,\"spread\":%.5f,\"spreadMedian60m\":%.5f,\"spreadMax60m\":%.5f,\"compressionCountM15\":0,\"expansionCountM15\":0,\"impulseStrengthScore\":0.0,\"telegramState\":\"QUIET\",\"panicSuspected\":false,\"tvAlertType\":\"NONE\"}",
             symbol,
             iOpen(symbol, PERIOD_M5, 1), iHigh(symbol, PERIOD_M5, 1), iLow(symbol, PERIOD_M5, 1), iClose(symbol, PERIOD_M5, 1),
             iOpen(symbol, PERIOD_M15, 1), iHigh(symbol, PERIOD_M15, 1), iLow(symbol, PERIOD_M15, 1), iClose(symbol, PERIOD_M15, 1),
@@ -288,6 +357,25 @@ public:
             atr,
             adr,
             ma20,
+            ema50H1,
+            ema200H1,
+            adrUsedPct,
+            previousDayHigh,
+            previousDayLow,
+            weeklyHigh,
+            weeklyLow,
+            dayOpen,
+            weekOpen,
+            sessionHigh,
+            sessionLow,
+            sessionHighJapan,
+            sessionLowJapan,
+            sessionHighIndia,
+            sessionLowIndia,
+            sessionHighLondon,
+            sessionLowLondon,
+            sessionHighNy,
+            sessionLowNy,
             DetermineSession(utcNow),
             ToIsoUtc(utcNow),
             volatilityExpansion,
