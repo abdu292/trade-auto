@@ -169,15 +169,19 @@ public sealed class WeekendMarketSimulationService(
             var adr = Math.Max(12m, Math.Min(45m, atr * 2.4m));
             var isExpansion = atr >= (_strategyProfile == "WARPREMIUM" ? 11m : 10m);
             var isCompression = atr <= (_strategyProfile == "WARPREMIUM" ? 6m : 7m);
+            var upMove = _currentMid >= previousMid;
             var hasImpulse = move >= Math.Max(0.35m, _volatilityUsd * (_strategyProfile == "WARPREMIUM" ? 1.7m : 1.4m));
             var panic = shock < -(_volatilityUsd * (_strategyProfile == "WARPREMIUM" ? 3.4m : 2.8m));
+            var hasLiquiditySweep = panic
+                || (isCompression && ((decimal)_random.NextDouble() > (_strategyProfile == "WARPREMIUM" ? 0.20m : 0.40m)))
+                || (hasImpulse && !upMove && ((decimal)_random.NextDouble() > 0.55m));
 
             var rsiH1 = Math.Clamp(52m + ((_currentMid - 2890m) / 2.2m), 28m, 78m);
             var rsiM15 = Math.Clamp(rsiH1 + (((decimal)_random.NextDouble() - 0.5m) * 6m), 25m, 82m);
 
-            var tvAlertType = ResolveTvAlertType(hasImpulse, panic, _currentMid >= previousMid, isExpansion, isCompression);
+            var tvAlertType = ResolveTvAlertType(hasImpulse, panic, upMove, isExpansion, isCompression, hasLiquiditySweep);
 
-            var telegramState = ResolveTelegramState(hasImpulse, panic, _currentMid >= previousMid);
+            var telegramState = ResolveTelegramState(hasImpulse, panic, upMove);
 
             var timeframeData = BuildTimeframes(_currentMid, atr);
             var mt5ServerTime = now;
@@ -215,7 +219,7 @@ public sealed class WeekendMarketSimulationService(
                 IsAtrExpanding: atrExpanding,
                 HasOverlapCandles: isCompression,
                 HasImpulseCandles: hasImpulse,
-                HasLiquiditySweep: hasImpulse && ((decimal)_random.NextDouble() > 0.65m),
+                HasLiquiditySweep: hasLiquiditySweep,
                 HasPanicDropSequence: panic,
                 IsPostSpikePullback: !hasImpulse && atr > 8m,
                 IsLondonNyOverlap: now.Hour is >= 12 and <= 16,
@@ -287,14 +291,16 @@ public sealed class WeekendMarketSimulationService(
         };
     }
 
-    private static string ResolveTvAlertType(bool hasImpulse, bool panic, bool upMove, bool isExpansion, bool isCompression)
+    private static string ResolveTvAlertType(bool hasImpulse, bool panic, bool upMove, bool isExpansion, bool isCompression, bool hasLiquiditySweep)
     {
         if (panic)
             return "EXHAUSTION";
         if (hasImpulse && upMove)
             return "LID_BREAK";
-        if (isCompression && !upMove)
+        if (isCompression && hasLiquiditySweep)
             return "SHELF_RECLAIM";
+        if (isCompression && !upMove)
+            return "RETEST_HOLD";
         if (isExpansion && !upMove)
             return "RSI_OVERHEAT";
         return "NONE";
