@@ -589,66 +589,80 @@ public:
         bool isPostSpikePullback = !isExpansion && compressionCountM15 >= 2 && expansionCountM15 >= 1;
         bool isLondonNyOverlap = (mt5Struct.hour >= 12 && mt5Struct.hour <= 16);
 
-        string payload = StringFormat(
-            "{\"symbol\":\"%s\",\"timeframeData\":[{\"timeframe\":\"M5\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"M15\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"M30\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f},{\"timeframe\":\"H4\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}],\"atr\":%.5f,\"adr\":%.5f,\"ma20\":%.5f,\"rsiH1\":%.5f,\"rsiM15\":%.5f,\"atrH1\":%.5f,\"atrM15\":%.5f,\"ema50H1\":%.5f,\"ema200H1\":%.5f,\"adrUsedPct\":%.5f,\"previousDayHigh\":%.5f,\"previousDayLow\":%.5f,\"weeklyHigh\":%.5f,\"weeklyLow\":%.5f,\"dayOpen\":%.5f,\"weekOpen\":%.5f,\"sessionHigh\":%.5f,\"sessionLow\":%.5f,\"sessionHighJapan\":%.5f,\"sessionLowJapan\":%.5f,\"sessionHighIndia\":%.5f,\"sessionLowIndia\":%.5f,\"sessionHighLondon\":%.5f,\"sessionLowLondon\":%.5f,\"sessionHighNy\":%.5f,\"sessionLowNy\":%.5f,\"session\":\"%s\",\"timestamp\":\"%s\",\"volatilityExpansion\":%.5f,\"mt5ServerTime\":\"%s\",\"mt5ToKsaOffsetMinutes\":50,\"isCompression\":%s,\"isExpansion\":%s,\"isAtrExpanding\":%s,\"hasOverlapCandles\":%s,\"hasImpulseCandles\":%s,\"hasLiquiditySweep\":%s,\"hasPanicDropSequence\":%s,\"isPostSpikePullback\":%s,\"isLondonNyOverlap\":%s,\"isBreakoutConfirmed\":%s,\"isUsRiskWindow\":%s,\"isFriday\":%s,\"bid\":%.5f,\"ask\":%.5f,\"spread\":%.5f,\"spreadMedian60m\":%.5f,\"spreadMax60m\":%.5f,\"compressionCountM15\":%d,\"expansionCountM15\":%d,\"impulseStrengthScore\":%.5f,\"telegramState\":\"QUIET\",\"panicSuspected\":%s,\"tvAlertType\":\"NONE\"}",
-            symbol,
-            iOpen(symbol, PERIOD_M5, 1), iHigh(symbol, PERIOD_M5, 1), iLow(symbol, PERIOD_M5, 1), iClose(symbol, PERIOD_M5, 1),
-            iOpen(symbol, PERIOD_M15, 1), iHigh(symbol, PERIOD_M15, 1), iLow(symbol, PERIOD_M15, 1), iClose(symbol, PERIOD_M15, 1),
-            iOpen(symbol, PERIOD_M30, 1), iHigh(symbol, PERIOD_M30, 1), iLow(symbol, PERIOD_M30, 1), iClose(symbol, PERIOD_M30, 1),
-            iOpen(symbol, PERIOD_H1, 1), iHigh(symbol, PERIOD_H1, 1), iLow(symbol, PERIOD_H1, 1), iClose(symbol, PERIOD_H1, 1),
-            iOpen(symbol, PERIOD_H4, 1), iHigh(symbol, PERIOD_H4, 1), iLow(symbol, PERIOD_H4, 1), iClose(symbol, PERIOD_H4, 1),
-            atr,
-            adr,
-            ma20,
-            rsiH1,
-            rsiM15,
-            atrH1,
-            atrM15,
-            ema50H1,
-            ema200H1,
-            adrUsedPct,
-            previousDayHigh,
-            previousDayLow,
-            weeklyHigh,
-            weeklyLow,
-            dayOpen,
-            weekOpen,
-            sessionHigh,
-            sessionLow,
-            sessionHighJapan,
-            sessionLowJapan,
-            sessionHighIndia,
-            sessionLowIndia,
-            sessionHighLondon,
-            sessionLowLondon,
-            sessionHighNy,
-            sessionLowNy,
-            DetermineSession(utcNow),
-            ToIsoUtc(utcNow),
-            volatilityExpansion,
-            ToIsoUtc(mt5ServerNow),
-            isCompression ? "true" : "false",
-            isExpansion ? "true" : "false",
-            isAtrExpanding ? "true" : "false",
-            hasOverlapCandles ? "true" : "false",
-            hasImpulseCandles ? "true" : "false",
-            hasLiquiditySweep ? "true" : "false",
-            hasPanicDropSequence ? "true" : "false",
-            isPostSpikePullback ? "true" : "false",
-            isLondonNyOverlap ? "true" : "false",
-            isBreakoutConfirmed ? "true" : "false",
-            isUsRiskWindow ? "true" : "false",
-            isFriday ? "true" : "false",
-            bid,
-            ask,
-            spread,
-            spread,
-            spread,
-            compressionCountM15,
-            expansionCountM15,
-            impulseStrengthScore,
-            panicSuspected ? "true" : "false"
-        );
+        string payload = "{";
+        payload += "\"symbol\":\"" + JsonEscape(symbol) + "\",";
+        payload += "\"timeframeData\":[";
+        payload += StringFormat("{\"timeframe\":\"M5\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}",
+                                iOpen(symbol, PERIOD_M5, 1), iHigh(symbol, PERIOD_M5, 1), iLow(symbol, PERIOD_M5, 1), iClose(symbol, PERIOD_M5, 1));
+        payload += ",";
+        payload += StringFormat("{\"timeframe\":\"M15\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}",
+                                iOpen(symbol, PERIOD_M15, 1), iHigh(symbol, PERIOD_M15, 1), iLow(symbol, PERIOD_M15, 1), iClose(symbol, PERIOD_M15, 1));
+        payload += ",";
+        payload += StringFormat("{\"timeframe\":\"M30\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}",
+                                iOpen(symbol, PERIOD_M30, 1), iHigh(symbol, PERIOD_M30, 1), iLow(symbol, PERIOD_M30, 1), iClose(symbol, PERIOD_M30, 1));
+        payload += ",";
+        payload += StringFormat("{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}",
+                                iOpen(symbol, PERIOD_H1, 1), iHigh(symbol, PERIOD_H1, 1), iLow(symbol, PERIOD_H1, 1), iClose(symbol, PERIOD_H1, 1));
+        payload += ",";
+        payload += StringFormat("{\"timeframe\":\"H4\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}",
+                                iOpen(symbol, PERIOD_H4, 1), iHigh(symbol, PERIOD_H4, 1), iLow(symbol, PERIOD_H4, 1), iClose(symbol, PERIOD_H4, 1));
+        payload += "],";
+
+        payload += StringFormat("\"atr\":%.5f,", atr);
+        payload += StringFormat("\"adr\":%.5f,", adr);
+        payload += StringFormat("\"ma20\":%.5f,", ma20);
+        payload += StringFormat("\"rsiH1\":%.5f,", rsiH1);
+        payload += StringFormat("\"rsiM15\":%.5f,", rsiM15);
+        payload += StringFormat("\"atrH1\":%.5f,", atrH1);
+        payload += StringFormat("\"atrM15\":%.5f,", atrM15);
+        payload += StringFormat("\"ema50H1\":%.5f,", ema50H1);
+        payload += StringFormat("\"ema200H1\":%.5f,", ema200H1);
+        payload += StringFormat("\"adrUsedPct\":%.5f,", adrUsedPct);
+        payload += StringFormat("\"previousDayHigh\":%.5f,", previousDayHigh);
+        payload += StringFormat("\"previousDayLow\":%.5f,", previousDayLow);
+        payload += StringFormat("\"weeklyHigh\":%.5f,", weeklyHigh);
+        payload += StringFormat("\"weeklyLow\":%.5f,", weeklyLow);
+        payload += StringFormat("\"dayOpen\":%.5f,", dayOpen);
+        payload += StringFormat("\"weekOpen\":%.5f,", weekOpen);
+        payload += StringFormat("\"sessionHigh\":%.5f,", sessionHigh);
+        payload += StringFormat("\"sessionLow\":%.5f,", sessionLow);
+        payload += StringFormat("\"sessionHighJapan\":%.5f,", sessionHighJapan);
+        payload += StringFormat("\"sessionLowJapan\":%.5f,", sessionLowJapan);
+        payload += StringFormat("\"sessionHighIndia\":%.5f,", sessionHighIndia);
+        payload += StringFormat("\"sessionLowIndia\":%.5f,", sessionLowIndia);
+        payload += StringFormat("\"sessionHighLondon\":%.5f,", sessionHighLondon);
+        payload += StringFormat("\"sessionLowLondon\":%.5f,", sessionLowLondon);
+        payload += StringFormat("\"sessionHighNy\":%.5f,", sessionHighNy);
+        payload += StringFormat("\"sessionLowNy\":%.5f,", sessionLowNy);
+        payload += "\"session\":\"" + DetermineSession(utcNow) + "\",";
+        payload += "\"timestamp\":\"" + ToIsoUtc(utcNow) + "\",";
+        payload += StringFormat("\"volatilityExpansion\":%.5f,", volatilityExpansion);
+        payload += "\"mt5ServerTime\":\"" + ToIsoUtc(mt5ServerNow) + "\",";
+        payload += "\"mt5ToKsaOffsetMinutes\":50,";
+        payload += "\"isCompression\":" + (isCompression ? "true" : "false") + ",";
+        payload += "\"isExpansion\":" + (isExpansion ? "true" : "false") + ",";
+        payload += "\"isAtrExpanding\":" + (isAtrExpanding ? "true" : "false") + ",";
+        payload += "\"hasOverlapCandles\":" + (hasOverlapCandles ? "true" : "false") + ",";
+        payload += "\"hasImpulseCandles\":" + (hasImpulseCandles ? "true" : "false") + ",";
+        payload += "\"hasLiquiditySweep\":" + (hasLiquiditySweep ? "true" : "false") + ",";
+        payload += "\"hasPanicDropSequence\":" + (hasPanicDropSequence ? "true" : "false") + ",";
+        payload += "\"isPostSpikePullback\":" + (isPostSpikePullback ? "true" : "false") + ",";
+        payload += "\"isLondonNyOverlap\":" + (isLondonNyOverlap ? "true" : "false") + ",";
+        payload += "\"isBreakoutConfirmed\":" + (isBreakoutConfirmed ? "true" : "false") + ",";
+        payload += "\"isUsRiskWindow\":" + (isUsRiskWindow ? "true" : "false") + ",";
+        payload += "\"isFriday\":" + (isFriday ? "true" : "false") + ",";
+        payload += StringFormat("\"bid\":%.5f,", bid);
+        payload += StringFormat("\"ask\":%.5f,", ask);
+        payload += StringFormat("\"spread\":%.5f,", spread);
+        payload += StringFormat("\"spreadMedian60m\":%.5f,", spread);
+        payload += StringFormat("\"spreadMax60m\":%.5f,", spread);
+        payload += StringFormat("\"compressionCountM15\":%d,", compressionCountM15);
+        payload += StringFormat("\"expansionCountM15\":%d,", expansionCountM15);
+        payload += StringFormat("\"impulseStrengthScore\":%.5f,", impulseStrengthScore);
+        payload += "\"telegramState\":\"QUIET\",";
+        payload += "\"panicSuspected\":" + (panicSuspected ? "true" : "false") + ",";
+        payload += "\"tvAlertType\":\"NONE\"";
+        payload += "}";
 
         char postData[];
         StringToCharArray(payload, postData, 0, StringLen(payload));
