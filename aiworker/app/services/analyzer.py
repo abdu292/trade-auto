@@ -9,10 +9,12 @@ from app.ai.config import (
     CONSENSUS_MIN_AGREEMENT,
     AI_NEWS_TIMEOUT_SECONDS,
     AI_COMMITTEE_TIMEOUT_SECONDS,
+    AI_MACRO_TIMEOUT_SECONDS,
 )
 from app.ai.provider_manager import AIProviderManager
 from app.models.contracts import MarketSnapshot, TradeSignal
 from app.services.external_news import ExternalNewsContext, ExternalNewsService
+from app.services.macro_intel import MacroIntelContext, MacroIntelService
 from app.services.telegram_news import TelegramNewsContext, TelegramNewsService
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,7 @@ class AnalyzerService:
         self._manager = AIProviderManager(AI_ANALYZERS) if self._has_live_analyzers else None
         self._telegram_news = TelegramNewsService()
         self._external_news = ExternalNewsService()
+        self._macro_intel = MacroIntelService()
 
         if not self._has_live_analyzers:
             logger.warning(
@@ -103,6 +106,7 @@ class AnalyzerService:
             "telegram_state": snapshot.telegramState,
             "panic_suspected": snapshot.panicSuspected,
             "tv_alert_type": snapshot.tvAlertType,
+            "session_phase": snapshot.sessionPhase,
         }
 
         try:
@@ -182,6 +186,65 @@ class AnalyzerService:
             "items": external_news.items,
         }
 
+        try:
+            macro_intel = await asyncio.wait_for(
+                self._macro_intel.collect_context(snapshot.symbol),
+                timeout=max(1.0, AI_MACRO_TIMEOUT_SECONDS),
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Macro intelligence timed out after %.1fs; using safe fallback context.", AI_MACRO_TIMEOUT_SECONDS)
+            macro_intel = MacroIntelContext(summary="Macro intelligence timeout; fallback context used.")
+
+        market_context["macro_intel"] = {
+            "geo_headline": macro_intel.geo_headline,
+            "dxy_bias": macro_intel.dxy_bias,
+            "yields_bias": macro_intel.yields_bias,
+            "cross_metals_bias": macro_intel.cross_metals_bias,
+            "cb_flow": macro_intel.cb_flow,
+            "inst_positioning": macro_intel.inst_positioning,
+            "event_risk": macro_intel.event_risk,
+            "summary": macro_intel.summary,
+        }
+
+        indicators_regime = _classify_indicators_regime(snapshot, macro_intel)
+        risk_state = _classify_risk_state(snapshot, macro_intel, telegram_news, external_news)
+        regime_tag = _resolve_regime_tag(snapshot, macro_intel, indicators_regime, risk_state)
+
+        if risk_state == "BLOCK":
+            return TradeSignal(
+                rail="NO_TRADE",
+                entry=0.0,
+                tp=0.0,
+                pe=snapshot.timestamp + timedelta(minutes=5),
+                ml=300,
+                confidence=0.0,
+                safetyTag="BLOCK",
+                directionBias="NEUTRAL",
+                alignmentScore=0.0,
+                newsImpactTag=_resolve_news_impact_tag(snapshot, telegram_news, external_news),
+                tvConfirmationTag=_resolve_tv_confirmation(snapshot),
+                newsTags=_resolve_news_tags(snapshot, volatility_expansion, telegram_news, external_news),
+                summary=_build_pretable_summary(snapshot, regime_tag, risk_state, macro_intel),
+                consensusPassed=True,
+                agreementCount=1,
+                requiredAgreement=1,
+                disagreementReason="RISK_BLOCKED_PRETABLE",
+                providerVotes=["pretable_classifier:block"],
+                modeHint=_resolve_mode_hint(snapshot, telegram_news, external_news),
+                modeConfidence=_resolve_mode_confidence(snapshot, telegram_news, external_news),
+                modeTtlSeconds=_resolve_mode_ttl(snapshot, telegram_news, external_news),
+                modeKeywords=_resolve_mode_keywords(telegram_news, external_news),
+                regimeTag=regime_tag,
+                riskState=risk_state,
+                geoHeadline=macro_intel.geo_headline,
+                dxyBias=macro_intel.dxy_bias,
+                yieldsBias=macro_intel.yields_bias,
+                crossMetalsBias=macro_intel.cross_metals_bias,
+                cbFlow=macro_intel.cb_flow,
+                instPositioning=macro_intel.inst_positioning,
+                eventRisk=macro_intel.event_risk,
+            )
+
         if not self._has_live_analyzers or self._manager is None:
             return _build_fallback_signal(snapshot, volatility_expansion, telegram_news, external_news)
 
@@ -240,6 +303,15 @@ class AnalyzerService:
                 modeConfidence=_resolve_mode_confidence(snapshot, telegram_news, external_news),
                 modeTtlSeconds=_resolve_mode_ttl(snapshot, telegram_news, external_news),
                 modeKeywords=_resolve_mode_keywords(telegram_news, external_news),
+                regimeTag=regime_tag,
+                riskState=risk_state,
+                geoHeadline=macro_intel.geo_headline,
+                dxyBias=macro_intel.dxy_bias,
+                yieldsBias=macro_intel.yields_bias,
+                crossMetalsBias=macro_intel.cross_metals_bias,
+                cbFlow=macro_intel.cb_flow,
+                instPositioning=macro_intel.inst_positioning,
+                eventRisk=macro_intel.event_risk,
             )
 
         signal = committee.signal
@@ -260,7 +332,7 @@ class AnalyzerService:
             newsImpactTag=_resolve_news_impact_tag(snapshot, telegram_news, external_news),
             tvConfirmationTag=_resolve_tv_confirmation(snapshot),
             newsTags=_resolve_news_tags(snapshot, volatility_expansion, telegram_news, external_news),
-            summary=_build_summary(snapshot, volatility_expansion, telegram_news, external_news),
+            summary=_build_decision_table(snapshot, signal.rail, regime_tag, risk_state, macro_intel),
             consensusPassed=committee.consensus_passed,
             agreementCount=committee.agreement_count,
             requiredAgreement=committee.required_agreement,
@@ -270,6 +342,15 @@ class AnalyzerService:
             modeConfidence=_resolve_mode_confidence(snapshot, telegram_news, external_news),
             modeTtlSeconds=_resolve_mode_ttl(snapshot, telegram_news, external_news),
             modeKeywords=_resolve_mode_keywords(telegram_news, external_news),
+            regimeTag=regime_tag,
+            riskState=risk_state,
+            geoHeadline=macro_intel.geo_headline,
+            dxyBias=macro_intel.dxy_bias,
+            yieldsBias=macro_intel.yields_bias,
+            crossMetalsBias=macro_intel.cross_metals_bias,
+            cbFlow=macro_intel.cb_flow,
+            instPositioning=macro_intel.inst_positioning,
+            eventRisk=macro_intel.event_risk,
         )
 
 
@@ -422,6 +503,97 @@ def _build_summary(
         f"usRisk={snapshot.isUsRiskWindow}, friday={snapshot.isFriday}, overlap={snapshot.isLondonNyOverlap}, "
         f"telegram={telegram_news.summary}, externalNews={external_news.summary}"
     )
+
+
+def _build_pretable_summary(snapshot: MarketSnapshot, regime_tag: str, risk_state: str, macro_intel: MacroIntelContext) -> str:
+    return (
+        f"PRETABLE_BLOCK | session={snapshot.session}/{snapshot.sessionPhase} | "
+        f"regime={regime_tag} | risk={risk_state} | geo={macro_intel.geo_headline} | event={macro_intel.event_risk}"
+    )
+
+
+def _build_decision_table(
+    snapshot: MarketSnapshot,
+    rail: str,
+    regime_tag: str,
+    risk_state: str,
+    macro_intel: MacroIntelContext,
+) -> str:
+    rows = [
+        "| Field | Value |",
+        "|---|---|",
+        f"| Session | {snapshot.session}/{snapshot.sessionPhase} |",
+        f"| Rail | {rail} |",
+        f"| RegimeTag | {regime_tag} |",
+        f"| RiskState | {risk_state} |",
+        f"| GeoHeadline | {macro_intel.geo_headline} |",
+        f"| DXY | {macro_intel.dxy_bias} |",
+        f"| Yields | {macro_intel.yields_bias} |",
+        f"| XAG/XPT | {macro_intel.cross_metals_bias} |",
+        f"| CB Flow | {macro_intel.cb_flow} |",
+        f"| Institutional | {macro_intel.inst_positioning} |",
+        f"| Event Risk | {macro_intel.event_risk} |",
+    ]
+    return "\n".join(rows)
+
+
+def _classify_indicators_regime(snapshot: MarketSnapshot, macro_intel: MacroIntelContext) -> str:
+    if snapshot.hasPanicDropSequence or snapshot.panicSuspected:
+        return "PANIC"
+
+    if snapshot.isExpansion and snapshot.hasImpulseCandles and macro_intel.event_risk in {"MEDIUM", "HIGH"}:
+        return "VOLATILE_EXPANSION"
+
+    if snapshot.isCompression and snapshot.hasOverlapCandles:
+        return "COMPRESSION"
+
+    return "BALANCED"
+
+
+def _classify_risk_state(
+    snapshot: MarketSnapshot,
+    macro_intel: MacroIntelContext,
+    telegram_news: TelegramNewsContext,
+    external_news: ExternalNewsContext,
+) -> str:
+    if macro_intel.event_risk == "HIGH":
+        return "BLOCK"
+    if snapshot.hasPanicDropSequence or snapshot.panicSuspected:
+        return "BLOCK"
+    if telegram_news.impact_tag == "HIGH" or external_news.impact_tag == "HIGH":
+        return "BLOCK"
+
+    caution_count = 0
+    if macro_intel.event_risk == "MEDIUM":
+        caution_count += 1
+    if snapshot.isExpansion:
+        caution_count += 1
+    if snapshot.spreadMedian60m > 0 and snapshot.spread >= snapshot.spreadMedian60m * 1.8:
+        caution_count += 1
+
+    return "CAUTION" if caution_count > 0 else "SAFE"
+
+
+def _resolve_regime_tag(
+    snapshot: MarketSnapshot,
+    macro_intel: MacroIntelContext,
+    indicators_regime: str,
+    risk_state: str,
+) -> str:
+    if risk_state == "BLOCK":
+        return "DEESCALATION_RISK"
+
+    if (
+        macro_intel.geo_headline not in {"NONE", ""}
+        or macro_intel.event_risk in {"MEDIUM", "HIGH"}
+        or indicators_regime == "VOLATILE_EXPANSION"
+    ):
+        return "WAR_PREMIUM"
+
+    if snapshot.session.upper() in {"LONDON", "NY", "INDIA", "JAPAN"}:
+        return "STANDARD"
+
+    return "STANDARD"
 
 
 def _resolve_mode_hint(
@@ -601,4 +773,6 @@ def _build_fallback_signal(
         modeConfidence=_resolve_mode_confidence(snapshot, telegram_news, external_news),
         modeTtlSeconds=_resolve_mode_ttl(snapshot, telegram_news, external_news),
         modeKeywords=_resolve_mode_keywords(telegram_news, external_news),
+        regimeTag="STANDARD",
+        riskState="CAUTION",
     )

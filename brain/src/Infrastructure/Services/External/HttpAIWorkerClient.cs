@@ -79,6 +79,7 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 ema200H1 = snapshot.Ema200H1,
                 adrUsedPct = snapshot.AdrUsedPct,
                 session = snapshot.Session,
+                sessionPhase = snapshot.SessionPhase,
                 timestamp = snapshot.Timestamp,
                 volatilityExpansion = snapshot.VolatilityExpansion,
                 dayOfWeek = snapshot.DayOfWeek.ToString(),
@@ -155,7 +156,16 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 ModeHint: result.ModeHint ?? "UNKNOWN",
                 ModeConfidence: Convert.ToDecimal(result.ModeConfidence ?? 0.5),
                 ModeTtlSeconds: result.ModeTtlSeconds ?? 900,
-                ModeKeywords: result.ModeKeywords ?? []);
+                ModeKeywords: result.ModeKeywords ?? [],
+                RegimeTag: string.IsNullOrWhiteSpace(result.RegimeTag) ? "STANDARD" : result.RegimeTag,
+                RiskState: string.IsNullOrWhiteSpace(result.RiskState) ? "CAUTION" : result.RiskState,
+                GeoHeadline: result.GeoHeadline ?? "NONE",
+                DxyBias: result.DxyBias ?? "NEUTRAL",
+                YieldsBias: result.YieldsBias ?? "NEUTRAL",
+                CrossMetalsBias: result.CrossMetalsBias ?? "NEUTRAL",
+                CbFlow: result.CbFlow ?? "UNKNOWN",
+                InstPositioning: result.InstPositioning ?? "UNKNOWN",
+                EventRisk: result.EventRisk ?? "LOW");
 
             _logger.LogInformation(
                 "← [AIWorker] Analysis complete: {Signal} (confidence={Confidence})",
@@ -269,7 +279,16 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         string? ModeHint,
         double? ModeConfidence,
         int? ModeTtlSeconds,
-        IReadOnlyCollection<string>? ModeKeywords);
+        IReadOnlyCollection<string>? ModeKeywords,
+        string? RegimeTag,
+        string? RiskState,
+        string? GeoHeadline,
+        string? DxyBias,
+        string? YieldsBias,
+        string? CrossMetalsBias,
+        string? CbFlow,
+        string? InstPositioning,
+        string? EventRisk);
 
     private sealed record ModeSignalResponse(
         string Mode,

@@ -26,11 +26,12 @@ public static class DecisionEngine
             return NoTrade("Only XAUUSD-family symbols are permitted.", aiSignal.AlignmentScore, snapshot);
         }
 
-        var strategy = NormalizeStrategy(strategyProfileName);
-        return strategy switch
+        var regimeTag = ResolveRegimeTag(aiSignal, regime);
+        var riskState = ResolveRiskState(aiSignal, regime);
+        return regimeTag switch
         {
-            "WARPREMIUM" => EvaluateWarPremium(snapshot, regime, aiSignal, ledgerState),
-            _ => EvaluateStandard(snapshot, regime, aiSignal, ledgerState),
+            "WAR_PREMIUM" or "DEESCALATION_RISK" => EvaluateWarPremium(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState),
+            _ => EvaluateStandard(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState),
         };
     }
 
@@ -38,7 +39,9 @@ public static class DecisionEngine
         MarketSnapshotContract snapshot,
         RegimeClassificationContract regime,
         TradeSignalContract aiSignal,
-        LedgerStateContract ledgerState)
+        LedgerStateContract ledgerState,
+        string regimeTag,
+        string riskState)
     {
         var session = NormalizeSession(snapshot.Session);
         var waterfallRisk = ResolveWaterfallRiskStandard(snapshot, regime, aiSignal);
@@ -144,6 +147,9 @@ public static class DecisionEngine
             Bucket: bucket,
             Rail: rail,
             Session: session,
+            SessionPhase: NormalizeSessionPhase(snapshot.SessionPhase),
+            RegimeTag: regimeTag,
+            RiskState: riskState,
             SizeClass: sizeClass,
             Entry: decimal.Round(entry, 2),
             Tp: decimal.Round(tp, 2),
@@ -167,7 +173,9 @@ public static class DecisionEngine
         MarketSnapshotContract snapshot,
         RegimeClassificationContract regime,
         TradeSignalContract aiSignal,
-        LedgerStateContract ledgerState)
+        LedgerStateContract ledgerState,
+        string regimeTag,
+        string riskState)
     {
         var session = NormalizeSession(snapshot.Session);
         var now = DateTimeOffset.UtcNow;
@@ -236,6 +244,19 @@ public static class DecisionEngine
 
         if (mode == "WAR_PREMIUM" && waterfallRisk == "LOW")
         {
+            if (NormalizeSessionPhase(snapshot.SessionPhase) == "START")
+            {
+                return NoTrade(
+                    "Rail-B blocked in session start phase to avoid first spike chase.",
+                    aiSignal.AlignmentScore,
+                    snapshot,
+                    cause: "FIRST_SPIKE_BAN",
+                    mode: mode,
+                    waterfallRisk: waterfallRisk,
+                    railPermissionA: "ALLOWED",
+                    railPermissionB: "BLOCKED");
+            }
+
             if (!IsLidBreakConfirmed(snapshot))
             {
                 return NoTrade(
@@ -250,7 +271,7 @@ public static class DecisionEngine
             }
 
             var stageFractions = new[] { 0.25m, 0.25m, 0.20m, 0.15m, 0.10m };
-            var tpDistances = new[] { 200m, 200m, 150m, 100m, 80m };
+            var tpDistances = new[] { 160m, 150m, 120m, 90m, 70m };
             var stage = Math.Clamp(ledgerState.OpenBuyCount, 0, stageFractions.Length - 1);
 
             if (stage == 4 && snapshot.RsiH1 >= 72m)
@@ -296,6 +317,9 @@ public static class DecisionEngine
                 Bucket: "WAR_B",
                 Rail: "BUY_STOP",
                 Session: session,
+                SessionPhase: NormalizeSessionPhase(snapshot.SessionPhase),
+                RegimeTag: regimeTag,
+                RiskState: riskState,
                 SizeClass: $"B{stage + 1}:{(int)(stageFractions[stage] * 100m)}%",
                 Entry: decimal.Round(entry, 2),
                 Tp: decimal.Round(tp, 2),
@@ -353,6 +377,9 @@ public static class DecisionEngine
             Bucket: "WAR_A",
             Rail: "BUY_LIMIT",
             Session: session,
+            SessionPhase: NormalizeSessionPhase(snapshot.SessionPhase),
+            RegimeTag: regimeTag,
+            RiskState: riskState,
             SizeClass: $"RELOAD:{(int)(reloadFraction * 100m)}%",
             Entry: decimal.Round(reloadEntry, 2),
             Tp: decimal.Round(reloadTp, 2),
@@ -366,19 +393,45 @@ public static class DecisionEngine
             RotationCapThisSession: 2);
     }
 
-    private static string NormalizeStrategy(string? value)
+    private static string NormalizeSessionPhase(string? value)
     {
-        var normalized = (value ?? "Standard").Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
+        var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized switch
         {
-            return "STANDARD";
+            "START" => "START",
+            "MID" => "MID",
+            "END" => "END",
+            _ => "UNKNOWN",
+        };
+    }
+
+    private static string ResolveRegimeTag(TradeSignalContract aiSignal, RegimeClassificationContract regime)
+    {
+        var tag = (aiSignal.RegimeTag ?? string.Empty).Trim().ToUpperInvariant();
+        if (tag is "WAR_PREMIUM" or "DEESCALATION_RISK" or "STANDARD")
+        {
+            return tag;
         }
 
-        normalized = normalized.Replace(" ", string.Empty, StringComparison.Ordinal)
-            .Replace("_", string.Empty, StringComparison.Ordinal)
-            .ToUpperInvariant();
+        return string.Equals(regime.Regime, "NEWS_SPIKE", StringComparison.OrdinalIgnoreCase)
+            ? "WAR_PREMIUM"
+            : "STANDARD";
+    }
 
-        return normalized;
+    private static string ResolveRiskState(TradeSignalContract aiSignal, RegimeClassificationContract regime)
+    {
+        var state = (aiSignal.RiskState ?? string.Empty).Trim().ToUpperInvariant();
+        if (state is "SAFE" or "CAUTION" or "BLOCK")
+        {
+            return state;
+        }
+
+        return regime.RiskTag.ToUpperInvariant() switch
+        {
+            "SAFE" => "SAFE",
+            "BLOCK" => "BLOCK",
+            _ => "CAUTION",
+        };
     }
 
     private static string ResolveWarMode(MarketSnapshotContract snapshot, TradeSignalContract aiSignal, DateTimeOffset now)
@@ -712,6 +765,9 @@ public static class DecisionEngine
             Bucket: "C1",
             Rail: string.Empty,
             Session: NormalizeSession(snapshot.Session),
+            SessionPhase: NormalizeSessionPhase(snapshot.SessionPhase),
+            RegimeTag: "STANDARD",
+            RiskState: "BLOCK",
             SizeClass: "25%",
             Entry: 0m,
             Tp: 0m,

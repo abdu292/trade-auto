@@ -65,7 +65,8 @@ public sealed record MarketSnapshotContract(
     decimal ImpulseStrengthScore = 0m,
     string TelegramState = "QUIET",
     bool PanicSuspected = false,
-    string TvAlertType = "NONE");
+    string TvAlertType = "NONE",
+    string SessionPhase = "UNKNOWN");
 
 public sealed record TradeSignalContract(
     string Rail,
@@ -89,7 +90,16 @@ public sealed record TradeSignalContract(
     string ModeHint = "UNKNOWN",
     decimal ModeConfidence = 0.5m,
     int ModeTtlSeconds = 900,
-    IReadOnlyCollection<string>? ModeKeywords = null);
+    IReadOnlyCollection<string>? ModeKeywords = null,
+    string RegimeTag = "STANDARD",
+    string RiskState = "CAUTION",
+    string GeoHeadline = "NONE",
+    string DxyBias = "NEUTRAL",
+    string YieldsBias = "NEUTRAL",
+    string CrossMetalsBias = "NEUTRAL",
+    string CbFlow = "UNKNOWN",
+    string InstPositioning = "UNKNOWN",
+    string EventRisk = "LOW");
 
 public sealed record ModeSignalContract(
     string Mode,
@@ -116,6 +126,9 @@ public sealed record DecisionResultContract(
     string Bucket,
     string Rail,
     string Session,
+    string SessionPhase,
+    string RegimeTag,
+    string RiskState,
     string SizeClass,
     decimal Entry,
     decimal Tp,
@@ -187,6 +200,9 @@ public sealed record PendingTradeContract(
     string WaterfallRisk = "LOW",
     string Bucket = "C1",
     string Session = "",
+    string SessionPhase = "UNKNOWN",
+    string RegimeTag = "STANDARD",
+    string RiskState = "CAUTION",
     string SizeClass = "25%",
     string TelegramState = "QUIET",
     bool ConsensusPassed = true,

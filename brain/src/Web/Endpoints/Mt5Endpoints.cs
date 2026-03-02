@@ -1,5 +1,6 @@
 using Brain.Application.Common.Interfaces;
 using Brain.Application.Common.Models;
+using Brain.Application.Common.Services;
 using Brain.Domain.Entities;
 using Brain.Web.Filters;
 using Microsoft.EntityFrameworkCore;
@@ -50,6 +51,9 @@ public static class Mt5Endpoints
                     waterfallRisk = trade.WaterfallRisk,
                     bucket = trade.Bucket,
                     session = trade.Session,
+                    sessionPhase = trade.SessionPhase,
+                    regimeTag = trade.RegimeTag,
+                    riskState = trade.RiskState,
                     sizeClass = trade.SizeClass,
                     telegramState = trade.TelegramState,
                 });
@@ -78,6 +82,7 @@ public static class Mt5Endpoints
                 var mt5ServerTime = request.Mt5ServerTime ?? request.Timestamp;
                 var ksaTime = mt5ServerTime.AddMinutes(request.Mt5ToKsaOffsetMinutes ?? 50);
                 var volatilityExpansion = request.VolatilityExpansion ?? (request.Adr <= 0 ? 0 : request.Atr / request.Adr);
+                var (resolvedSession, resolvedPhase) = TradingSessionClock.Resolve(ksaTime);
 
                 var timeframeData = request.TimeframeData.Select(tf =>
                     new TimeframeDataContract(tf.Timeframe, tf.Open, tf.High, tf.Low, tf.Close)).ToArray();
@@ -114,7 +119,7 @@ public static class Mt5Endpoints
                     Ema50H1: request.Ema50H1 ?? 0m,
                     Ema200H1: request.Ema200H1 ?? 0m,
                     AdrUsedPct: request.AdrUsedPct ?? 0m,
-                    Session: request.Session,
+                    Session: resolvedSession,
                     Timestamp: request.Timestamp,
                     VolatilityExpansion: volatilityExpansion,
                     DayOfWeek: mt5ServerTime.DayOfWeek,
@@ -145,15 +150,18 @@ public static class Mt5Endpoints
                     ImpulseStrengthScore: request.ImpulseStrengthScore ?? 0m,
                     TelegramState: NormalizeTelegramState(request.TelegramState),
                     PanicSuspected: request.PanicSuspected ?? false,
-                    TvAlertType: NormalizeTvAlertType(request.TvAlertType));
+                    TvAlertType: NormalizeTvAlertType(request.TvAlertType),
+                    SessionPhase: resolvedPhase);
 
                 snapshotStore.Upsert(snapshot);
                 var tickTelemetry = snapshotStore.GetTickTelemetry(1);
                 logger.LogInformation(
-                    "→ POST /mt5/market-snapshot stored {Symbol} snapshot #{TickCount} ({TimeframeCount} TFs, regimeVol={VolatilityExpansion:0.00}, spread={Spread:0.000}, lagMs={LagMs:0}, mt5={Mt5Time}, ksa={KsaTime})",
+                    "→ POST /mt5/market-snapshot stored {Symbol} snapshot #{TickCount} ({TimeframeCount} TFs, session={Session}/{Phase}, regimeVol={VolatilityExpansion:0.00}, spread={Spread:0.000}, lagMs={LagMs:0}, mt5={Mt5Time}, ksa={KsaTime})",
                     snapshot.Symbol,
                     tickTelemetry.TotalIngested,
                     timeframeData.Length,
+                    resolvedSession,
+                    resolvedPhase,
                     volatilityExpansion,
                     snapshot.Spread,
                     tickTelemetry.LastIngestionLatencyMs,
@@ -173,7 +181,6 @@ public static class Mt5Endpoints
                 ITradeLedgerService ledger,
                 ILatestMarketSnapshotStore snapshotStore,
                 IApplicationDbContext db,
-                IWhatsAppService whatsApp,
                 INotificationService notification,
                 CancellationToken cancellationToken) =>
             {
@@ -218,7 +225,6 @@ public static class Mt5Endpoints
                         request.Mt5Price ?? 0m,
                         mt5Time);
 
-                    await whatsApp.SendMessageAsync("ops-whatsapp", buySlip.Message, cancellationToken);
                     await notification.NotifyAsync("BUY SLIP", buySlip.Message, cancellationToken);
 
                     if (snapshotStore.TryGet(out var latest) && latest is not null)
@@ -274,7 +280,6 @@ public static class Mt5Endpoints
                         });
                     }
 
-                    await whatsApp.SendMessageAsync("ops-whatsapp", sellSlip.Message, cancellationToken);
                     await notification.NotifyAsync("SELL SLIP", sellSlip.Message, cancellationToken);
 
                     if (snapshotStore.TryGet(out var latest) && latest is not null)

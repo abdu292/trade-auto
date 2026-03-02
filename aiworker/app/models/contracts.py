@@ -74,6 +74,7 @@ class MarketSnapshot(BaseModel):
     telegramState: str = "QUIET"
     panicSuspected: bool = False
     tvAlertType: str = "NONE"
+    sessionPhase: str = "UNKNOWN"
 
 
 class TradeSignal(BaseModel):
@@ -99,3 +100,12 @@ class TradeSignal(BaseModel):
     modeConfidence: float = 0.5
     modeTtlSeconds: int = 900
     modeKeywords: list[str] = Field(default_factory=list)
+    regimeTag: str = "STANDARD"
+    riskState: str = "CAUTION"
+    geoHeadline: str = "NONE"
+    dxyBias: str = "NEUTRAL"
+    yieldsBias: str = "NEUTRAL"
+    crossMetalsBias: str = "NEUTRAL"
+    cbFlow: str = "UNKNOWN"
+    instPositioning: str = "UNKNOWN"
+    eventRisk: str = "LOW"

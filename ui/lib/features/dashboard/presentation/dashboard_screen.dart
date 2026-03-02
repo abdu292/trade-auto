@@ -70,6 +70,41 @@ class DashboardScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text('Hard-coded Sessions',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tokyo: 03:00-09:00 KSA | 04:00-10:00 UAE | 05:30-11:30 IST',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  Text(
+                    'India: 06:30-14:30 KSA | 07:30-15:30 UAE | 09:00-17:00 IST',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  Text(
+                    'London: 10:00-18:00 KSA | 11:00-19:00 UAE | 12:30-20:30 IST',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  Text(
+                    'New York: 15:30-23:30 KSA | 16:30-00:30 UAE | 18:00-02:00 IST',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Phases: START (first 20%), MID (middle), END (last 20%).',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _AnimatedCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text('AI Providers',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
@@ -92,16 +127,13 @@ class DashboardScreen extends ConsumerWidget {
                                       : 'NO'),
                               _MetricChip(
                                   label: 'OpenAI',
-                                  value:
-                                      status.coverage.openai ? 'ON' : 'OFF'),
+                                  value: status.coverage.openai ? 'ON' : 'OFF'),
                               _MetricChip(
                                   label: 'Gemini',
-                                  value:
-                                      status.coverage.gemini ? 'ON' : 'OFF'),
+                                  value: status.coverage.gemini ? 'ON' : 'OFF'),
                               _MetricChip(
                                   label: 'Grok',
-                                  value:
-                                      status.coverage.grok ? 'ON' : 'OFF'),
+                                  value: status.coverage.grok ? 'ON' : 'OFF'),
                               _MetricChip(
                                   label: 'Perplexity',
                                   value: status.coverage.perplexity
@@ -111,7 +143,8 @@ class DashboardScreen extends ConsumerWidget {
                           ),
                           if (status.analyzers.isNotEmpty) ...[
                             const SizedBox(height: 8),
-                            Text('Active analyzers: ${status.analyzers.join(', ')}'),
+                            Text(
+                                'Active analyzers: ${status.analyzers.join(', ')}'),
                           ],
                           if (status.parityBlockers.isNotEmpty) ...[
                             const SizedBox(height: 8),
@@ -218,13 +251,13 @@ class DashboardScreen extends ConsumerWidget {
                           _MetricChip(
                               label: 'Queue Depth',
                               value: state.pendingQueueDepth.toString()),
-                            _MetricChip(
+                          _MetricChip(
                               label: 'Approval Queue',
                               value: state.approvalQueueDepth.toString()),
-                            _MetricChip(
+                          _MetricChip(
                               label: 'Execution Mode',
                               value: state.executionMode.toUpperCase()),
-                            _MetricChip(
+                          _MetricChip(
                               label: 'Hybrid Auto',
                               value: state.hybridAutoSessions),
                           _MetricChip(
