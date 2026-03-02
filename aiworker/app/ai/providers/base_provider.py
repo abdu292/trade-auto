@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 import os
 
@@ -42,9 +41,74 @@ class TradeSignal:
         }
 
 
+_PROMPT_CACHE: dict[str, str] = {}
+
+
+def _find_repo_root(start: Path) -> Path:
+    """Walk up from start to find repo root (containing .git or prompts/ folder)."""
+    current = start
+    for _ in range(8):  # max 8 levels up
+        if (current / ".git").exists() or (current / "prompts").is_dir():
+            return current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    # Fallback: use 4 levels up from this file (original behaviour)
+    return start.parents[3]
+
+
+def _load_prompt_for_role(role: str = "standard") -> str:
+    """Load provider-specific master prompt from the prompts/ folder.
+    
+    Per PRD IMPORTANT NOTE 2: ChatGPT, Grok & Perplexity use their respective
+    master prompts; other AI models use the standard master_prompt.
+    """
+    cache_key = role or "standard"
+    if cache_key in _PROMPT_CACHE:
+        return _PROMPT_CACHE[cache_key]
+
+    here = Path(__file__).resolve()
+    repo_root = _find_repo_root(here.parent)
+
+    configured = os.getenv("MASTER_PROMPT_PATH", "").strip()
+    candidates: list[Path] = []
+
+    if configured:
+        candidates.append(Path(configured))
+
+    # Role-specific prompt first (e.g. prompts/master_prompt_grok.md)
+    if role and role not in ("standard", ""):
+        candidates.append(repo_root / "prompts" / f"master_prompt_{role}.md")
+
+    # Generic fallback locations (prompts/ folder is primary)
+    candidates.extend([
+        repo_root / "prompts" / "master_prompt",
+        repo_root / "spec" / "master_prompt",
+        repo_root / "aiworker" / "master_prompt",
+    ])
+
+    for candidate in candidates:
+        try:
+            if candidate.exists() and candidate.is_file():
+                text = candidate.read_text(encoding="utf-8").strip()
+                if text:
+                    _PROMPT_CACHE[cache_key] = text
+                    return text
+        except Exception:
+            continue
+
+    _PROMPT_CACHE[cache_key] = ""
+    return ""
+
+
 class AIProvider(ABC):
     """Base class for all AI providers"""
-    
+
+    # Subclasses override this to load their provider-specific master prompt.
+    # Valid roles: "grok", "chat_gpt", "perplexity", "standard"
+    PROMPT_ROLE: str = "standard"
+
     def __init__(self, config: AIProviderConfig):
         self.config = config
     
@@ -66,36 +130,9 @@ class AIProvider(ABC):
         """
         pass
 
-    @staticmethod
-    @lru_cache(maxsize=1)
-    def _load_master_prompt() -> str:
-        configured = os.getenv("MASTER_PROMPT_PATH", "").strip()
-
-        candidates: list[Path] = []
-        if configured:
-            candidates.append(Path(configured))
-
-        here = Path(__file__).resolve()
-        repo_root = here.parents[4]
-        candidates.extend([
-            repo_root / "spec" / "master_prompt",
-            repo_root / "aiworker" / "master_prompt",
-        ])
-
-        for candidate in candidates:
-            try:
-                if candidate.exists() and candidate.is_file():
-                    text = candidate.read_text(encoding="utf-8").strip()
-                    if text:
-                        return text
-            except Exception:
-                continue
-
-        return ""
-    
     def _build_system_prompt(self) -> str:
-        """Common system prompt for all providers"""
-        master_prompt = self._load_master_prompt()
+        """Build system prompt, using provider-specific master prompt when available."""
+        master_prompt = _load_prompt_for_role(self.PROMPT_ROLE)
         response_contract = """You are a gold (XAUUSD) trading AI. Analyze the market data and provide a buy-first pending recommendation.
 
 Execution context:
@@ -130,3 +167,4 @@ DO NOT add any explanation outside the JSON."""
             return response_contract
 
         return f"{master_prompt}\n\n{response_contract}"
+

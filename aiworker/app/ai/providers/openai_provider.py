@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 
 class OpenAIProvider(AIProvider):
     """ChatGPT 4 / 3.5 Turbo provider"""
-    
+
+    PROMPT_ROLE = "chat_gpt"
+
     def __init__(self, config: AIProviderConfig):
         super().__init__(config)
         self.client = AsyncOpenAI(api_key=config.api_key)

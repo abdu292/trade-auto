@@ -2,14 +2,15 @@ namespace Brain.Application.Common.Services;
 
 public static class TradingSessionClock
 {
+    // Session windows in KSA time (UTC+3) per spec_v5.md section E
     private static readonly TimeSpan TokyoStart = new(3, 0, 0);
-    private static readonly TimeSpan TokyoEnd = new(9, 0, 0);
-    private static readonly TimeSpan IndiaStart = new(6, 30, 0);
-    private static readonly TimeSpan IndiaEnd = new(14, 30, 0);
+    private static readonly TimeSpan TokyoEnd = new(12, 0, 0);
+    private static readonly TimeSpan IndiaStart = new(7, 0, 0);
+    private static readonly TimeSpan IndiaEnd = new(16, 0, 0);
     private static readonly TimeSpan LondonStart = new(10, 0, 0);
-    private static readonly TimeSpan LondonEnd = new(18, 0, 0);
-    private static readonly TimeSpan NewYorkStart = new(15, 30, 0);
-    private static readonly TimeSpan NewYorkEnd = new(23, 30, 0);
+    private static readonly TimeSpan LondonEnd = new(19, 0, 0);
+    private static readonly TimeSpan NewYorkStart = new(15, 0, 0);
+    private static readonly TimeSpan NewYorkEnd = new(23, 59, 59);
 
     public static (string Session, string Phase) Resolve(DateTimeOffset ksaTime)
     {

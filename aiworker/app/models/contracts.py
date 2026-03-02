@@ -8,6 +8,7 @@ class TimeframeData(BaseModel):
     high: float
     low: float
     close: float
+    volume: int = 0
 
 
 class MarketSnapshot(BaseModel):
@@ -68,6 +69,13 @@ class MarketSnapshot(BaseModel):
     spread: float = 0.0
     spreadMedian60m: float = 0.0
     spreadMax60m: float = 0.0
+    # Spread stats 1m/5m (spec_v5.md A1)
+    spreadMin1m: float = 0.0
+    spreadAvg1m: float = 0.0
+    spreadMax1m: float = 0.0
+    spreadMin5m: float = 0.0
+    spreadAvg5m: float = 0.0
+    spreadMax5m: float = 0.0
     compressionCountM15: int = 0
     expansionCountM15: int = 0
     impulseStrengthScore: float = 0.0
@@ -75,6 +83,30 @@ class MarketSnapshot(BaseModel):
     panicSuspected: bool = False
     tvAlertType: str = "NONE"
     sessionPhase: str = "UNKNOWN"
+    # Account state (spec_v5.md A1)
+    freeMargin: float = 0.0
+    equity: float = 0.0
+    balance: float = 0.0
+
+
+class PostTradeAnalysisRequest(BaseModel):
+    """Request for post-trade re-analysis after order placement (PRD point 7)."""
+    tradeId: str
+    placedRail: str
+    placedEntry: float
+    placedTp: float
+    placedGrams: float
+    snapshot: MarketSnapshot
+
+
+class PostTradeAnalysisSuggestion(BaseModel):
+    """Suggestion returned after post-trade re-analysis."""
+    tradeId: str
+    action: str  # KEEP | ADJUST_ENTRY | ADJUST_TP | CANCEL
+    suggestedEntry: float | None = None
+    suggestedTp: float | None = None
+    confidence: float
+    reasoning: str
 
 
 class TradeSignal(BaseModel):

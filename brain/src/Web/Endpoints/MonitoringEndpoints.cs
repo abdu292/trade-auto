@@ -20,6 +20,57 @@ public static class MonitoringEndpoints
             .WithName("GetLedgerState")
             .WithDescription("Returns deterministic ledger state (cash, grams, exposure, deployable cash).");
 
+        monitoring.MapPost(
+            "/ledger/deposit",
+            IResult (LedgerActionRequest request, ITradeLedgerService ledger) =>
+            {
+                try
+                {
+                    var slip = ledger.AddCapital(request.AmountAed, request.Note ?? "Manual deposit", DateTimeOffset.UtcNow);
+                    return TypedResults.Ok(new { slip, ledger = ledger.GetState() });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return TypedResults.BadRequest(new { error = ex.Message });
+                }
+            })
+            .WithName("LedgerDeposit")
+            .WithDescription("Add capital (deposit) to ledger cash.");
+
+        monitoring.MapPost(
+            "/ledger/withdraw",
+            IResult (LedgerActionRequest request, ITradeLedgerService ledger) =>
+            {
+                try
+                {
+                    var slip = ledger.WithdrawCapital(request.AmountAed, request.Note ?? "Manual withdrawal", DateTimeOffset.UtcNow);
+                    return TypedResults.Ok(new { slip, ledger = ledger.GetState() });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return TypedResults.BadRequest(new { error = ex.Message });
+                }
+            })
+            .WithName("LedgerWithdraw")
+            .WithDescription("Withdraw capital from ledger cash.");
+
+        monitoring.MapPost(
+            "/ledger/adjustment",
+            IResult (LedgerAdjustmentRequest request, ITradeLedgerService ledger) =>
+            {
+                try
+                {
+                    var slip = ledger.ShopAdjustment(request.AdjustmentAed, request.Note ?? "Shop adjustment", DateTimeOffset.UtcNow);
+                    return TypedResults.Ok(new { slip, ledger = ledger.GetState() });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return TypedResults.BadRequest(new { error = ex.Message });
+                }
+            })
+            .WithName("LedgerShopAdjustment")
+            .WithDescription("Apply a shop price adjustment to ledger cash (positive = gain, negative = loss).");
+
         monitoring.MapGet(
             "/notifications",
             (INotificationFeedStore feedStore, int take = 50) => TypedResults.Ok(feedStore.GetLatest(take)))
@@ -560,6 +611,9 @@ public sealed record CreateHazardWindowRequest(
     DateTimeOffset StartUtc,
     DateTimeOffset EndUtc,
     bool IsBlocked = true);
+
+public sealed record LedgerActionRequest(decimal AmountAed, string? Note);
+public sealed record LedgerAdjustmentRequest(decimal AdjustmentAed, string? Note);
 
 public sealed record StartMarketSimulationRequest(
     decimal? StartPrice,

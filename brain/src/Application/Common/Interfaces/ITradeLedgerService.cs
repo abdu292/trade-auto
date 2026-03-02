@@ -8,4 +8,10 @@ public interface ITradeLedgerService
     bool CanScaleIn(decimal currentPrice, RegimeClassificationContract regime, decimal minSpacingPercent, decimal exposureCapPercent);
     TradeSlipContract ApplyBuyFill(Guid tradeId, decimal grams, decimal mt5BuyPrice, DateTimeOffset mt5Time);
     TradeSlipContract? ApplySellFill(Guid tradeId, decimal mt5SellPrice, DateTimeOffset mt5Time);
+    /// <summary>Add capital (deposit) to ledger cash.</summary>
+    TradeSlipContract AddCapital(decimal amountAed, string note, DateTimeOffset timestamp);
+    /// <summary>Withdraw capital from ledger cash.</summary>
+    TradeSlipContract WithdrawCapital(decimal amountAed, string note, DateTimeOffset timestamp);
+    /// <summary>Apply a shop price adjustment (revalue gold grams without cash flow).</summary>
+    TradeSlipContract ShopAdjustment(decimal adjustmentAed, string note, DateTimeOffset timestamp);
 }

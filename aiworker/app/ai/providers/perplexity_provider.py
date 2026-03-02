@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 
 class PerplexityProvider(AIProvider):
     """Perplexity AI provider (uses OpenAI-compatible API)"""
-    
+
+    PROMPT_ROLE = "perplexity"
+
     def __init__(self, config: AIProviderConfig):
         super().__init__(config)
         self.client = AsyncOpenAI(

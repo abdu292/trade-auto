@@ -44,4 +44,22 @@ public sealed class LedgerAccount : BaseEntity<Guid>
 
         UpdatedAtUtc = DateTimeOffset.UtcNow;
     }
+
+    public void ApplyDeposit(decimal amountAed)
+    {
+        CashAed += amountAed;
+        UpdatedAtUtc = DateTimeOffset.UtcNow;
+    }
+
+    public void ApplyWithdrawal(decimal amountAed)
+    {
+        CashAed -= amountAed;
+        UpdatedAtUtc = DateTimeOffset.UtcNow;
+    }
+
+    public void ApplyAdjustment(decimal adjustmentAed)
+    {
+        CashAed += adjustmentAed;
+        UpdatedAtUtc = DateTimeOffset.UtcNow;
+    }
 }

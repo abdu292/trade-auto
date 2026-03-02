@@ -26,6 +26,15 @@ public sealed class SignalPollingBackgroundService(
     private const decimal UsdToAed = 3.674m;
     private const decimal ShopSpreadUsdPerOz = 0.80m;
 
+    // Waterfall failure tracking: after 2 consecutive failures the system enters study lock
+    // (PRD point 4: "if two orders fail to either trigger or gets caught in the waterfall then
+    //  the system should do study & self_cross check and hard lock only refinements")
+    private static int _consecutiveWaterfallFailures = 0;
+    private static DateTimeOffset _studyLockExpiry = DateTimeOffset.MinValue;
+    private static readonly Lock _waterfallGate = new();
+    private const int StudyLockWaterfallThreshold = 2;
+    private static readonly TimeSpan StudyLockDuration = TimeSpan.FromMinutes(30);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -44,6 +53,31 @@ public sealed class SignalPollingBackgroundService(
 
             try
             {
+                // Check study lock (PRD point 4): after 2 consecutive waterfall failures,
+                // the system pauses new signal generation and requires STUDY & SELF_CROSSCHECK.
+                bool isStudyLockActive;
+                lock (_waterfallGate)
+                {
+                    isStudyLockActive = _studyLockExpiry > DateTimeOffset.UtcNow;
+                    if (!isStudyLockActive && _consecutiveWaterfallFailures >= StudyLockWaterfallThreshold)
+                    {
+                        // Lock expired, reset failure counter so it can accumulate again
+                        _consecutiveWaterfallFailures = 0;
+                    }
+                }
+
+                if (isStudyLockActive)
+                {
+                    var remaining = _studyLockExpiry - DateTimeOffset.UtcNow;
+                    logger.LogWarning(
+                        "STUDY_LOCK_ACTIVE — {ConsecutiveFailures} consecutive waterfall failures detected. " +
+                        "Perform STUDY & SELF_CROSSCHECK before trading resumes. Lock expires in {RemainingMinutes:0.0}m.",
+                        StudyLockWaterfallThreshold,
+                        remaining.TotalMinutes);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
                 var symbol = runtimeSettings.GetSymbol();
                 var snapshot = await marketData.GetSnapshotAsync(symbol, stoppingToken);
                 var normalizedSession = MapSessionType(snapshot.Session);
@@ -229,6 +263,21 @@ public sealed class SignalPollingBackgroundService(
                         {
                             logger.LogInformation("Canceled {Count} pending orders due to HIGH waterfall veto.", canceled);
                         }
+
+                        // Track consecutive waterfall failures for study lock (PRD point 4)
+                        lock (_waterfallGate)
+                        {
+                            _consecutiveWaterfallFailures++;
+                            if (_consecutiveWaterfallFailures >= StudyLockWaterfallThreshold)
+                            {
+                                _studyLockExpiry = DateTimeOffset.UtcNow + StudyLockDuration;
+                                logger.LogWarning(
+                                    "STUDY_LOCK_TRIGGERED — {Count} consecutive HIGH waterfall failures. " +
+                                    "System locked for {DurationMinutes}m. Perform STUDY & SELF_CROSSCHECK.",
+                                    _consecutiveWaterfallFailures,
+                                    StudyLockDuration.TotalMinutes);
+                            }
+                        }
                     }
 
                     db.DecisionLogs.Add(DecisionLog.Create(
@@ -377,6 +426,12 @@ public sealed class SignalPollingBackgroundService(
                 }
 
                 _lastArmedAtUtc = DateTimeOffset.UtcNow;
+
+                // Reset waterfall failure counter on successful trade arm (PRD point 4)
+                lock (_waterfallGate)
+                {
+                    _consecutiveWaterfallFailures = 0;
+                }
 
                 db.DecisionLogs.Add(DecisionLog.Create(
                     symbol: snapshot.Symbol,
