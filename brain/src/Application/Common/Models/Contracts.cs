@@ -1,6 +1,6 @@
 namespace Brain.Application.Common.Models;
 
-public sealed record TimeframeDataContract(string Timeframe, decimal Open, decimal High, decimal Low, decimal Close);
+public sealed record TimeframeDataContract(string Timeframe, decimal Open, decimal High, decimal Low, decimal Close, long Volume = 0L);
 
 public sealed record MarketSnapshotContract(
     string Symbol,
@@ -66,7 +66,18 @@ public sealed record MarketSnapshotContract(
     string TelegramState = "QUIET",
     bool PanicSuspected = false,
     string TvAlertType = "NONE",
-    string SessionPhase = "UNKNOWN");
+    string SessionPhase = "UNKNOWN",
+    // Spread stats per 1m and 5m windows (spec_v5.md A1)
+    decimal SpreadMin1m = 0m,
+    decimal SpreadAvg1m = 0m,
+    decimal SpreadMax1m = 0m,
+    decimal SpreadMin5m = 0m,
+    decimal SpreadAvg5m = 0m,
+    decimal SpreadMax5m = 0m,
+    // Account state for exposure cap enforcement (spec_v5.md A1)
+    decimal FreeMargin = 0m,
+    decimal Equity = 0m,
+    decimal Balance = 0m);
 
 public sealed record TradeSignalContract(
     string Rail,

@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 
 class GrokProvider(AIProvider):
     """Grok by xAI provider (uses OpenAI-compatible API)"""
-    
+
+    PROMPT_ROLE = "grok"
+
     def __init__(self, config: AIProviderConfig):
         super().__init__(config)
         # Grok uses xAI API (OpenAI compatible)

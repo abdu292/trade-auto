@@ -4,9 +4,26 @@ from typing import Optional
 
 from openai import APIError, AsyncOpenAI
 
-from app.ai.providers.base_provider import AIProvider, AIProviderConfig, TradeSignal
+from app.ai.providers.base_provider import AIProvider, AIProviderConfig, TradeSignal, _load_prompt_for_role
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_openrouter_prompt_role(config_name: str, model: str) -> str:
+    """Resolve the prompt role based on the model name for OpenRouter.
+    
+    Per PRD: ChatGPT, Grok & Perplexity use their respective master prompts.
+    Other models use the standard master_prompt.
+    """
+    name_lower = config_name.lower()
+    model_lower = model.lower()
+    if "grok" in name_lower or "grok" in model_lower or "x-ai" in model_lower:
+        return "grok"
+    if "openai" in name_lower or "gpt" in model_lower:
+        return "chat_gpt"
+    if "perplexity" in name_lower or "sonar" in model_lower:
+        return "perplexity"
+    return "standard"
 
 
 class OpenRouterProvider(AIProvider):
@@ -18,6 +35,45 @@ class OpenRouterProvider(AIProvider):
             api_key=config.api_key,
             base_url="https://openrouter.ai/api/v1",
         )
+        self._prompt_role = _resolve_openrouter_prompt_role(config.name, config.model)
+
+    def _build_system_prompt(self) -> str:
+        """Build system prompt using the resolved model-specific role."""
+        master_prompt = _load_prompt_for_role(self._prompt_role)
+        response_contract = """You are a gold (XAUUSD) trading AI. Analyze the market data and provide a buy-first pending recommendation.
+
+Execution context:
+- Inputs are structured MT5 snapshots plus Telegram/news context.
+- Do not request screenshots.
+- Return only machine-readable JSON.
+
+IMPORTANT: Always respond with ONLY valid JSON in this exact format:
+{
+    "rail": "BUY_LIMIT" or "BUY_STOP",
+  "entry": <price>,
+  "tp": <price>,
+    "sl": 0,
+  "pe": "HH:MM",
+  "ml": "HH:MM",
+  "confidence": <0.0-1.0>,
+  "reasoning": "<brief explanation>"
+}
+
+Rules:
+- Symbol is XAUUSD only.
+- Buy-first only. Never output sell-first logic.
+- No hedging and no market execution.
+- No stop-loss logic, keep sl=0.
+- pe (pending expiry) = when to cancel if not triggered
+- ml (max life) = max hold time for the trade
+- If no good setup, respond with: {"signal": null}
+
+DO NOT add any explanation outside the JSON."""
+
+        if not master_prompt:
+            return response_contract
+
+        return f"{master_prompt}\n\n{response_contract}"
 
     async def analyze(self, market_context: dict) -> Optional[TradeSignal]:
         try:

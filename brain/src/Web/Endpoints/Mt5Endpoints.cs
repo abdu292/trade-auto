@@ -85,7 +85,7 @@ public static class Mt5Endpoints
                 var (resolvedSession, resolvedPhase) = TradingSessionClock.Resolve(ksaTime);
 
                 var timeframeData = request.TimeframeData.Select(tf =>
-                    new TimeframeDataContract(tf.Timeframe, tf.Open, tf.High, tf.Low, tf.Close)).ToArray();
+                    new TimeframeDataContract(tf.Timeframe, tf.Open, tf.High, tf.Low, tf.Close, tf.Volume)).ToArray();
 
                 var snapshot = new MarketSnapshotContract(
                     Symbol: request.Symbol,
@@ -143,15 +143,24 @@ public static class Mt5Endpoints
                     Bid: request.Bid ?? 0m,
                     Ask: request.Ask ?? 0m,
                     Spread: request.Spread ?? 0m,
-                    SpreadMedian60m: request.SpreadMedian60m ?? 0m,
-                    SpreadMax60m: request.SpreadMax60m ?? 0m,
+                    SpreadMedian60m: request.SpreadMedian60m ?? request.SpreadAvg5m ?? 0m,
+                    SpreadMax60m: request.SpreadMax60m ?? request.SpreadMax5m ?? 0m,
                     CompressionCountM15: request.CompressionCountM15 ?? 0,
                     ExpansionCountM15: request.ExpansionCountM15 ?? 0,
                     ImpulseStrengthScore: request.ImpulseStrengthScore ?? 0m,
                     TelegramState: NormalizeTelegramState(request.TelegramState),
                     PanicSuspected: request.PanicSuspected ?? false,
                     TvAlertType: NormalizeTvAlertType(request.TvAlertType),
-                    SessionPhase: resolvedPhase);
+                    SessionPhase: resolvedPhase,
+                    SpreadMin1m: request.SpreadMin1m ?? 0m,
+                    SpreadAvg1m: request.SpreadAvg1m ?? 0m,
+                    SpreadMax1m: request.SpreadMax1m ?? 0m,
+                    SpreadMin5m: request.SpreadMin5m ?? 0m,
+                    SpreadAvg5m: request.SpreadAvg5m ?? 0m,
+                    SpreadMax5m: request.SpreadMax5m ?? 0m,
+                    FreeMargin: request.FreeMargin ?? 0m,
+                    Equity: request.Equity ?? 0m,
+                    Balance: request.Balance ?? 0m);
 
                 snapshotStore.Upsert(snapshot);
                 var tickTelemetry = snapshotStore.GetTickTelemetry(1);
@@ -473,11 +482,23 @@ public sealed record Mt5MarketSnapshotRequest(
     decimal? ImpulseStrengthScore,
     string? TelegramState,
     bool? PanicSuspected,
-    string? TvAlertType);
+    string? TvAlertType,
+    // Spread stats for 1m and 5m windows (spec_v5.md A1)
+    decimal? SpreadMin1m,
+    decimal? SpreadAvg1m,
+    decimal? SpreadMax1m,
+    decimal? SpreadMin5m,
+    decimal? SpreadAvg5m,
+    decimal? SpreadMax5m,
+    // Account state (spec_v5.md A1)
+    decimal? FreeMargin,
+    decimal? Equity,
+    decimal? Balance);
 
 public sealed record Mt5TimeframeDataRequest(
     string Timeframe,
     decimal Open,
     decimal High,
     decimal Low,
-    decimal Close);
+    decimal Close,
+    long Volume = 0L);

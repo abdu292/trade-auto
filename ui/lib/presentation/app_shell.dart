@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/network/api_client.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
+import '../features/ledger/presentation/ledger_screen.dart';
 import '../features/risk/presentation/risk_control_screen.dart';
 import '../features/sessions/presentation/session_overview_screen.dart';
 import '../features/strategies/presentation/strategy_control_screen.dart';
@@ -26,6 +27,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     'Risk',
     'Trades',
     'Sessions',
+    'Ledger',
   ];
 
   Future<void> _openEnvironmentDialog(BuildContext context) async {
@@ -124,6 +126,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       const RiskControlScreen(),
       const TradesScreen(),
       const SessionOverviewScreen(),
+      const LedgerScreen(),
     ];
 
     final destinations = const <NavigationDestination>[
@@ -147,6 +150,10 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: Icon(Icons.schedule_outlined),
           selectedIcon: Icon(Icons.schedule),
           label: 'Sessions'),
+      NavigationDestination(
+          icon: Icon(Icons.account_balance_outlined),
+          selectedIcon: Icon(Icons.account_balance),
+          label: 'Ledger'),
     ];
 
     Future<void> refreshEverything() async {
@@ -263,6 +270,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                           NavigationRailDestination(
                               icon: Icon(Icons.schedule),
                               label: Text('Sessions')),
+                          NavigationRailDestination(
+                              icon: Icon(Icons.account_balance),
+                              label: Text('Ledger')),
                         ],
                       ),
                       const VerticalDivider(width: 1),

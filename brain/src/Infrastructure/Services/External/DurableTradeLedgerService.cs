@@ -168,6 +168,96 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
         }
     }
 
+    public TradeSlipContract AddCapital(decimal amountAed, string note, DateTimeOffset timestamp)
+    {
+        if (amountAed <= 0m)
+        {
+            throw new InvalidOperationException("Deposit amount must be positive.");
+        }
+
+        lock (_gate)
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var account = EnsureAccount(db);
+            account.ApplyDeposit(amountAed);
+            db.SaveChanges();
+            return new TradeSlipContract(
+                SlipType: "DEPOSIT",
+                TradeId: Guid.NewGuid(),
+                Grams: 0m,
+                Mt5Price: 0m,
+                ShopPrice: 0m,
+                AmountAed: decimal.Round(amountAed, 2),
+                NetProfitAed: 0m,
+                CashBalanceAed: decimal.Round(account.CashAed, 2),
+                GoldBalanceGrams: decimal.Round(account.GoldGrams, 2),
+                Mt5Time: timestamp,
+                KsaTime: timestamp.AddMinutes(50),
+                Message: $"DEPOSIT | AED {amountAed:0.00} | {note} | Balance AED {account.CashAed:0.00}");
+        }
+    }
+
+    public TradeSlipContract WithdrawCapital(decimal amountAed, string note, DateTimeOffset timestamp)
+    {
+        if (amountAed <= 0m)
+        {
+            throw new InvalidOperationException("Withdrawal amount must be positive.");
+        }
+
+        lock (_gate)
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var account = EnsureAccount(db);
+            if (amountAed > account.CashAed)
+            {
+                throw new InvalidOperationException("Withdrawal exceeds available cash balance.");
+            }
+
+            account.ApplyWithdrawal(amountAed);
+            db.SaveChanges();
+            return new TradeSlipContract(
+                SlipType: "WITHDRAWAL",
+                TradeId: Guid.NewGuid(),
+                Grams: 0m,
+                Mt5Price: 0m,
+                ShopPrice: 0m,
+                AmountAed: decimal.Round(amountAed, 2),
+                NetProfitAed: 0m,
+                CashBalanceAed: decimal.Round(account.CashAed, 2),
+                GoldBalanceGrams: decimal.Round(account.GoldGrams, 2),
+                Mt5Time: timestamp,
+                KsaTime: timestamp.AddMinutes(50),
+                Message: $"WITHDRAWAL | AED {amountAed:0.00} | {note} | Balance AED {account.CashAed:0.00}");
+        }
+    }
+
+    public TradeSlipContract ShopAdjustment(decimal adjustmentAed, string note, DateTimeOffset timestamp)
+    {
+        lock (_gate)
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var account = EnsureAccount(db);
+            account.ApplyAdjustment(adjustmentAed);
+            db.SaveChanges();
+            return new TradeSlipContract(
+                SlipType: "ADJUSTMENT",
+                TradeId: Guid.NewGuid(),
+                Grams: 0m,
+                Mt5Price: 0m,
+                ShopPrice: 0m,
+                AmountAed: decimal.Round(Math.Abs(adjustmentAed), 2),
+                NetProfitAed: decimal.Round(adjustmentAed, 2),
+                CashBalanceAed: decimal.Round(account.CashAed, 2),
+                GoldBalanceGrams: decimal.Round(account.GoldGrams, 2),
+                Mt5Time: timestamp,
+                KsaTime: timestamp.AddMinutes(50),
+                Message: $"SHOP_ADJUSTMENT | AED {adjustmentAed:+0.00;-0.00} | {note} | Balance AED {account.CashAed:0.00}");
+        }
+    }
+
     private static Domain.Entities.LedgerAccount EnsureAccount(ApplicationDbContext db)
     {
         var account = db.Set<Domain.Entities.LedgerAccount>().FirstOrDefault();

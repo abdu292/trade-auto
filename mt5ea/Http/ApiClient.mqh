@@ -3,11 +3,55 @@
 
 #include "../Models/TradeCommand.mqh"
 
+// Spread tracking buffer for 1m/5m statistics (sampled at snapshot push frequency)
+#define SPREAD_BUFFER_SIZE 60
+
 class ApiClient
 {
 private:
     string m_baseUrl;
     string m_apiKey;
+
+    // Rolling spread buffer for stats (approx 5 minutes at default 5s push rate = 60 samples)
+    double m_spreadBuffer[SPREAD_BUFFER_SIZE];
+    int    m_spreadBufferCount;
+    int    m_spreadBufferIdx;
+
+    void RecordSpread(double spread)
+    {
+        m_spreadBuffer[m_spreadBufferIdx] = spread;
+        m_spreadBufferIdx = (m_spreadBufferIdx + 1) % SPREAD_BUFFER_SIZE;
+        if (m_spreadBufferCount < SPREAD_BUFFER_SIZE)
+            m_spreadBufferCount++;
+    }
+
+    void ComputeSpreadStats(int samples, double &outMin, double &outAvg, double &outMax)
+    {
+        outMin = 0.0;
+        outAvg = 0.0;
+        outMax = 0.0;
+
+        int n = MathMin(samples, m_spreadBufferCount);
+        if (n <= 0)
+            return;
+
+        double sum = 0.0;
+        outMin = 1e18;
+        outMax = 0.0;
+
+        // Walk backwards through buffer to get the most recent n samples
+        for (int i = 0; i < n; i++)
+        {
+            int idx = ((m_spreadBufferIdx - 1 - i) % SPREAD_BUFFER_SIZE + SPREAD_BUFFER_SIZE) % SPREAD_BUFFER_SIZE;
+            double v = m_spreadBuffer[idx];
+            if (v < outMin) outMin = v;
+            if (v > outMax) outMax = v;
+            sum += v;
+        }
+
+        outAvg = sum / n;
+        if (outMin > outMax) outMin = outMax;
+    }
 
     string JsonGetString(string json, string key)
     {
@@ -388,6 +432,9 @@ public:
     {
         m_baseUrl = baseUrl;
         m_apiKey = apiKey;
+        m_spreadBufferCount = 0;
+        m_spreadBufferIdx = 0;
+        ArrayInitialize(m_spreadBuffer, 0.0);
         Print("ApiClient configured. BaseUrl=", m_baseUrl, ", ApiKeyLength=", StringLen(m_apiKey));
     }
 
@@ -548,6 +595,20 @@ public:
         double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
         double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
         double spread = (ask > 0.0 && bid > 0.0) ? (ask - bid) : 0.0;
+
+        // Record spread in rolling buffer for statistics
+        RecordSpread(spread);
+
+        // Compute spread stats: 1m ≈ 12 samples, 5m ≈ 60 samples at 5s push rate
+        double spreadMin1m, spreadAvg1m, spreadMax1m;
+        double spreadMin5m, spreadAvg5m, spreadMax5m;
+        ComputeSpreadStats(12, spreadMin1m, spreadAvg1m, spreadMax1m);
+        ComputeSpreadStats(60, spreadMin5m, spreadAvg5m, spreadMax5m);
+
+        // Use 5m stats as median/max for backward compatibility
+        double spreadMedian60m = spreadAvg5m > 0.0 ? spreadAvg5m : spread;
+        double spreadMax60m = spreadMax5m > 0.0 ? spreadMax5m : spread;
+
         double previousDayHigh = iHigh(symbol, PERIOD_D1, 1);
         double previousDayLow = iLow(symbol, PERIOD_D1, 1);
         double weeklyHigh = iHigh(symbol, PERIOD_W1, 1);
@@ -589,23 +650,35 @@ public:
         bool isPostSpikePullback = !isExpansion && compressionCountM15 >= 2 && expansionCountM15 >= 1;
         bool isLondonNyOverlap = (mt5Struct.hour >= 12 && mt5Struct.hour <= 16);
 
+        // Account state (free margin / equity / balance) for exposure cap enforcement
+        double freeMargin = AccountInfoDouble(ACCOUNT_FREEMARGIN);
+        double equity     = AccountInfoDouble(ACCOUNT_EQUITY);
+        double balance    = AccountInfoDouble(ACCOUNT_BALANCE);
+
+        // Tick volumes per timeframe candle
+        long volumeM5  = iVolume(symbol, PERIOD_M5,  1);
+        long volumeM15 = iVolume(symbol, PERIOD_M15, 1);
+        long volumeM30 = iVolume(symbol, PERIOD_M30, 1);
+        long volumeH1  = iVolume(symbol, PERIOD_H1,  1);
+        long volumeH4  = iVolume(symbol, PERIOD_H4,  1);
+
         string payload = "{";
         payload += "\"symbol\":\"" + JsonEscape(symbol) + "\",";
         payload += "\"timeframeData\":[";
-        payload += StringFormat("{\"timeframe\":\"M5\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}",
-                                iOpen(symbol, PERIOD_M5, 1), iHigh(symbol, PERIOD_M5, 1), iLow(symbol, PERIOD_M5, 1), iClose(symbol, PERIOD_M5, 1));
+        payload += StringFormat("{\"timeframe\":\"M5\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d}",
+                                iOpen(symbol, PERIOD_M5, 1), iHigh(symbol, PERIOD_M5, 1), iLow(symbol, PERIOD_M5, 1), iClose(symbol, PERIOD_M5, 1), volumeM5);
         payload += ",";
-        payload += StringFormat("{\"timeframe\":\"M15\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}",
-                                iOpen(symbol, PERIOD_M15, 1), iHigh(symbol, PERIOD_M15, 1), iLow(symbol, PERIOD_M15, 1), iClose(symbol, PERIOD_M15, 1));
+        payload += StringFormat("{\"timeframe\":\"M15\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d}",
+                                iOpen(symbol, PERIOD_M15, 1), iHigh(symbol, PERIOD_M15, 1), iLow(symbol, PERIOD_M15, 1), iClose(symbol, PERIOD_M15, 1), volumeM15);
         payload += ",";
-        payload += StringFormat("{\"timeframe\":\"M30\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}",
-                                iOpen(symbol, PERIOD_M30, 1), iHigh(symbol, PERIOD_M30, 1), iLow(symbol, PERIOD_M30, 1), iClose(symbol, PERIOD_M30, 1));
+        payload += StringFormat("{\"timeframe\":\"M30\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d}",
+                                iOpen(symbol, PERIOD_M30, 1), iHigh(symbol, PERIOD_M30, 1), iLow(symbol, PERIOD_M30, 1), iClose(symbol, PERIOD_M30, 1), volumeM30);
         payload += ",";
-        payload += StringFormat("{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}",
-                                iOpen(symbol, PERIOD_H1, 1), iHigh(symbol, PERIOD_H1, 1), iLow(symbol, PERIOD_H1, 1), iClose(symbol, PERIOD_H1, 1));
+        payload += StringFormat("{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d}",
+                                iOpen(symbol, PERIOD_H1, 1), iHigh(symbol, PERIOD_H1, 1), iLow(symbol, PERIOD_H1, 1), iClose(symbol, PERIOD_H1, 1), volumeH1);
         payload += ",";
-        payload += StringFormat("{\"timeframe\":\"H4\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f}",
-                                iOpen(symbol, PERIOD_H4, 1), iHigh(symbol, PERIOD_H4, 1), iLow(symbol, PERIOD_H4, 1), iClose(symbol, PERIOD_H4, 1));
+        payload += StringFormat("{\"timeframe\":\"H4\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d}",
+                                iOpen(symbol, PERIOD_H4, 1), iHigh(symbol, PERIOD_H4, 1), iLow(symbol, PERIOD_H4, 1), iClose(symbol, PERIOD_H4, 1), volumeH4);
         payload += "],";
 
         payload += StringFormat("\"atr\":%.5f,", atr);
@@ -654,14 +727,23 @@ public:
         payload += StringFormat("\"bid\":%.5f,", bid);
         payload += StringFormat("\"ask\":%.5f,", ask);
         payload += StringFormat("\"spread\":%.5f,", spread);
-        payload += StringFormat("\"spreadMedian60m\":%.5f,", spread);
-        payload += StringFormat("\"spreadMax60m\":%.5f,", spread);
+        payload += StringFormat("\"spreadMin1m\":%.5f,", spreadMin1m);
+        payload += StringFormat("\"spreadAvg1m\":%.5f,", spreadAvg1m);
+        payload += StringFormat("\"spreadMax1m\":%.5f,", spreadMax1m);
+        payload += StringFormat("\"spreadMin5m\":%.5f,", spreadMin5m);
+        payload += StringFormat("\"spreadAvg5m\":%.5f,", spreadAvg5m);
+        payload += StringFormat("\"spreadMax5m\":%.5f,", spreadMax5m);
+        payload += StringFormat("\"spreadMedian60m\":%.5f,", spreadMedian60m);
+        payload += StringFormat("\"spreadMax60m\":%.5f,", spreadMax60m);
         payload += StringFormat("\"compressionCountM15\":%d,", compressionCountM15);
         payload += StringFormat("\"expansionCountM15\":%d,", expansionCountM15);
         payload += StringFormat("\"impulseStrengthScore\":%.5f,", impulseStrengthScore);
         payload += "\"telegramState\":\"QUIET\",";
         payload += "\"panicSuspected\":" + (panicSuspected ? "true" : "false") + ",";
-        payload += "\"tvAlertType\":\"NONE\"";
+        payload += "\"tvAlertType\":\"NONE\",";
+        payload += StringFormat("\"freeMargin\":%.2f,", freeMargin);
+        payload += StringFormat("\"equity\":%.2f,", equity);
+        payload += StringFormat("\"balance\":%.2f", balance);
         payload += "}";
 
         char postData[];

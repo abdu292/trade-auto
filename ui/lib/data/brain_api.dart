@@ -126,6 +126,30 @@ class BrainApi {
   Future<void> rejectTrade(String tradeId) async {
     await _dio.post('/api/monitoring/approvals/$tradeId/reject');
   }
+
+  Future<LedgerState> ledgerDeposit(
+      {required double amountAed, required String note}) async {
+    final response = await _dio.post('/api/monitoring/ledger/deposit',
+        data: {'amountAed': amountAed, 'note': note});
+    return LedgerState.fromJson(
+        _asMap((_asMap(response.data))['ledger'] ?? response.data));
+  }
+
+  Future<LedgerState> ledgerWithdraw(
+      {required double amountAed, required String note}) async {
+    final response = await _dio.post('/api/monitoring/ledger/withdraw',
+        data: {'amountAed': amountAed, 'note': note});
+    return LedgerState.fromJson(
+        _asMap((_asMap(response.data))['ledger'] ?? response.data));
+  }
+
+  Future<LedgerState> ledgerAdjustment(
+      {required double adjustmentAed, required String note}) async {
+    final response = await _dio.post('/api/monitoring/ledger/adjustment',
+        data: {'adjustmentAed': adjustmentAed, 'note': note});
+    return LedgerState.fromJson(
+        _asMap((_asMap(response.data))['ledger'] ?? response.data));
+  }
 }
 
 Map<String, dynamic> _asMap(dynamic data) {

@@ -70,23 +70,23 @@ class DashboardScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Hard-coded Sessions',
+                  Text('Sessions (KSA UTC+3 | UAE UTC+4 | IST UTC+5:30)',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Text(
-                    'Tokyo: 03:00-09:00 KSA | 04:00-10:00 UAE | 05:30-11:30 IST',
+                    'Japan:    03:00–12:00 KSA | 04:00–13:00 UAE | 05:30–14:30 IST | peak: 05:00–09:00',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   Text(
-                    'India: 06:30-14:30 KSA | 07:30-15:30 UAE | 09:00-17:00 IST',
+                    'India:    07:00–16:00 KSA | 08:00–17:00 UAE | 09:30–18:30 IST | peak: 09:00–13:00',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   Text(
-                    'London: 10:00-18:00 KSA | 11:00-19:00 UAE | 12:30-20:30 IST',
+                    'London:   10:00–19:00 KSA | 11:00–20:00 UAE | 12:30–21:30 IST | peak: 12:00–17:00',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   Text(
-                    'New York: 15:30-23:30 KSA | 16:30-00:30 UAE | 18:00-02:00 IST',
+                    'New York: 15:00–00:00 KSA | 16:00–01:00 UAE | 17:30–02:30 IST | peak: 16:00–20:00',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 8),
