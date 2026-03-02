@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import asyncio
 from email.utils import parsedate_to_datetime
 import logging
 import re
@@ -17,6 +18,7 @@ from app.ai.config import (
     EXTERNAL_NEWS_FEEDS,
     EXTERNAL_NEWS_LOOKBACK_MINUTES,
     EXTERNAL_NEWS_MAX_ITEMS,
+    AI_NEWS_TIMEOUT_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,7 +69,11 @@ class ExternalNewsService:
                 items=[],
             )
 
-        items = await self._fetch_recent_items()
+        try:
+            items = await asyncio.wait_for(self._fetch_recent_items(), timeout=max(1.0, AI_NEWS_TIMEOUT_SECONDS))
+        except asyncio.TimeoutError:
+            logger.warning("External news collection timed out after %.1fs", AI_NEWS_TIMEOUT_SECONDS)
+            items = []
         headlines = [f"{item['source']}: {item['title']}" for item in items]
         return self._analyze_items(symbol, headlines, items)
 

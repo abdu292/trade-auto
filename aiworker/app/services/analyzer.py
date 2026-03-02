@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 from app.ai.config import (
@@ -6,6 +7,8 @@ from app.ai.config import (
     AI_STRATEGY,
     CONSENSUS_ENTRY_TOLERANCE_PCT,
     CONSENSUS_MIN_AGREEMENT,
+    AI_NEWS_TIMEOUT_SECONDS,
+    AI_COMMITTEE_TIMEOUT_SECONDS,
 )
 from app.ai.provider_manager import AIProviderManager
 from app.models.contracts import MarketSnapshot, TradeSignal
@@ -102,8 +105,52 @@ class AnalyzerService:
             "tv_alert_type": snapshot.tvAlertType,
         }
 
-        telegram_news = await self._telegram_news.collect_news_context(snapshot.symbol)
-        external_news = await self._external_news.collect_news_context(snapshot.symbol)
+        try:
+            telegram_news = await asyncio.wait_for(
+                self._telegram_news.collect_news_context(snapshot.symbol),
+                timeout=max(1.0, AI_NEWS_TIMEOUT_SECONDS),
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Telegram context timed out after %.1fs; using safe fallback context.", AI_NEWS_TIMEOUT_SECONDS)
+            telegram_news = TelegramNewsContext(
+                enabled=False,
+                impact_tag="LOW",
+                risk_tag="CAUTION",
+                direction_bias="NEUTRAL",
+                telegram_state="QUIET",
+                panic_suspected=False,
+                buy_score=0.0,
+                sell_score=0.0,
+                dominance=0.0,
+                tags=["telegram_timeout"],
+                summary="Telegram context timeout; fallback context used.",
+                headlines=[],
+                items=[],
+            )
+
+        try:
+            external_news = await asyncio.wait_for(
+                self._external_news.collect_news_context(snapshot.symbol),
+                timeout=max(1.0, AI_NEWS_TIMEOUT_SECONDS),
+            )
+        except asyncio.TimeoutError:
+            logger.warning("External news context timed out after %.1fs; using safe fallback context.", AI_NEWS_TIMEOUT_SECONDS)
+            external_news = ExternalNewsContext(
+                enabled=False,
+                feed_count=0,
+                impact_tag="LOW",
+                risk_tag="CAUTION",
+                direction_bias="NEUTRAL",
+                news_state="QUIET",
+                buy_score=0.0,
+                sell_score=0.0,
+                dominance=0.0,
+                panic_suspected=False,
+                tags=["external_news_timeout"],
+                summary="External news timeout; fallback context used.",
+                headlines=[],
+                items=[],
+            )
         market_context["telegram_news"] = {
             "impact_tag": telegram_news.impact_tag,
             "risk_tag": telegram_news.risk_tag,
@@ -139,11 +186,18 @@ class AnalyzerService:
             return _build_fallback_signal(snapshot, volatility_expansion, telegram_news, external_news)
 
         min_agreement = 1 if AI_STRATEGY == "single" else max(2, CONSENSUS_MIN_AGREEMENT)
-        committee = await self._manager.analyze_with_committee(
-            market_context,
-            min_agreement=min_agreement,
-            entry_tolerance_pct=CONSENSUS_ENTRY_TOLERANCE_PCT,
-        )
+        try:
+            committee = await asyncio.wait_for(
+                self._manager.analyze_with_committee(
+                    market_context,
+                    min_agreement=min_agreement,
+                    entry_tolerance_pct=CONSENSUS_ENTRY_TOLERANCE_PCT,
+                ),
+                timeout=max(5.0, AI_COMMITTEE_TIMEOUT_SECONDS),
+            )
+        except asyncio.TimeoutError:
+            logger.warning("AI committee timed out after %.1fs", AI_COMMITTEE_TIMEOUT_SECONDS)
+            committee = self._manager.timeout_decision(required_agreement=min_agreement)
 
         if not committee.consensus_passed or committee.signal is None:
             if committee.agreement_count == 0:

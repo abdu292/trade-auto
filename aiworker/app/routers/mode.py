@@ -1,4 +1,6 @@
 import json
+import asyncio
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from fastapi import APIRouter
@@ -10,6 +12,8 @@ from app.ai.config import (
     GROK_RUNTIME_TRANSPORT,
     GROK_API_KEY,
     GROK_MODEL,
+    AI_NEWS_TIMEOUT_SECONDS,
+    AI_MODE_TIMEOUT_SECONDS,
 )
 from app.services.telegram_news import TelegramNewsService
 
@@ -39,10 +43,27 @@ class ModeResponse(BaseModel):
 @router.post("/mode", response_model=ModeResponse)
 async def resolve_mode(request: ModeRequest) -> ModeResponse:
     telegram = TelegramNewsService()
-    context = await telegram.collect_news_context(request.symbol)
+    try:
+        context = await asyncio.wait_for(
+            telegram.collect_news_context(request.symbol),
+            timeout=max(1.0, AI_NEWS_TIMEOUT_SECONDS),
+        )
+    except asyncio.TimeoutError:
+        context = SimpleNamespace(
+            headlines=[],
+            panic_suspected=False,
+            telegram_state="QUIET",
+            impact_tag="LOW",
+        )
 
     keywords = _extract_mode_keywords(context.headlines)
-    grok_mode = await _try_grok_mode(request, context, keywords)
+    try:
+        grok_mode = await asyncio.wait_for(
+            _try_grok_mode(request, context, keywords),
+            timeout=max(2.0, AI_MODE_TIMEOUT_SECONDS),
+        )
+    except asyncio.TimeoutError:
+        grok_mode = None
     if grok_mode is not None:
         return grok_mode
 

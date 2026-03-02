@@ -50,6 +50,16 @@ class AIProviderManager:
             except Exception as ex:
                 logger.error("Failed to initialize analyzer %s: %s", config.name, str(ex))
 
+    def timeout_decision(self, required_agreement: int) -> CommitteeDecision:
+        return CommitteeDecision(
+            signal=None,
+            consensus_passed=False,
+            agreement_count=0,
+            required_agreement=max(1, required_agreement),
+            disagreement_reason="AI committee timeout",
+            provider_votes=[],
+        )
+
     async def _analyze_one(self, analyzer_name: str, market_context: dict) -> Optional[Tuple[str, TradeSignal]]:
         provider = self.providers.get(analyzer_name)
         if provider is None:
@@ -80,9 +90,15 @@ class AIProviderManager:
                 provider_votes=[],
             )
 
-        tasks = [self._analyze_one(name, market_context) for name in self.provider_names]
-        results = await asyncio.gather(*tasks)
+        timeout_candidates = [max(1, int(config.timeout)) for config in self.configs if config.name in self.provider_names]
+        per_analyzer_timeout = (max(timeout_candidates) + 2) if timeout_candidates else 22
+        tasks = [
+            asyncio.wait_for(self._analyze_one(name, market_context), timeout=per_analyzer_timeout)
+            for name in self.provider_names
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         votes = [result for result in results if result is not None]
+        votes = [result for result in votes if not isinstance(result, Exception)]
         vote_descriptions = [
             f"{analyzer_name}:{signal.rail}@{signal.entry:.2f}|c={signal.confidence:.2f}"
             for analyzer_name, signal in votes

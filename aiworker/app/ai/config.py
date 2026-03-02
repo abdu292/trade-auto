@@ -131,6 +131,12 @@ EXTERNAL_NEWS_BEARISH_KEYWORDS = _read_csv_env(
     "gold falls,strong dollar,rising yields,risk-on,hawkish fed,profit taking",
 )
 
+AI_NEWS_TIMEOUT_SECONDS = float(os.getenv("AI_NEWS_TIMEOUT_SECONDS", "8"))
+AI_MODE_TIMEOUT_SECONDS = float(os.getenv("AI_MODE_TIMEOUT_SECONDS", "10"))
+AI_COMMITTEE_TIMEOUT_SECONDS = float(os.getenv("AI_COMMITTEE_TIMEOUT_SECONDS", "30"))
+TELEGRAM_MAX_CHANNELS_PER_POLL = _read_int_env("TELEGRAM_MAX_CHANNELS_PER_POLL", 20)
+TELEGRAM_PER_CHANNEL_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_PER_CHANNEL_TIMEOUT_SECONDS", "1.5"))
+
 
 def build_analyzers() -> List[AIProviderConfig]:
     analyzers: List[AIProviderConfig] = []

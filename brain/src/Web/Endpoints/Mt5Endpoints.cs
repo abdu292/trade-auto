@@ -148,11 +148,15 @@ public static class Mt5Endpoints
                     TvAlertType: NormalizeTvAlertType(request.TvAlertType));
 
                 snapshotStore.Upsert(snapshot);
+                var tickTelemetry = snapshotStore.GetTickTelemetry(1);
                 logger.LogInformation(
-                    "→ POST /mt5/market-snapshot stored {Symbol} snapshot ({TimeframeCount} TFs, regimeVol={VolatilityExpansion:0.00}, mt5={Mt5Time}, ksa={KsaTime})",
-                    request.Symbol,
+                    "→ POST /mt5/market-snapshot stored {Symbol} snapshot #{TickCount} ({TimeframeCount} TFs, regimeVol={VolatilityExpansion:0.00}, spread={Spread:0.000}, lagMs={LagMs:0}, mt5={Mt5Time}, ksa={KsaTime})",
+                    snapshot.Symbol,
+                    tickTelemetry.TotalIngested,
                     timeframeData.Length,
                     volatilityExpansion,
+                    snapshot.Spread,
+                    tickTelemetry.LastIngestionLatencyMs,
                     mt5ServerTime,
                     ksaTime);
 

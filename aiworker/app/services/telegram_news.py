@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import asyncio
 import logging
 import re
 from typing import Any
@@ -23,6 +24,9 @@ from app.ai.config import (
     TELEGRAM_BEARISH_KEYWORDS,
     TELEGRAM_CHANNEL_WEIGHTS,
     TELEGRAM_TRUSTED_CORE_CHANNELS,
+    AI_NEWS_TIMEOUT_SECONDS,
+    TELEGRAM_MAX_CHANNELS_PER_POLL,
+    TELEGRAM_PER_CHANNEL_TIMEOUT_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,7 +75,11 @@ class TelegramNewsService:
                 items=[],
             )
 
-        items = await self._fetch_recent_items()
+        try:
+            items = await asyncio.wait_for(self._fetch_recent_items(), timeout=max(1.0, AI_NEWS_TIMEOUT_SECONDS))
+        except asyncio.TimeoutError:
+            logger.warning("Telegram context collection timed out after %.1fs", AI_NEWS_TIMEOUT_SECONDS)
+            items = []
         headlines = [f"{item['channel']}: {item['text']}" for item in items]
         return self._analyze_headlines(symbol, headlines, items)
 
@@ -127,6 +135,8 @@ class TelegramNewsService:
         session = StringSession(TELEGRAM_SESSION_STRING) if TELEGRAM_SESSION_STRING else TELEGRAM_SESSION_NAME
         since = datetime.now(timezone.utc) - timedelta(minutes=max(1, TELEGRAM_LOOKBACK_MINUTES))
         allowed_channels = {self._normalize_channel(value) for value in TELEGRAM_CHANNELS}
+        max_channels = max(1, TELEGRAM_MAX_CHANNELS_PER_POLL)
+        channel_list = list(allowed_channels)[:max_channels]
         per_channel_limit = max(5, min(TELEGRAM_MAX_UPDATES, 50))
         collected: list[dict[str, str]] = []
 
@@ -137,11 +147,20 @@ class TelegramNewsService:
                 )
                 return []
 
-            for channel in allowed_channels:
+            for channel in channel_list:
                 channel_ref = channel[1:] if channel.startswith("@") else channel
                 try:
-                    entity = await client.get_entity(channel_ref)
-                    messages = await client.get_messages(entity, limit=per_channel_limit)
+                    entity = await asyncio.wait_for(
+                        client.get_entity(channel_ref),
+                        timeout=max(0.5, TELEGRAM_PER_CHANNEL_TIMEOUT_SECONDS),
+                    )
+                    messages = await asyncio.wait_for(
+                        client.get_messages(entity, limit=per_channel_limit),
+                        timeout=max(0.5, TELEGRAM_PER_CHANNEL_TIMEOUT_SECONDS),
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("Timeout reading channel %s via Telegram client", channel)
+                    continue
                 except Exception as ex:
                     logger.warning("Failed reading channel %s via Telegram client: %s", channel, ex)
                     continue

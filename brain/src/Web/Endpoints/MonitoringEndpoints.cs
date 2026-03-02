@@ -177,6 +177,16 @@ public static class MonitoringEndpoints
             .WithDescription("Returns live runtime telemetry for MT5 demo/live operation monitoring.");
 
         monitoring.MapGet(
+            "/tick-ingestion",
+            IResult (ILatestMarketSnapshotStore snapshotStore, int take = 20) =>
+            {
+                var telemetry = snapshotStore.GetTickTelemetry(take <= 0 ? 20 : take);
+                return TypedResults.Ok(telemetry);
+            })
+            .WithName("GetTickIngestionTelemetry")
+            .WithDescription("Returns MT5 tick ingestion rate/freshness and recent ingested tick snapshots.");
+
+        monitoring.MapGet(
             "/runtime-settings",
             IResult (ITradingRuntimeSettingsStore runtimeSettings) =>
             {
