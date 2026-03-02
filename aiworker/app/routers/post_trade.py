@@ -3,8 +3,8 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.models.contracts import PostTradeAnalysisRequest, PostTradeAnalysisSuggestion
+from app.ai.config import AI_ANALYZERS
 from app.ai.provider_manager import AIProviderManager
-from app.config import Settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Post-Trade"])
@@ -23,11 +23,10 @@ async def post_trade_analyze(request: PostTradeAnalysisRequest) -> PostTradeAnal
     - Cancel the order entirely
     """
     try:
-        settings = Settings()
-        if not settings.ai_providers:
+        if not AI_ANALYZERS:
             raise HTTPException(status_code=503, detail="No AI providers configured")
 
-        manager = AIProviderManager(settings.ai_providers)
+        manager = AIProviderManager(AI_ANALYZERS)
 
         # Build context including the placed trade details
         market_ctx = request.snapshot.model_dump()
