@@ -160,12 +160,19 @@ class _LedgerActionsCardState extends ConsumerState<_LedgerActionsCard> {
 
     if (confirmed != true) return;
 
-    final amount = double.tryParse(amountController.text.trim()) ?? 0;
+    final amount = double.tryParse(amountController.text.trim());
     final note = noteController.text.trim();
     amountController.dispose();
     noteController.dispose();
 
-    if (amount == 0) return;
+    if (amount == null || amount == 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a valid non-zero amount.')),
+        );
+      }
+      return;
+    }
 
     await onConfirm(amount, note);
   }

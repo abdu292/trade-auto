@@ -193,7 +193,7 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
                 CashBalanceAed: decimal.Round(account.CashAed, 2),
                 GoldBalanceGrams: decimal.Round(account.GoldGrams, 2),
                 Mt5Time: timestamp,
-                KsaTime: timestamp.AddMinutes(50),
+                KsaTime: timestamp.AddHours(3),
                 Message: $"DEPOSIT | AED {amountAed:0.00} | {note} | Balance AED {account.CashAed:0.00}");
         }
     }
@@ -228,7 +228,7 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
                 CashBalanceAed: decimal.Round(account.CashAed, 2),
                 GoldBalanceGrams: decimal.Round(account.GoldGrams, 2),
                 Mt5Time: timestamp,
-                KsaTime: timestamp.AddMinutes(50),
+                KsaTime: timestamp.AddHours(3),
                 Message: $"WITHDRAWAL | AED {amountAed:0.00} | {note} | Balance AED {account.CashAed:0.00}");
         }
     }
@@ -253,7 +253,7 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
                 CashBalanceAed: decimal.Round(account.CashAed, 2),
                 GoldBalanceGrams: decimal.Round(account.GoldGrams, 2),
                 Mt5Time: timestamp,
-                KsaTime: timestamp.AddMinutes(50),
+                KsaTime: timestamp.AddHours(3),
                 Message: $"SHOP_ADJUSTMENT | AED {adjustmentAed:+0.00;-0.00} | {note} | Balance AED {account.CashAed:0.00}");
         }
     }

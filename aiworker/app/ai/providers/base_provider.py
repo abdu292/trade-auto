@@ -44,6 +44,20 @@ class TradeSignal:
 _PROMPT_CACHE: dict[str, str] = {}
 
 
+def _find_repo_root(start: Path) -> Path:
+    """Walk up from start to find repo root (containing .git or prompts/ folder)."""
+    current = start
+    for _ in range(8):  # max 8 levels up
+        if (current / ".git").exists() or (current / "prompts").is_dir():
+            return current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    # Fallback: use 4 levels up from this file (original behaviour)
+    return start.parents[3]
+
+
 def _load_prompt_for_role(role: str = "standard") -> str:
     """Load provider-specific master prompt from the prompts/ folder.
     
@@ -55,7 +69,7 @@ def _load_prompt_for_role(role: str = "standard") -> str:
         return _PROMPT_CACHE[cache_key]
 
     here = Path(__file__).resolve()
-    repo_root = here.parents[4]
+    repo_root = _find_repo_root(here.parent)
 
     configured = os.getenv("MASTER_PROMPT_PATH", "").strip()
     candidates: list[Path] = []

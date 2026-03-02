@@ -168,7 +168,7 @@ public sealed class InMemoryTradeLedgerService : ITradeLedgerService
                 CashBalanceAed: decimal.Round(_cashAed, 2),
                 GoldBalanceGrams: decimal.Round(_goldGrams, 2),
                 Mt5Time: timestamp,
-                KsaTime: timestamp.AddMinutes(50),
+                KsaTime: timestamp.AddHours(3),
                 Message: $"DEPOSIT | AED {amountAed:0.00} | {note} | Balance AED {_cashAed:0.00}");
         }
     }
@@ -199,7 +199,7 @@ public sealed class InMemoryTradeLedgerService : ITradeLedgerService
                 CashBalanceAed: decimal.Round(_cashAed, 2),
                 GoldBalanceGrams: decimal.Round(_goldGrams, 2),
                 Mt5Time: timestamp,
-                KsaTime: timestamp.AddMinutes(50),
+                KsaTime: timestamp.AddHours(3),
                 Message: $"WITHDRAWAL | AED {amountAed:0.00} | {note} | Balance AED {_cashAed:0.00}");
         }
     }
@@ -220,7 +220,7 @@ public sealed class InMemoryTradeLedgerService : ITradeLedgerService
                 CashBalanceAed: decimal.Round(_cashAed, 2),
                 GoldBalanceGrams: decimal.Round(_goldGrams, 2),
                 Mt5Time: timestamp,
-                KsaTime: timestamp.AddMinutes(50),
+                KsaTime: timestamp.AddHours(3),
                 Message: $"SHOP_ADJUSTMENT | AED {adjustmentAed:+0.00;-0.00} | {note} | Balance AED {_cashAed:0.00}");
         }
     }

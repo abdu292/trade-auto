@@ -61,8 +61,10 @@ async def post_trade_analyze(request: PostTradeAnalysisRequest) -> PostTradeAnal
 
         signal = decision.signal
         # Compare suggested entry/tp with placed values to determine action
-        entry_diff_pct = abs(signal.entry - request.placedEntry) / max(1.0, request.placedEntry)
-        tp_diff_pct = abs(signal.tp - request.placedTp) / max(1.0, request.placedTp)
+        placed_entry_safe = request.placedEntry if request.placedEntry > 0 else 1.0
+        placed_tp_safe = request.placedTp if request.placedTp > 0 else 1.0
+        entry_diff_pct = abs(signal.entry - request.placedEntry) / placed_entry_safe
+        tp_diff_pct = abs(signal.tp - request.placedTp) / placed_tp_safe
 
         if signal.entry <= 0 or signal.tp <= 0:
             action = "KEEP"

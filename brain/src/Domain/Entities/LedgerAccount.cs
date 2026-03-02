@@ -54,11 +54,6 @@ public sealed class LedgerAccount : BaseEntity<Guid>
     public void ApplyWithdrawal(decimal amountAed)
     {
         CashAed -= amountAed;
-        if (CashAed < 0m)
-        {
-            CashAed = 0m;
-        }
-
         UpdatedAtUtc = DateTimeOffset.UtcNow;
     }
 
