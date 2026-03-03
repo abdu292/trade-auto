@@ -25,6 +25,8 @@ class LedgerScreen extends ConsumerWidget {
             error: (e, _) => Text('Error loading ledger: $e'),
           ),
           const SizedBox(height: 16),
+          _CompoundingTrackerCard(),
+          const SizedBox(height: 16),
           _LedgerActionsCard(onRefresh: onRefresh),
         ],
       ),
@@ -61,6 +63,85 @@ class _LedgerSummaryCard extends StatelessWidget {
                 exposure > 60 ? cs.error : cs.onSurface),
             _row('Deployable Cash', 'AED ${deployable.toStringAsFixed(2)}', cs.primary),
             _row('Open Buy Count', openBuys.toString(), cs.onSurface),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(String label, String value, Color color) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label),
+            Text(value,
+                style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+          ],
+        ),
+      );
+}
+
+class _CompoundingTrackerCard extends ConsumerWidget {
+  const _CompoundingTrackerCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final kpi = ref.watch(kpiProvider);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Compounding Tracker (4x)', style: tt.titleMedium),
+            const SizedBox(height: 12),
+            kpi.when(
+              data: (stats) {
+                final c = stats.compounding;
+                final progress = (c.multiple / 4.0).clamp(0.0, 1.0);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _row('Starting Investment',
+                        'AED ${c.startingInvestmentAed.toStringAsFixed(2)}',
+                        cs.onSurface),
+                    _row('Current Equity',
+                        'AED ${c.currentEquityAed.toStringAsFixed(2)}',
+                        cs.primary),
+                    _row('Multiple', '${c.multiple.toStringAsFixed(2)}x',
+                        cs.secondary),
+                    const SizedBox(height: 10),
+                    LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: cs.surfaceContainerHighest,
+                      color:
+                          c.milestoneReached ? cs.tertiary : cs.primary,
+                      minHeight: 10,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    const SizedBox(height: 6),
+                    if (c.milestoneReached)
+                      Text(
+                        '🎉 4x REACHED — Ready to Pull Original Capital',
+                        style: TextStyle(
+                            color: cs.tertiary,
+                            fontWeight: FontWeight.bold),
+                      )
+                    else
+                      Text(
+                        '4x Target: AED ${c.neededForFourXAed.toStringAsFixed(2)} remaining',
+                        style: tt.bodySmall,
+                      ),
+                  ],
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (e, _) => Text('KPI error: $e'),
+            ),
           ],
         ),
       ),

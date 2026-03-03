@@ -127,6 +127,11 @@ class BrainApi {
     await _dio.post('/api/monitoring/approvals/$tradeId/reject');
   }
 
+  Future<KpiStats> getKpiStats() async {
+    final response = await _dio.get('/api/monitoring/kpi');
+    return KpiStats.fromJson(_asMap(response.data));
+  }
+
   Future<LedgerState> ledgerDeposit(
       {required double amountAed, required String note}) async {
     final response = await _dio.post('/api/monitoring/ledger/deposit',

@@ -16,9 +16,14 @@ public static class MonitoringEndpoints
 
         monitoring.MapGet(
             "/ledger",
-            (ITradeLedgerService ledger) => TypedResults.Ok(ledger.GetState()))
+            IResult (ITradeLedgerService ledger, ILatestMarketSnapshotStore snapshotStore) =>
+            {
+                snapshotStore.TryGet(out var snapshot);
+                var bid = snapshot?.Bid ?? 0m;
+                return TypedResults.Ok(ledger.GetExtendedState(bid));
+            })
             .WithName("GetLedgerState")
-            .WithDescription("Returns deterministic ledger state (cash, grams, exposure, deployable cash).");
+            .WithDescription("Returns deterministic ledger state with extended capital metrics (cash, gold, equity, compounding).");
 
         monitoring.MapPost(
             "/ledger/deposit",
@@ -618,6 +623,128 @@ public static class MonitoringEndpoints
             })
             .WithName("RunReplayHarness")
             .WithDescription("Runs a deterministic replay batch against DecisionEngine and returns gating outcome metrics.");
+
+        monitoring.MapGet(
+            "/kpi",
+            async Task<IResult> (IApplicationDbContext db, ILatestMarketSnapshotStore snapshotStore, ITradeLedgerService ledger, CancellationToken cancellationToken) =>
+            {
+                var nowUtc = DateTimeOffset.UtcNow;
+                var ksaNow = nowUtc.AddHours(3);
+                var ksaDayStart = new DateTimeOffset(ksaNow.Year, ksaNow.Month, ksaNow.Day, 0, 0, 0, TimeSpan.FromHours(3));
+                var ksaDayStartUtc = ksaDayStart.ToUniversalTime();
+
+                // KSA week: Mon-Sun
+                var dow = (int)ksaNow.DayOfWeek; // 0=Sun
+                var daysToMon = dow == 0 ? 6 : dow - 1;
+                var ksaWeekStartUtc = ksaDayStartUtc.AddDays(-daysToMon);
+
+                var closedPositions = await db.LedgerPositions
+                    .AsNoTracking()
+                    .Where(x => x.IsClosed)
+                    .ToListAsync(cancellationToken);
+
+                var openPositions = await db.LedgerPositions
+                    .AsNoTracking()
+                    .Where(x => !x.IsClosed)
+                    .ToListAsync(cancellationToken);
+
+                var todayClosed = closedPositions.Where(x => x.ClosedAtUtc >= ksaDayStartUtc).ToList();
+                var todayProfitAed = todayClosed.Sum(x => x.NetProfitAed);
+                var todayRotations = todayClosed.Count;
+                var todayAvgProfit = todayRotations > 0 ? todayProfitAed / todayRotations : 0m;
+                var openBuyCount = openPositions.Count;
+                // Hit rate: profitable rotations / total closed rotations today
+                var todayProfitableRotations = todayClosed.Count(x => x.NetProfitAed > 0m);
+                var todayHitRate = todayRotations > 0 ? (double)todayProfitableRotations / todayRotations : 0.0;
+
+                var weeklyClosed = closedPositions.Where(x => x.ClosedAtUtc >= ksaWeekStartUtc).ToList();
+                var weeklyProfitAed = weeklyClosed.Sum(x => x.NetProfitAed);
+                var weeklyRotations = weeklyClosed.Count;
+
+                // Session classification per PRD: JAPAN 03-12 KSA, INDIA 07-16, LONDON 10-19, NY 15-00
+                // When sessions overlap, prefer stored value; otherwise use KSA hour midpoint ordering (JAPAN → INDIA → LONDON → NY)
+                static string ClassifySession(DateTimeOffset? closedUtc, string stored)
+                {
+                    if (!string.IsNullOrEmpty(stored)) return stored;
+                    if (closedUtc is null) return "UNKNOWN";
+                    var ksaHour = closedUtc.Value.ToOffset(TimeSpan.FromHours(3)).Hour;
+                    // NY: 15:00-00:00 (hour 15-23)
+                    if (ksaHour >= 15) return "NY";
+                    // LONDON: 10:00-15:00
+                    if (ksaHour >= 10) return "LONDON";
+                    // INDIA: 07:00-10:00
+                    if (ksaHour >= 7) return "INDIA";
+                    // JAPAN: 03:00-07:00, or post-midnight NY (00:00-03:00)
+                    if (ksaHour >= 3) return "JAPAN";
+                    return "NY"; // 00:00-03:00 KSA = late NY
+                }
+
+                // Waterfall blocks per session from today's decision logs
+                var todayWaterfallLogs = await db.DecisionLogs
+                    .AsNoTracking()
+                    .Where(x => x.CreatedAtUtc >= ksaDayStartUtc && x.WaterfallRisk == "HIGH")
+                    .Select(x => new { x.CreatedAtUtc })
+                    .ToListAsync(cancellationToken);
+
+                var sessions = new[] { "JAPAN", "INDIA", "LONDON", "NY" };
+                var sessionStats = sessions.ToDictionary(s => s, s =>
+                {
+                    var sp = todayClosed.Where(x => ClassifySession(x.ClosedAtUtc, x.ClosedSession) == s).ToList();
+                    var wfBlocks = todayWaterfallLogs.Count(x =>
+                    {
+                        var ksaH = x.CreatedAtUtc.ToOffset(TimeSpan.FromHours(3)).Hour;
+                        return s switch
+                        {
+                            "JAPAN" => ksaH >= 3 && ksaH < 7,
+                            "INDIA" => ksaH >= 7 && ksaH < 10,
+                            "LONDON" => ksaH >= 10 && ksaH < 15,
+                            "NY" => ksaH >= 15 || ksaH < 3,
+                            _ => false,
+                        };
+                    });
+                    return new { profitAed = decimal.Round(sp.Sum(x => x.NetProfitAed), 2), rotations = sp.Count, waterfallBlocks = wfBlocks };
+                });
+
+                snapshotStore.TryGet(out var snapshot);
+                var currentBid = snapshot?.Bid ?? 0m;
+                var extState = ledger.GetExtendedState(currentBid);
+
+                var account = await db.LedgerAccounts
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(cancellationToken);
+                var startingInvestment = extState.StartingInvestmentAed > 0m
+                    ? extState.StartingInvestmentAed
+                    : (account?.InitialCashAed ?? 100000m);
+                var currentEquityAed = extState.NetEquityAed > 0m ? extState.NetEquityAed : extState.CashAed;
+                var multiple = startingInvestment > 0m ? decimal.Round(currentEquityAed / startingInvestment, 4) : 0m;
+                var milestoneReached = multiple >= 4.0m;
+                var neededForFourX = Math.Max(0m, startingInvestment * 4m - currentEquityAed);
+
+                return TypedResults.Ok(new
+                {
+                    todayKsaDate = ksaNow.ToString("yyyy-MM-dd"),
+                    todayProfitAed = decimal.Round(todayProfitAed, 2),
+                    todayRotations,
+                    todayAvgProfitAed = decimal.Round(todayAvgProfit, 2),
+                    todayHitRate = Math.Round(todayHitRate, 4),
+                    sessionStats,
+                    weeklyProfitAed = decimal.Round(weeklyProfitAed, 2),
+                    weeklyRotations,
+                    compounding = new
+                    {
+                        startingInvestmentAed = decimal.Round(startingInvestment, 2),
+                        currentEquityAed = decimal.Round(currentEquityAed, 2),
+                        multiple,
+                        milestoneReached,
+                        neededForFourXAed = decimal.Round(neededForFourX, 2),
+                    },
+                    openPositionsCount = openPositions.Count,
+                    openBuyCount,
+                    studyLockActive = false,
+                });
+            })
+            .WithName("GetKpi")
+            .WithDescription("Returns today/weekly KPI metrics, session stats, and compounding data.");
 
         return group;
     }

@@ -131,6 +131,9 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Anomaly Alerts
+          _AnomalyAlertsCard(),
+          const SizedBox(height: 12),
           Text('Risk Profiles',
               style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 12),
@@ -340,4 +343,115 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
       ),
     );
   }
+}
+
+class _AnomalyAlertsCard extends ConsumerWidget {
+  const _AnomalyAlertsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final runtime = ref.watch(runtimeStatusProvider);
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Anomaly Alerts',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            runtime.when(
+              data: (rt) {
+                final alerts = <_Alert>[];
+
+                final spreadSpike = rt.spreadMedian60m > 0 &&
+                    rt.spread > 2 * rt.spreadMedian60m;
+                if (spreadSpike) {
+                  alerts.add(_Alert(
+                    icon: Icons.trending_up,
+                    label:
+                        'Spread spike: ${rt.spread.toStringAsFixed(3)} > 2× median ${rt.spreadMedian60m.toStringAsFixed(3)}',
+                    color: cs.error,
+                  ));
+                }
+
+                if (rt.panicSuspected) {
+                  alerts.add(_Alert(
+                    icon: Icons.warning_amber,
+                    label: 'Telegram panic surge detected',
+                    color: cs.error,
+                  ));
+                }
+
+                if (rt.macroCacheAgeMinutes > 120) {
+                  alerts.add(_Alert(
+                    icon: Icons.cloud_off,
+                    label:
+                        'Macro cache stale: ${rt.macroCacheAgeMinutes}m ago',
+                    color: cs.tertiary,
+                  ));
+                }
+
+                if (rt.mt5ServerTime == null) {
+                  alerts.add(_Alert(
+                    icon: Icons.sync_problem,
+                    label: 'MT5 desync: server time unavailable',
+                    color: cs.error,
+                  ));
+                }
+
+                if (alerts.isEmpty) {
+                  return Row(
+                    children: [
+                      Icon(Icons.check_circle, color: cs.primary, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('No anomalies detected'),
+                    ],
+                  );
+                }
+
+                return Column(
+                  children: alerts
+                      .map(
+                        (a) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Row(
+                            children: [
+                              Icon(a.icon, color: a.color, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  a.label,
+                                  style: TextStyle(color: a.color),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => Text('Runtime error: $error'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Alert {
+  const _Alert({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
 }

@@ -109,6 +109,14 @@ class LedgerState {
     required this.openExposurePercent,
     required this.deployableCashAed,
     required this.openBuyCount,
+    this.goldAedEquivalent = 0,
+    this.netEquityAed = 0,
+    this.purchasePowerAed = 0,
+    this.deployedAed = 0,
+    this.openPositionsAed = 0,
+    this.pendingReservedAed = 0,
+    this.startingInvestmentAed = 0,
+    this.equityMultiple = 0,
   });
 
   final double cashAed;
@@ -116,6 +124,14 @@ class LedgerState {
   final double openExposurePercent;
   final double deployableCashAed;
   final int openBuyCount;
+  final double goldAedEquivalent;
+  final double netEquityAed;
+  final double purchasePowerAed;
+  final double deployedAed;
+  final double openPositionsAed;
+  final double pendingReservedAed;
+  final double startingInvestmentAed;
+  final double equityMultiple;
 
   factory LedgerState.fromJson(Map<String, dynamic> json) => LedgerState(
         cashAed: _readDouble(json, 'cashAed'),
@@ -123,6 +139,14 @@ class LedgerState {
         openExposurePercent: _readDouble(json, 'openExposurePercent'),
         deployableCashAed: _readDouble(json, 'deployableCashAed'),
         openBuyCount: _readInt(json, 'openBuyCount'),
+        goldAedEquivalent: _readDouble(json, 'goldAedEquivalent'),
+        netEquityAed: _readDouble(json, 'netEquityAed'),
+        purchasePowerAed: _readDouble(json, 'purchasePowerAed'),
+        deployedAed: _readDouble(json, 'deployedAed'),
+        openPositionsAed: _readDouble(json, 'openPositionsAed'),
+        pendingReservedAed: _readDouble(json, 'pendingReservedAed'),
+        startingInvestmentAed: _readDouble(json, 'startingInvestmentAed'),
+        equityMultiple: _readDouble(json, 'equityMultiple'),
       );
 }
 
@@ -449,6 +473,115 @@ class AnalyzeSnapshotInput {
       'session': session,
       'timestamp': now.toIso8601String(),
     };
+  }
+}
+
+class SessionKpi {
+  final double profitAed;
+  final int rotations;
+  final double avgCycleTimeMinutes;
+  final int waterfallBlocks;
+
+  const SessionKpi({
+    required this.profitAed,
+    required this.rotations,
+    this.avgCycleTimeMinutes = 0,
+    this.waterfallBlocks = 0,
+  });
+
+  factory SessionKpi.fromJson(Map<String, dynamic> json) => SessionKpi(
+        profitAed: _readDouble(json, 'profitAed'),
+        rotations: _readInt(json, 'rotations'),
+        avgCycleTimeMinutes: _readDouble(json, 'avgCycleTimeMinutes'),
+        waterfallBlocks: _readInt(json, 'waterfallBlocks'),
+      );
+}
+
+class CompoundingStats {
+  final double startingInvestmentAed;
+  final double currentEquityAed;
+  final double multiple;
+  final bool milestoneReached;
+  final double neededForFourXAed;
+
+  const CompoundingStats({
+    required this.startingInvestmentAed,
+    required this.currentEquityAed,
+    required this.multiple,
+    required this.milestoneReached,
+    required this.neededForFourXAed,
+  });
+
+  factory CompoundingStats.fromJson(Map<String, dynamic> json) =>
+      CompoundingStats(
+        startingInvestmentAed: _readDouble(json, 'startingInvestmentAed'),
+        currentEquityAed: _readDouble(json, 'currentEquityAed'),
+        multiple: _readDouble(json, 'multiple'),
+        milestoneReached: _readBool(json, 'milestoneReached'),
+        neededForFourXAed: _readDouble(json, 'neededForFourXAed'),
+      );
+}
+
+class KpiStats {
+  final String todayKsaDate;
+  final double todayProfitAed;
+  final int todayRotations;
+  final double todayAvgProfitAed;
+  final double todayHitRate;
+  final Map<String, SessionKpi> sessionStats;
+  final double weeklyProfitAed;
+  final int weeklyRotations;
+  final CompoundingStats compounding;
+  final int openPositionsCount;
+  final int openBuyCount;
+
+  const KpiStats({
+    required this.todayKsaDate,
+    required this.todayProfitAed,
+    required this.todayRotations,
+    required this.todayAvgProfitAed,
+    required this.todayHitRate,
+    required this.sessionStats,
+    required this.weeklyProfitAed,
+    required this.weeklyRotations,
+    required this.compounding,
+    required this.openPositionsCount,
+    required this.openBuyCount,
+  });
+
+  factory KpiStats.fromJson(Map<String, dynamic> json) {
+    final sessionMap = <String, SessionKpi>{};
+    final rawSessions = json['sessionStats'] ?? json['SessionStats'];
+    if (rawSessions is Map) {
+      rawSessions.forEach((key, value) {
+        if (value is Map<String, dynamic>) {
+          sessionMap[key.toString()] = SessionKpi.fromJson(value);
+        } else if (value is Map) {
+          sessionMap[key.toString()] = SessionKpi.fromJson(
+              value.map((k, v) => MapEntry(k.toString(), v)));
+        }
+      });
+    }
+    final compoundingRaw =
+        json['compounding'] ?? json['Compounding'] ?? const <String, dynamic>{};
+    final compoundingMap = compoundingRaw is Map<String, dynamic>
+        ? compoundingRaw
+        : (compoundingRaw is Map
+            ? compoundingRaw.map((k, v) => MapEntry(k.toString(), v))
+            : <String, dynamic>{});
+    return KpiStats(
+      todayKsaDate: _readString(json, 'todayKsaDate'),
+      todayProfitAed: _readDouble(json, 'todayProfitAed'),
+      todayRotations: _readInt(json, 'todayRotations'),
+      todayAvgProfitAed: _readDouble(json, 'todayAvgProfitAed'),
+      todayHitRate: _readDouble(json, 'todayHitRate'),
+      sessionStats: sessionMap,
+      weeklyProfitAed: _readDouble(json, 'weeklyProfitAed'),
+      weeklyRotations: _readInt(json, 'weeklyRotations'),
+      compounding: CompoundingStats.fromJson(compoundingMap),
+      openPositionsCount: _readInt(json, 'openPositionsCount'),
+      openBuyCount: _readInt(json, 'openBuyCount'),
+    );
   }
 }
 

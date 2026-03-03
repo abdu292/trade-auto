@@ -59,3 +59,7 @@ final aiHealthStatusProvider = FutureProvider<AiHealthStatus>((ref) {
 final hazardWindowsProvider = FutureProvider<List<HazardWindow>>((ref) {
   return ref.watch(brainApiProvider).getHazardWindows();
 });
+
+final kpiProvider = FutureProvider<KpiStats>((ref) {
+  return ref.watch(brainApiProvider).getKpiStats();
+});

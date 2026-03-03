@@ -11,6 +11,7 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
     private const decimal OunceToGram = 31.1035m;
     private const decimal UsdToAed = 3.674m;
     private const decimal MinTradeGrams = 100m;
+    private const decimal ShopSpread = 0.80m;
 
     private readonly Lock _gate = new();
 
@@ -34,6 +35,49 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
                 OpenExposurePercent: decimal.Round(exposure, 2),
                 DeployableCashAed: decimal.Round(Math.Max(0m, account.CashAed), 2),
                 OpenBuyCount: openPositions.Count);
+        }
+    }
+
+    public LedgerStateContract GetExtendedState(decimal currentBidPrice)
+    {
+        lock (_gate)
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var account = EnsureAccount(db);
+            var openPositions = db.Set<Domain.Entities.LedgerPosition>()
+                .AsNoTracking()
+                .Where(x => !x.IsClosed)
+                .ToList();
+
+            var exposure = GetExposurePercentUnsafe(account.CashAed, openPositions.Sum(x => x.DebitAed));
+
+            var shopSellBid = currentBidPrice > 0m ? currentBidPrice - ShopSpread : 0m;
+            var goldAedEquivalent = currentBidPrice > 0m
+                ? decimal.Round(account.GoldGrams / OunceToGram * shopSellBid * UsdToAed, 2)
+                : 0m;
+            var netEquityAed = decimal.Round(account.CashAed + goldAedEquivalent, 2);
+            var openPositionsAed = decimal.Round(openPositions.Sum(x => x.DebitAed), 2);
+            var startingInvestment = account.InitialCashAed;
+            var equityMultiple = startingInvestment > 0m
+                ? decimal.Round(netEquityAed / startingInvestment, 4)
+                : 0m;
+
+            return new LedgerStateContract(
+                CashAed: decimal.Round(account.CashAed, 2),
+                GoldGrams: decimal.Round(account.GoldGrams, 2),
+                OpenExposurePercent: decimal.Round(exposure, 2),
+                DeployableCashAed: decimal.Round(Math.Max(0m, account.CashAed), 2),
+                OpenBuyCount: openPositions.Count,
+                GoldAedEquivalent: goldAedEquivalent,
+                NetEquityAed: netEquityAed,
+                PurchasePowerAed: decimal.Round(account.CashAed, 2),
+                DeployedAed: openPositionsAed,
+                OpenPositionsAed: openPositionsAed,
+                PendingReservedAed: 0m,
+                StartingInvestmentAed: decimal.Round(startingInvestment, 2),
+                EquityMultiple: equityMultiple);
         }
     }
 
@@ -78,7 +122,7 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
         }
     }
 
-    public TradeSlipContract ApplyBuyFill(Guid tradeId, decimal grams, decimal mt5BuyPrice, DateTimeOffset mt5Time)
+    public TradeSlipContract ApplyBuyFill(Guid tradeId, decimal grams, decimal mt5BuyPrice, DateTimeOffset mt5Time, string openedSession = "")
     {
         lock (_gate)
         {
@@ -98,7 +142,7 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
                 throw new InvalidOperationException("Buy fill rejected: duplicate tradeId in ledger.");
             }
 
-            var shopBuy = mt5BuyPrice + 0.80m;
+            var shopBuy = mt5BuyPrice + ShopSpread;
             var debit = ToAed(shopBuy, normalizedGrams);
 
             if (debit > account.CashAed)
@@ -107,7 +151,7 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
             }
 
             account.ApplyBuy(debit, normalizedGrams);
-            var position = Domain.Entities.LedgerPosition.Open(tradeId, normalizedGrams, mt5BuyPrice, shopBuy, debit, mt5Time);
+            var position = Domain.Entities.LedgerPosition.Open(tradeId, normalizedGrams, mt5BuyPrice, shopBuy, debit, mt5Time, openedSession);
             db.Set<Domain.Entities.LedgerPosition>().Add(position);
             db.SaveChanges();
 
@@ -128,7 +172,7 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
         }
     }
 
-    public TradeSlipContract? ApplySellFill(Guid tradeId, decimal mt5SellPrice, DateTimeOffset mt5Time)
+    public TradeSlipContract? ApplySellFill(Guid tradeId, decimal mt5SellPrice, DateTimeOffset mt5Time, string closedSession = "")
     {
         lock (_gate)
         {
@@ -143,12 +187,12 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
                 return null;
             }
 
-            var shopSell = mt5SellPrice - 0.80m;
+            var shopSell = mt5SellPrice - ShopSpread;
             var credit = ToAed(shopSell, position.Grams);
             var netProfit = credit - position.DebitAed;
 
             account.ApplySell(credit, position.Grams);
-            position.Close(mt5Time);
+            position.Close(mt5Time, mt5SellPrice, shopSell, credit, netProfit, closedSession);
             db.SaveChanges();
 
             var ksaTime = mt5Time.AddMinutes(50);
