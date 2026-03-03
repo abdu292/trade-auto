@@ -260,19 +260,23 @@ private:
         MqlDateTime dt;
         TimeToStruct(utcNow, dt);
 
-        // Convert UTC to KSA (UTC+3) and map to operating sessions:
-        // Japan: 02:00-05:59, India: 06:00-11:29, London: 11:30-15:29, New York: 15:30-01:59
+        // Convert UTC to KSA (UTC+3) and map to operating sessions per PRD:
+        // JAPAN: 03:00-12:00, INDIA: 07:00-16:00, LONDON: 10:00-19:00, NY: 15:00-00:00
+        // Overlap precedence: NY > LONDON > INDIA > JAPAN
         int ksaMinutes = dt.hour * 60 + dt.min + 180;
         while (ksaMinutes >= 1440)
             ksaMinutes -= 1440;
 
-        if (ksaMinutes >= 120 && ksaMinutes < 360)
-            return "JAPAN";
-        if (ksaMinutes >= 360 && ksaMinutes < 690)
-            return "INDIA";
-        if (ksaMinutes >= 690 && ksaMinutes < 930)
+        if (ksaMinutes >= 900 && ksaMinutes < 1440)
+            return "NY";
+        if (ksaMinutes >= 600 && ksaMinutes < 1140)
             return "LONDON";
-        return "NEW_YORK";
+        if (ksaMinutes >= 420 && ksaMinutes < 960)
+            return "INDIA";
+        if (ksaMinutes >= 180 && ksaMinutes < 720)
+            return "JAPAN";
+
+        return "OFFHOURS";
     }
 
     double GetAdr(string symbol)
@@ -750,11 +754,34 @@ public:
         double sessionLowLondon = 0.0;
         double sessionHighNy = 0.0;
         double sessionLowNy = 0.0;
+        double previousSessionHigh = 0.0;
+        double previousSessionLow = 0.0;
         GetHighLow(symbol, PERIOD_M15, 48, 32, sessionHighJapan, sessionLowJapan);
         GetHighLow(symbol, PERIOD_M15, 32, 16, sessionHighIndia, sessionLowIndia);
         GetHighLow(symbol, PERIOD_M15, 16, 16, sessionHighLondon, sessionLowLondon);
         GetHighLow(symbol, PERIOD_M15, 0, 16, sessionHighNy, sessionLowNy);
         datetime utcNow = TimeGMT();
+        string currentSession = DetermineSession(utcNow);
+        if (currentSession == "JAPAN")
+        {
+            previousSessionHigh = sessionHighNy;
+            previousSessionLow = sessionLowNy;
+        }
+        else if (currentSession == "INDIA")
+        {
+            previousSessionHigh = sessionHighJapan;
+            previousSessionLow = sessionLowJapan;
+        }
+        else if (currentSession == "LONDON")
+        {
+            previousSessionHigh = sessionHighIndia;
+            previousSessionLow = sessionLowIndia;
+        }
+        else
+        {
+            previousSessionHigh = sessionHighLondon;
+            previousSessionLow = sessionLowLondon;
+        }
         datetime mt5ServerNow = TimeCurrent();
         MqlDateTime mt5Struct;
         TimeToStruct(mt5ServerNow, mt5Struct);
@@ -911,7 +938,9 @@ public:
         payload += StringFormat("\"sessionLowLondon\":%.5f,", sessionLowLondon);
         payload += StringFormat("\"sessionHighNy\":%.5f,", sessionHighNy);
         payload += StringFormat("\"sessionLowNy\":%.5f,", sessionLowNy);
-        payload += "\"session\":\"" + DetermineSession(utcNow) + "\",";
+        payload += StringFormat("\"previousSessionHigh\":%.5f,", previousSessionHigh);
+        payload += StringFormat("\"previousSessionLow\":%.5f,", previousSessionLow);
+        payload += "\"session\":\"" + currentSession + "\",";
         payload += "\"timestamp\":\"" + ToIsoUtc(utcNow) + "\",";
         payload += StringFormat("\"volatilityExpansion\":%.5f,", volatilityExpansion);
         payload += "\"mt5ServerTime\":\"" + ToIsoUtc(mt5ServerNow) + "\",";

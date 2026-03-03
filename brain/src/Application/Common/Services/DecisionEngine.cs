@@ -91,7 +91,9 @@ public static class DecisionEngine
             return NoTrade("Alignment below threshold.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
         }
 
-        var primaryClose = snapshot.TimeframeData
+        var primaryClose = snapshot.AuthoritativeRate > 0m
+            ? snapshot.AuthoritativeRate
+            : snapshot.TimeframeData
             .FirstOrDefault(tf => string.Equals(tf.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.Close
             ?? snapshot.TimeframeData.First().Close;
 
@@ -224,7 +226,9 @@ public static class DecisionEngine
                 railPermissionB: "BLOCKED");
         }
 
-        var primaryClose = snapshot.TimeframeData
+        var primaryClose = snapshot.AuthoritativeRate > 0m
+            ? snapshot.AuthoritativeRate
+            : snapshot.TimeframeData
             .FirstOrDefault(tf => string.Equals(tf.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.Close
             ?? snapshot.TimeframeData.First().Close;
 

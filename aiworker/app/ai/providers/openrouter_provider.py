@@ -94,7 +94,7 @@ DO NOT add any explanation outside the JSON."""
                 ],
             )
 
-            response_text = response.choices[0].message.content
+            response_text = self._extract_response_text(response)
             logger.info("OpenRouter response: %s", response_text)
             return await self.validate_response(response_text)
         except APIError as ex:
@@ -104,8 +104,39 @@ DO NOT add any explanation outside the JSON."""
             logger.error("OpenRouter provider error: %s", str(ex))
             return None
 
-    async def validate_response(self, response: str) -> Optional[TradeSignal]:
+    def _extract_response_text(self, response) -> str:
+        choices = getattr(response, "choices", None)
+        if not choices:
+            return ""
+
+        first_choice = choices[0]
+        message = getattr(first_choice, "message", None)
+        if message is None:
+            return ""
+
+        content = getattr(message, "content", None)
+        if isinstance(content, str):
+            return content
+
+        if isinstance(content, list):
+            text_parts: list[str] = []
+            for part in content:
+                if isinstance(part, dict):
+                    text = part.get("text") or part.get("content")
+                else:
+                    text = getattr(part, "text", None) or getattr(part, "content", None)
+                if isinstance(text, str) and text.strip():
+                    text_parts.append(text)
+            return "\n".join(text_parts)
+
+        return ""
+
+    async def validate_response(self, response: Optional[str]) -> Optional[TradeSignal]:
         try:
+            if not isinstance(response, str) or not response.strip():
+                logger.warning("OpenRouter returned empty or non-text content")
+                return None
+
             json_start = response.find("{")
             json_end = response.rfind("}") + 1
 

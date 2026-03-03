@@ -51,6 +51,8 @@ class MarketSnapshot(BaseModel):
     sessionLowLondon: float = 0.0
     sessionHighNy: float = 0.0
     sessionLowNy: float = 0.0
+    previousSessionHigh: float = 0.0
+    previousSessionLow: float = 0.0
     ema50H1: float = 0.0
     ema200H1: float = 0.0
     adrUsedPct: float = 0.0
@@ -60,6 +62,11 @@ class MarketSnapshot(BaseModel):
     dayOfWeek: str | None = None
     mt5ServerTime: datetime | None = None
     ksaTime: datetime | None = None
+    uaeTime: datetime | None = None
+    indiaTime: datetime | None = None
+    internalClockUtc: datetime | None = None
+    utcReferenceTime: datetime | None = None
+    timeSkewMs: float = 0.0
     mt5ToKsaOffsetMinutes: int = 50
     telegramImpactTag: str = "LOW"
     tradingViewConfirmation: str = "NEUTRAL"
@@ -103,6 +110,10 @@ class MarketSnapshot(BaseModel):
     freezeGapDetected: bool = False
     slippageEstimatePoints: float = 0.0
     sessionVwap: float = 0.0
+    systemFetchedGoldRate: float = 0.0
+    rateDeltaUsd: float = 0.0
+    rateAuthority: str = "MT5"
+    authoritativeRate: float = 0.0
     # Compression and order/account snapshots (PRD)
     compressionRangesM15: list[float] = Field(default_factory=list)
     pendingOrders: list[dict[str, Any]] = Field(default_factory=list)

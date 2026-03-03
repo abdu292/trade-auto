@@ -5,6 +5,7 @@ using Brain.Domain.Entities;
 using Brain.Web.Filters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Globalization;
 using System.Text.Json;
 
 namespace Brain.Web.Endpoints;
@@ -77,12 +78,56 @@ public static class Mt5Endpoints
 
         mt5Group.MapPost(
             "/market-snapshot",
-            (Mt5MarketSnapshotRequest request, ILatestMarketSnapshotStore snapshotStore, ILogger<object> logger) =>
+            async Task<IResult> (
+                Mt5MarketSnapshotRequest request,
+                ILatestMarketSnapshotStore snapshotStore,
+                ILogger<object> logger,
+                IHttpClientFactory httpClientFactory,
+                CancellationToken cancellationToken) =>
             {
-                var mt5ServerTime = request.Mt5ServerTime ?? request.Timestamp;
-                var ksaTime = mt5ServerTime.AddMinutes(request.Mt5ToKsaOffsetMinutes ?? 50);
+                var internalClockUtc = DateTimeOffset.UtcNow;
+                var utcReferenceTime = request.Timestamp;
+                var mt5ServerOffset = TimeSpan.FromMinutes(130); // MT5 server = UTC+2:10 per PRD relation (KSA-50m)
+                var expectedMt5FromUtc = utcReferenceTime.ToOffset(mt5ServerOffset);
+                var rawMt5ServerTime = request.Mt5ServerTime ?? expectedMt5FromUtc;
+                var mt5ServerTime = rawMt5ServerTime.Offset == mt5ServerOffset
+                    ? rawMt5ServerTime
+                    : rawMt5ServerTime.ToOffset(mt5ServerOffset);
+                var timeSkewMs = Math.Abs((decimal)(mt5ServerTime - expectedMt5FromUtc).TotalMilliseconds);
+
+                var mt5ToKsaOffsetMinutes = request.Mt5ToKsaOffsetMinutes ?? 50;
+                var ksaTime = mt5ServerTime.AddMinutes(mt5ToKsaOffsetMinutes).ToOffset(TimeSpan.FromHours(3));
+                var uaeTime = ksaTime.ToOffset(TimeSpan.FromHours(4));
+                var indiaTime = ksaTime.ToOffset(TimeSpan.FromMinutes(330));
                 var volatilityExpansion = request.VolatilityExpansion ?? (request.Adr <= 0 ? 0 : request.Atr / request.Adr);
                 var (resolvedSession, resolvedPhase) = TradingSessionClock.Resolve(ksaTime);
+
+                var mt5Mid = request.Bid.HasValue && request.Ask.HasValue
+                    ? (request.Bid.Value + request.Ask.Value) / 2m
+                    : (request.TimeframeData.FirstOrDefault(x => string.Equals(x.Timeframe, "M15", StringComparison.OrdinalIgnoreCase))?.Close
+                        ?? request.TimeframeData.FirstOrDefault()?.Close
+                        ?? 0m);
+
+                var systemFetchedGoldRate = await TryFetchSystemGoldRateAsync(httpClientFactory, cancellationToken);
+                var rateDeltaUsd = (systemFetchedGoldRate.HasValue && mt5Mid > 0m)
+                    ? Math.Abs(systemFetchedGoldRate.Value - mt5Mid)
+                    : 0m;
+                var rateAuthority = "MT5_FALLBACK";
+                var authoritativeRate = mt5Mid;
+
+                if (systemFetchedGoldRate.HasValue)
+                {
+                    if (rateDeltaUsd > 10m && mt5Mid > 0m)
+                    {
+                        rateAuthority = "MT5_REFERENCE";
+                        authoritativeRate = mt5Mid;
+                    }
+                    else
+                    {
+                        rateAuthority = "SYSTEM_FETCHED";
+                        authoritativeRate = systemFetchedGoldRate.Value;
+                    }
+                }
 
                 var timeframeData = request.TimeframeData.Select(tf =>
                     new TimeframeDataContract(
@@ -158,6 +203,8 @@ public static class Mt5Endpoints
                     SessionLowLondon: request.SessionLowLondon ?? 0m,
                     SessionHighNy: request.SessionHighNy ?? 0m,
                     SessionLowNy: request.SessionLowNy ?? 0m,
+                    PreviousSessionHigh: request.PreviousSessionHigh ?? 0m,
+                    PreviousSessionLow: request.PreviousSessionLow ?? 0m,
                     Ema50H1: request.Ema50H1 ?? 0m,
                     Ema200H1: request.Ema200H1 ?? 0m,
                     AdrUsedPct: request.AdrUsedPct ?? 0m,
@@ -167,7 +214,12 @@ public static class Mt5Endpoints
                     DayOfWeek: mt5ServerTime.DayOfWeek,
                     Mt5ServerTime: mt5ServerTime,
                     KsaTime: ksaTime,
-                    Mt5ToKsaOffsetMinutes: request.Mt5ToKsaOffsetMinutes ?? 50,
+                    UaeTime: uaeTime,
+                    IndiaTime: indiaTime,
+                    InternalClockUtc: internalClockUtc,
+                    UtcReferenceTime: utcReferenceTime,
+                    TimeSkewMs: timeSkewMs,
+                    Mt5ToKsaOffsetMinutes: mt5ToKsaOffsetMinutes,
                     TelegramImpactTag: NormalizeImpactTag(request.TelegramImpactTag),
                     TradingViewConfirmation: NormalizeConfirmationTag(request.TradingViewConfirmation),
                     IsCompression: request.IsCompression ?? false,
@@ -207,6 +259,10 @@ public static class Mt5Endpoints
                     FreezeGapDetected: request.FreezeGapDetected ?? false,
                     SlippageEstimatePoints: request.SlippageEstimatePoints ?? 0m,
                     SessionVwap: request.SessionVwap ?? 0m,
+                    SystemFetchedGoldRate: systemFetchedGoldRate ?? 0m,
+                    RateDeltaUsd: rateDeltaUsd,
+                    RateAuthority: rateAuthority,
+                    AuthoritativeRate: authoritativeRate,
                     CompressionRangesM15: (request.CompressionRangesM15 ?? Array.Empty<decimal>()).ToArray(),
                     PendingOrders: pendingOrders,
                     OpenPositions: openPositions,
@@ -215,7 +271,7 @@ public static class Mt5Endpoints
                 snapshotStore.Upsert(snapshot);
                 var tickTelemetry = snapshotStore.GetTickTelemetry(1);
                 logger.LogInformation(
-                    "→ POST /mt5/market-snapshot stored {Symbol} snapshot #{TickCount} ({TimeframeCount} TFs, session={Session}/{Phase}, regimeVol={VolatilityExpansion:0.00}, spread={Spread:0.000}, lagMs={LagMs:0}, mt5={Mt5Time}, ksa={KsaTime})",
+                    "→ POST /mt5/market-snapshot stored {Symbol} snapshot #{TickCount} ({TimeframeCount} TFs, session={Session}/{Phase}, regimeVol={VolatilityExpansion:0.00}, spread={Spread:0.000}, lagMs={LagMs:0}, mt5={Mt5Time}, ksa={KsaTime}, india={IndiaTime}, authority={RateAuthority}, rateDelta={RateDelta:0.00}, timeSkewMs={TimeSkew:0})",
                     snapshot.Symbol,
                     tickTelemetry.TotalIngested,
                     timeframeData.Length,
@@ -225,7 +281,11 @@ public static class Mt5Endpoints
                     snapshot.Spread,
                     tickTelemetry.LastIngestionLatencyMs,
                     mt5ServerTime,
-                    ksaTime);
+                    ksaTime,
+                    indiaTime,
+                    rateAuthority,
+                    rateDeltaUsd,
+                    timeSkewMs);
 
                 return TypedResults.Ok(new { received = true });
             })
@@ -418,6 +478,89 @@ public static class Mt5Endpoints
         return app;
     }
 
+    private static async Task<decimal?> TryFetchSystemGoldRateAsync(IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
+    {
+        var client = httpClientFactory.CreateClient();
+        client.Timeout = TimeSpan.FromSeconds(4);
+
+        var stooq = await TryFetchStooqAsync(client, cancellationToken);
+        if (stooq.HasValue && stooq.Value > 0m)
+        {
+            return stooq.Value;
+        }
+
+        var goldApi = await TryFetchGoldApiAsync(client, cancellationToken);
+        if (goldApi.HasValue && goldApi.Value > 0m)
+        {
+            return goldApi.Value;
+        }
+
+        return null;
+    }
+
+    private static async Task<decimal?> TryFetchStooqAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await client.GetAsync("https://stooq.com/q/l/?s=xauusd&i=1", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            var lines = body.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length < 2)
+            {
+                return null;
+            }
+
+            var values = lines[1].Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (values.Length < 7)
+            {
+                return null;
+            }
+
+            if (decimal.TryParse(values[6], NumberStyles.Any, CultureInfo.InvariantCulture, out var close) && close > 0m)
+            {
+                return close;
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    private static async Task<decimal?> TryFetchGoldApiAsync(HttpClient client, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await client.GetAsync("https://api.gold-api.com/price/XAU", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+            if (document.RootElement.TryGetProperty("price", out var priceProp)
+                && priceProp.ValueKind == JsonValueKind.Number
+                && priceProp.TryGetDecimal(out var price)
+                && price > 0m)
+            {
+                return price;
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
     private static string NormalizeImpactTag(string? value)
     {
         var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
@@ -510,6 +653,8 @@ public sealed record Mt5MarketSnapshotRequest(
     decimal? SessionLowLondon,
     decimal? SessionHighNy,
     decimal? SessionLowNy,
+    decimal? PreviousSessionHigh,
+    decimal? PreviousSessionLow,
     decimal? Ema50H1,
     decimal? Ema200H1,
     decimal? AdrUsedPct,

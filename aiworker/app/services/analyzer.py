@@ -61,9 +61,11 @@ class AnalyzerService:
         if volatility_expansion is None:
             volatility_expansion = (snapshot.atr / snapshot.adr) if snapshot.adr > 0 else 0.0
 
+        authoritative_rate = snapshot.authoritativeRate if snapshot.authoritativeRate > 0 else primary_tf.close
+
         market_context = {
             "symbol": snapshot.symbol,
-            "current_price": primary_tf.close,
+            "current_price": authoritative_rate,
             "open": primary_tf.open,
             "high": primary_tf.high,
             "low": primary_tf.low,
@@ -95,6 +97,8 @@ class AnalyzerService:
             "session_low_london": snapshot.sessionLowLondon,
             "session_high_ny": snapshot.sessionHighNy,
             "session_low_ny": snapshot.sessionLowNy,
+            "previous_session_high": snapshot.previousSessionHigh,
+            "previous_session_low": snapshot.previousSessionLow,
             "ema50_h1": snapshot.ema50H1,
             "ema200_h1": snapshot.ema200H1,
             "adr_used_pct": snapshot.adrUsedPct,
@@ -143,6 +147,17 @@ class AnalyzerService:
             "panic_suspected": snapshot.panicSuspected,
             "tv_alert_type": snapshot.tvAlertType,
             "session_phase": snapshot.sessionPhase,
+            "mt5_server_time": snapshot.mt5ServerTime.isoformat() if snapshot.mt5ServerTime else None,
+            "ksa_time": snapshot.ksaTime.isoformat() if snapshot.ksaTime else None,
+            "uae_time": snapshot.uaeTime.isoformat() if snapshot.uaeTime else None,
+            "india_time": snapshot.indiaTime.isoformat() if snapshot.indiaTime else None,
+            "internal_clock_utc": snapshot.internalClockUtc.isoformat() if snapshot.internalClockUtc else None,
+            "utc_reference_time": snapshot.utcReferenceTime.isoformat() if snapshot.utcReferenceTime else None,
+            "time_skew_ms": snapshot.timeSkewMs,
+            "system_fetched_gold_rate": snapshot.systemFetchedGoldRate,
+            "rate_delta_usd": snapshot.rateDeltaUsd,
+            "rate_authority": snapshot.rateAuthority,
+            "authoritative_rate": authoritative_rate,
         }
 
         try:
