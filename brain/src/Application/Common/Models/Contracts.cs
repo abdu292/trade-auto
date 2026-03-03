@@ -204,7 +204,15 @@ public sealed record LedgerStateContract(
     decimal GoldGrams,
     decimal OpenExposurePercent,
     decimal DeployableCashAed,
-    int OpenBuyCount);
+    int OpenBuyCount,
+    decimal GoldAedEquivalent = 0m,
+    decimal NetEquityAed = 0m,
+    decimal PurchasePowerAed = 0m,
+    decimal DeployedAed = 0m,
+    decimal OpenPositionsAed = 0m,
+    decimal PendingReservedAed = 0m,
+    decimal StartingInvestmentAed = 0m,
+    decimal EquityMultiple = 0m);
 
 public sealed record TradeSlipContract(
     string SlipType,

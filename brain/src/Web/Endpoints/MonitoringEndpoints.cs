@@ -619,6 +619,102 @@ public static class MonitoringEndpoints
             .WithName("RunReplayHarness")
             .WithDescription("Runs a deterministic replay batch against DecisionEngine and returns gating outcome metrics.");
 
+        monitoring.MapGet(
+            "/kpi",
+            async Task<IResult> (IApplicationDbContext db, ILatestMarketSnapshotStore snapshotStore, ITradeLedgerService ledger, CancellationToken cancellationToken) =>
+            {
+                var nowUtc = DateTimeOffset.UtcNow;
+                var ksaNow = nowUtc.AddHours(3);
+                var ksaDayStart = new DateTimeOffset(ksaNow.Year, ksaNow.Month, ksaNow.Day, 0, 0, 0, TimeSpan.FromHours(3));
+                var ksaDayStartUtc = ksaDayStart.ToUniversalTime();
+
+                // KSA week: Mon-Sun
+                var dow = (int)ksaNow.DayOfWeek; // 0=Sun
+                var daysToMon = dow == 0 ? 6 : dow - 1;
+                var ksaWeekStartUtc = ksaDayStartUtc.AddDays(-daysToMon);
+
+                var closedPositions = await db.LedgerPositions
+                    .AsNoTracking()
+                    .Where(x => x.IsClosed)
+                    .ToListAsync(cancellationToken);
+
+                var openPositions = await db.LedgerPositions
+                    .AsNoTracking()
+                    .Where(x => !x.IsClosed)
+                    .ToListAsync(cancellationToken);
+
+                var todayClosed = closedPositions.Where(x => x.ClosedAtUtc >= ksaDayStartUtc).ToList();
+                var todayProfitAed = todayClosed.Sum(x => x.NetProfitAed);
+                var todayRotations = todayClosed.Count;
+                var todayAvgProfit = todayRotations > 0 ? todayProfitAed / todayRotations : 0m;
+                var openBuyCount = openPositions.Count;
+                var todayHitRate = (double)todayRotations / Math.Max(1, openBuyCount + todayRotations);
+
+                var weeklyClosed = closedPositions.Where(x => x.ClosedAtUtc >= ksaWeekStartUtc).ToList();
+                var weeklyProfitAed = weeklyClosed.Sum(x => x.NetProfitAed);
+                var weeklyRotations = weeklyClosed.Count;
+
+                // Sessions have overlapping KSA time ranges per spec; first match wins (JAPAN > INDIA > LONDON > NY).
+                static string ClassifySession(DateTimeOffset? closedUtc, string stored)
+                {
+                    if (!string.IsNullOrEmpty(stored)) return stored;
+                    if (closedUtc is null) return "UNKNOWN";
+                    var ksaHour = closedUtc.Value.ToOffset(TimeSpan.FromHours(3)).Hour;
+                    if (ksaHour >= 3 && ksaHour < 7) return "JAPAN";
+                    if (ksaHour >= 7 && ksaHour < 10) return "INDIA";
+                    if (ksaHour >= 10 && ksaHour < 15) return "LONDON";
+                    if (ksaHour >= 15 || ksaHour < 3) return "NY";
+                    return "JAPAN";
+                }
+
+                var sessions = new[] { "JAPAN", "INDIA", "LONDON", "NY" };
+                var sessionStats = sessions.ToDictionary(s => s, s =>
+                {
+                    var sp = todayClosed.Where(x => ClassifySession(x.ClosedAtUtc, x.ClosedSession) == s).ToList();
+                    return new { profitAed = decimal.Round(sp.Sum(x => x.NetProfitAed), 2), rotations = sp.Count };
+                });
+
+                snapshotStore.TryGet(out var snapshot);
+                var currentBid = snapshot?.Bid ?? 0m;
+                var extState = ledger.GetExtendedState(currentBid);
+
+                var account = await db.LedgerAccounts
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(cancellationToken);
+                var startingInvestment = extState.StartingInvestmentAed > 0m
+                    ? extState.StartingInvestmentAed
+                    : (account?.InitialCashAed ?? 100000m);
+                var currentEquityAed = extState.NetEquityAed > 0m ? extState.NetEquityAed : extState.CashAed;
+                var multiple = startingInvestment > 0m ? decimal.Round(currentEquityAed / startingInvestment, 4) : 0m;
+                var milestoneReached = multiple >= 4.0m;
+                var neededForFourX = Math.Max(0m, startingInvestment * 4m - currentEquityAed);
+
+                return TypedResults.Ok(new
+                {
+                    todayKsaDate = ksaNow.ToString("yyyy-MM-dd"),
+                    todayProfitAed = decimal.Round(todayProfitAed, 2),
+                    todayRotations,
+                    todayAvgProfitAed = decimal.Round(todayAvgProfit, 2),
+                    todayHitRate = Math.Round(todayHitRate, 4),
+                    sessionStats,
+                    weeklyProfitAed = decimal.Round(weeklyProfitAed, 2),
+                    weeklyRotations,
+                    compounding = new
+                    {
+                        startingInvestmentAed = decimal.Round(startingInvestment, 2),
+                        currentEquityAed = decimal.Round(currentEquityAed, 2),
+                        multiple,
+                        milestoneReached,
+                        neededForFourXAed = decimal.Round(neededForFourX, 2),
+                    },
+                    openPositionsCount = openPositions.Count,
+                    openBuyCount,
+                    studyLockActive = false,
+                });
+            })
+            .WithName("GetKpi")
+            .WithDescription("Returns today/weekly KPI metrics, session stats, and compounding data.");
+
         return group;
     }
 }

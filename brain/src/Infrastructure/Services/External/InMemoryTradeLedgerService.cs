@@ -32,6 +32,8 @@ public sealed class InMemoryTradeLedgerService : ITradeLedgerService
         }
     }
 
+    public LedgerStateContract GetExtendedState(decimal currentBidPrice) => GetState();
+
     public bool CanScaleIn(decimal currentPrice, RegimeClassificationContract regime, decimal minSpacingPercent, decimal exposureCapPercent)
     {
         lock (_gate)
@@ -63,7 +65,7 @@ public sealed class InMemoryTradeLedgerService : ITradeLedgerService
         }
     }
 
-    public TradeSlipContract ApplyBuyFill(Guid tradeId, decimal grams, decimal mt5BuyPrice, DateTimeOffset mt5Time)
+    public TradeSlipContract ApplyBuyFill(Guid tradeId, decimal grams, decimal mt5BuyPrice, DateTimeOffset mt5Time, string openedSession = "")
     {
         lock (_gate)
         {
