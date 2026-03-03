@@ -7,7 +7,7 @@
 
 input string BrainBaseUrl = "http://127.0.0.1:5000";
 input string BrainApiKey = "dev-local-change-me";
-input int SnapshotPushSeconds = 5;
+input int SnapshotPushSeconds = 30;
 input int PollTradeSeconds = 2;
 
 ApiClient g_api;
@@ -108,10 +108,28 @@ void OnTick()
 
     static datetime lastSnapshotPush = 0;
     static datetime lastTradePoll = 0;
+    static datetime lastM5Bar = 0;
+    static datetime lastM15Bar = 0;
+    static datetime lastH1Bar = 0;
 
     datetime now = TimeCurrent();
+    datetime currentM5Bar = iTime(_Symbol, PERIOD_M5, 0);
+    datetime currentM15Bar = iTime(_Symbol, PERIOD_M15, 0);
+    datetime currentH1Bar = iTime(_Symbol, PERIOD_H1, 0);
 
-    if (now - lastSnapshotPush >= SnapshotPushSeconds)
+    bool candleAlignedPush = false;
+    if (lastM5Bar > 0 && currentM5Bar != lastM5Bar)
+        candleAlignedPush = true;
+    if (lastM15Bar > 0 && currentM15Bar != lastM15Bar)
+        candleAlignedPush = true;
+    if (lastH1Bar > 0 && currentH1Bar != lastH1Bar)
+        candleAlignedPush = true;
+
+    lastM5Bar = currentM5Bar;
+    lastM15Bar = currentM15Bar;
+    lastH1Bar = currentH1Bar;
+
+    if ((now - lastSnapshotPush >= SnapshotPushSeconds) || candleAlignedPush)
     {
         g_api.PostMarketSnapshot(_Symbol);
         lastSnapshotPush = now;

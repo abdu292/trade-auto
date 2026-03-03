@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from pydantic import BaseModel, Field
 
 
@@ -9,6 +10,16 @@ class TimeframeData(BaseModel):
     low: float
     close: float
     volume: int = 0
+    candleStartTime: datetime | None = None
+    candleCloseTime: datetime | None = None
+    candleBodySize: float = 0.0
+    upperWickSize: float = 0.0
+    lowerWickSize: float = 0.0
+    candleRange: float = 0.0
+    ma20Value: float = 0.0
+    ma20Distance: float = 0.0
+    rsi: float = 0.0
+    atr: float = 0.0
 
 
 class MarketSnapshot(BaseModel):
@@ -87,6 +98,16 @@ class MarketSnapshot(BaseModel):
     freeMargin: float = 0.0
     equity: float = 0.0
     balance: float = 0.0
+    # Tick/market quality (PRD)
+    tickRatePer30s: float = 0.0
+    freezeGapDetected: bool = False
+    slippageEstimatePoints: float = 0.0
+    sessionVwap: float = 0.0
+    # Compression and order/account snapshots (PRD)
+    compressionRangesM15: list[float] = Field(default_factory=list)
+    pendingOrders: list[dict[str, Any]] = Field(default_factory=list)
+    openPositions: list[dict[str, Any]] = Field(default_factory=list)
+    orderExecutionEvents: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class PostTradeAnalysisRequest(BaseModel):

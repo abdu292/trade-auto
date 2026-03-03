@@ -47,7 +47,18 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                     open = tf.Open,
                     high = tf.High,
                     low = tf.Low,
-                    close = tf.Close
+                    close = tf.Close,
+                    volume = tf.Volume,
+                    candleStartTime = tf.CandleStartTime,
+                    candleCloseTime = tf.CandleCloseTime,
+                    candleBodySize = tf.CandleBodySize,
+                    upperWickSize = tf.UpperWickSize,
+                    lowerWickSize = tf.LowerWickSize,
+                    candleRange = tf.CandleRange,
+                    ma20Value = tf.Ma20Value,
+                    ma20Distance = tf.Ma20Distance,
+                    rsi = tf.Rsi,
+                    atr = tf.Atr,
                 }),
                 atr = snapshot.Atr,
                 adr = snapshot.Adr,
@@ -111,6 +122,37 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 telegramState = snapshot.TelegramState,
                 panicSuspected = snapshot.PanicSuspected,
                 tvAlertType = snapshot.TvAlertType,
+                tickRatePer30s = snapshot.TickRatePer30s,
+                freezeGapDetected = snapshot.FreezeGapDetected,
+                slippageEstimatePoints = snapshot.SlippageEstimatePoints,
+                sessionVwap = snapshot.SessionVwap,
+                compressionRangesM15 = snapshot.CompressionRangesM15 ?? [],
+                freeMargin = snapshot.FreeMargin,
+                equity = snapshot.Equity,
+                balance = snapshot.Balance,
+                pendingOrders = (snapshot.PendingOrders ?? []).Select(item => new
+                {
+                    type = item.Type,
+                    price = item.Price,
+                    tp = item.Tp,
+                    expiry = item.Expiry,
+                    volumeGramsEquivalent = item.VolumeGramsEquivalent,
+                }),
+                openPositions = (snapshot.OpenPositions ?? []).Select(item => new
+                {
+                    entryPrice = item.EntryPrice,
+                    currentPnlPoints = item.CurrentPnlPoints,
+                    tp = item.Tp,
+                    volumeGramsEquivalent = item.VolumeGramsEquivalent,
+                }),
+                orderExecutionEvents = (snapshot.OrderExecutionEvents ?? []).Select(item => new
+                {
+                    status = item.Status,
+                    timestamp = item.Timestamp,
+                    price = item.Price,
+                    volumeGramsEquivalent = item.VolumeGramsEquivalent,
+                    ticket = item.Ticket,
+                }),
             };
 
             var jsonContent = new StringContent(

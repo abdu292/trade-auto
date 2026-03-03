@@ -1,6 +1,22 @@
 namespace Brain.Application.Common.Models;
 
-public sealed record TimeframeDataContract(string Timeframe, decimal Open, decimal High, decimal Low, decimal Close, long Volume = 0L);
+public sealed record TimeframeDataContract(
+    string Timeframe,
+    decimal Open,
+    decimal High,
+    decimal Low,
+    decimal Close,
+    long Volume = 0L,
+    DateTimeOffset? CandleStartTime = null,
+    DateTimeOffset? CandleCloseTime = null,
+    decimal CandleBodySize = 0m,
+    decimal UpperWickSize = 0m,
+    decimal LowerWickSize = 0m,
+    decimal CandleRange = 0m,
+    decimal Ma20Value = 0m,
+    decimal Ma20Distance = 0m,
+    decimal Rsi = 0m,
+    decimal Atr = 0m);
 
 public sealed record MarketSnapshotContract(
     string Symbol,
@@ -77,7 +93,38 @@ public sealed record MarketSnapshotContract(
     // Account state for exposure cap enforcement (spec_v5.md A1)
     decimal FreeMargin = 0m,
     decimal Equity = 0m,
-    decimal Balance = 0m);
+    decimal Balance = 0m,
+    // Tick/market quality (PRD)
+    decimal TickRatePer30s = 0m,
+    bool FreezeGapDetected = false,
+    decimal SlippageEstimatePoints = 0m,
+    decimal SessionVwap = 0m,
+    // Compression metric support (PRD)
+    IReadOnlyCollection<decimal>? CompressionRangesM15 = null,
+    // Pending/open/execution snapshots (PRD)
+    IReadOnlyCollection<PendingOrderSnapshotContract>? PendingOrders = null,
+    IReadOnlyCollection<OpenPositionSnapshotContract>? OpenPositions = null,
+    IReadOnlyCollection<OrderExecutionEventContract>? OrderExecutionEvents = null);
+    
+public sealed record PendingOrderSnapshotContract(
+    string Type,
+    decimal Price,
+    decimal Tp,
+    DateTimeOffset? Expiry,
+    decimal VolumeGramsEquivalent = 0m);
+
+public sealed record OpenPositionSnapshotContract(
+    decimal EntryPrice,
+    decimal CurrentPnlPoints,
+    decimal Tp,
+    decimal VolumeGramsEquivalent = 0m);
+
+public sealed record OrderExecutionEventContract(
+    string Status,
+    DateTimeOffset Timestamp,
+    decimal Price = 0m,
+    decimal VolumeGramsEquivalent = 0m,
+    ulong Ticket = 0UL);
 
 public sealed record TradeSignalContract(
     string Rail,

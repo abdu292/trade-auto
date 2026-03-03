@@ -2,7 +2,7 @@ import json
 import logging
 from typing import Optional
 import httpx
-from app.ai.providers.base_provider import AIProvider, TradeSignal, AIProviderConfig
+from app.ai.providers.base_provider import AIProvider, TradeSignal, AIProviderConfig, dump_market_context
 
 logger = logging.getLogger(__name__)
 
@@ -12,9 +12,13 @@ class GeminiProvider(AIProvider):
 
     async def analyze(self, market_context: dict) -> Optional[TradeSignal]:
         try:
+            system_prompt = self._build_system_prompt()
+            extra_system_prompt = market_context.get("_extra_system_prompt")
+            if isinstance(extra_system_prompt, str) and extra_system_prompt.strip():
+                system_prompt = f"{system_prompt}\n\n{extra_system_prompt.strip()}"
             prompt = (
-                f"{self._build_system_prompt()}\n\n"
-                f"Analyze this forex market and respond JSON only:\n{json.dumps(market_context)}"
+                f"{system_prompt}\n\n"
+                f"Analyze this forex market and respond JSON only:\n{dump_market_context(market_context)}"
             )
 
             url = (

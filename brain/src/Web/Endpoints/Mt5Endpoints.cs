@@ -85,7 +85,49 @@ public static class Mt5Endpoints
                 var (resolvedSession, resolvedPhase) = TradingSessionClock.Resolve(ksaTime);
 
                 var timeframeData = request.TimeframeData.Select(tf =>
-                    new TimeframeDataContract(tf.Timeframe, tf.Open, tf.High, tf.Low, tf.Close, tf.Volume)).ToArray();
+                    new TimeframeDataContract(
+                        Timeframe: tf.Timeframe,
+                        Open: tf.Open,
+                        High: tf.High,
+                        Low: tf.Low,
+                        Close: tf.Close,
+                        Volume: tf.Volume,
+                        CandleStartTime: tf.CandleStartTime,
+                        CandleCloseTime: tf.CandleCloseTime,
+                        CandleBodySize: tf.CandleBodySize ?? 0m,
+                        UpperWickSize: tf.UpperWickSize ?? 0m,
+                        LowerWickSize: tf.LowerWickSize ?? 0m,
+                        CandleRange: tf.CandleRange ?? 0m,
+                        Ma20Value: tf.Ma20Value ?? 0m,
+                        Ma20Distance: tf.Ma20Distance ?? 0m,
+                        Rsi: tf.Rsi ?? 0m,
+                        Atr: tf.Atr ?? 0m)).ToArray();
+
+                var pendingOrders = (request.PendingOrders ?? Array.Empty<Mt5PendingOrderRequest>())
+                    .Select(item => new PendingOrderSnapshotContract(
+                        Type: item.Type,
+                        Price: item.Price,
+                        Tp: item.Tp,
+                        Expiry: item.Expiry,
+                        VolumeGramsEquivalent: item.VolumeGramsEquivalent ?? 0m))
+                    .ToArray();
+
+                var openPositions = (request.OpenPositions ?? Array.Empty<Mt5OpenPositionRequest>())
+                    .Select(item => new OpenPositionSnapshotContract(
+                        EntryPrice: item.EntryPrice,
+                        CurrentPnlPoints: item.CurrentPnlPoints,
+                        Tp: item.Tp,
+                        VolumeGramsEquivalent: item.VolumeGramsEquivalent ?? 0m))
+                    .ToArray();
+
+                var executionEvents = (request.OrderExecutionEvents ?? Array.Empty<Mt5OrderExecutionEventRequest>())
+                    .Select(item => new OrderExecutionEventContract(
+                        Status: item.Status,
+                        Timestamp: item.Timestamp,
+                        Price: item.Price ?? 0m,
+                        VolumeGramsEquivalent: item.VolumeGramsEquivalent ?? 0m,
+                        Ticket: item.Ticket ?? 0UL))
+                    .ToArray();
 
                 var snapshot = new MarketSnapshotContract(
                     Symbol: request.Symbol,
@@ -160,7 +202,15 @@ public static class Mt5Endpoints
                     SpreadMax5m: request.SpreadMax5m ?? 0m,
                     FreeMargin: request.FreeMargin ?? 0m,
                     Equity: request.Equity ?? 0m,
-                    Balance: request.Balance ?? 0m);
+                    Balance: request.Balance ?? 0m,
+                    TickRatePer30s: request.TickRatePer30s ?? 0m,
+                    FreezeGapDetected: request.FreezeGapDetected ?? false,
+                    SlippageEstimatePoints: request.SlippageEstimatePoints ?? 0m,
+                    SessionVwap: request.SessionVwap ?? 0m,
+                    CompressionRangesM15: (request.CompressionRangesM15 ?? Array.Empty<decimal>()).ToArray(),
+                    PendingOrders: pendingOrders,
+                    OpenPositions: openPositions,
+                    OrderExecutionEvents: executionEvents);
 
                 snapshotStore.Upsert(snapshot);
                 var tickTelemetry = snapshotStore.GetTickTelemetry(1);
@@ -300,6 +350,7 @@ public static class Mt5Endpoints
                             .OrderByDescending(x => x.ServerTimeUtc)
                             .Select(x => x.ChannelKey)
                             .Distinct()
+                            .OrderBy(x => x)
                             .Take(40)
                             .ToListAsync(cancellationToken);
 
@@ -493,7 +544,16 @@ public sealed record Mt5MarketSnapshotRequest(
     // Account state (spec_v5.md A1)
     decimal? FreeMargin,
     decimal? Equity,
-    decimal? Balance);
+    decimal? Balance,
+    // Tick/market quality (PRD)
+    decimal? TickRatePer30s,
+    bool? FreezeGapDetected,
+    decimal? SlippageEstimatePoints,
+    decimal? SessionVwap,
+    IReadOnlyCollection<decimal>? CompressionRangesM15,
+    IReadOnlyCollection<Mt5PendingOrderRequest>? PendingOrders,
+    IReadOnlyCollection<Mt5OpenPositionRequest>? OpenPositions,
+    IReadOnlyCollection<Mt5OrderExecutionEventRequest>? OrderExecutionEvents);
 
 public sealed record Mt5TimeframeDataRequest(
     string Timeframe,
@@ -501,4 +561,34 @@ public sealed record Mt5TimeframeDataRequest(
     decimal High,
     decimal Low,
     decimal Close,
-    long Volume = 0L);
+    long Volume = 0L,
+    DateTimeOffset? CandleStartTime = null,
+    DateTimeOffset? CandleCloseTime = null,
+    decimal? CandleBodySize = null,
+    decimal? UpperWickSize = null,
+    decimal? LowerWickSize = null,
+    decimal? CandleRange = null,
+    decimal? Ma20Value = null,
+    decimal? Ma20Distance = null,
+    decimal? Rsi = null,
+    decimal? Atr = null);
+
+public sealed record Mt5PendingOrderRequest(
+    string Type,
+    decimal Price,
+    decimal Tp,
+    DateTimeOffset? Expiry,
+    decimal? VolumeGramsEquivalent = null);
+
+public sealed record Mt5OpenPositionRequest(
+    decimal EntryPrice,
+    decimal CurrentPnlPoints,
+    decimal Tp,
+    decimal? VolumeGramsEquivalent = null);
+
+public sealed record Mt5OrderExecutionEventRequest(
+    string Status,
+    DateTimeOffset Timestamp,
+    decimal? Price = null,
+    decimal? VolumeGramsEquivalent = null,
+    ulong? Ticket = null);

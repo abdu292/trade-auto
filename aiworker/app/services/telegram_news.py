@@ -52,6 +52,7 @@ class TelegramNewsContext:
 class TelegramNewsService:
     def __init__(self) -> None:
         self._enabled = self._is_reader_enabled()
+        self._channel_suppressed_until: dict[str, datetime] = {}
 
     @property
     def enabled(self) -> bool:
@@ -136,7 +137,11 @@ class TelegramNewsService:
         since = datetime.now(timezone.utc) - timedelta(minutes=max(1, TELEGRAM_LOOKBACK_MINUTES))
         allowed_channels = {self._normalize_channel(value) for value in TELEGRAM_CHANNELS}
         max_channels = max(1, TELEGRAM_MAX_CHANNELS_PER_POLL)
-        channel_list = list(allowed_channels)[:max_channels]
+        channel_list = [
+            channel
+            for channel in list(allowed_channels)
+            if not self._is_channel_suppressed(channel)
+        ][:max_channels]
         per_channel_limit = max(5, min(TELEGRAM_MAX_UPDATES, 50))
         collected: list[dict[str, str]] = []
 
@@ -147,22 +152,55 @@ class TelegramNewsService:
                 )
                 return []
 
+            dialogs_by_channel_id: dict[str, Any] = {}
+            reachable_channel_ids: set[str] = set()
+            try:
+                dialogs = await asyncio.wait_for(
+                    client.get_dialogs(limit=max(100, max_channels * 5)),
+                    timeout=max(1.0, TELEGRAM_PER_CHANNEL_TIMEOUT_SECONDS * 2),
+                )
+                for dialog in dialogs:
+                    entity = getattr(dialog, "entity", None)
+                    if entity is None:
+                        continue
+                    entity_id = getattr(entity, "id", None)
+                    if isinstance(entity_id, int) and entity_id > 0:
+                        channel_id = f"-100{entity_id}"
+                        dialogs_by_channel_id[channel_id] = entity
+                        reachable_channel_ids.add(channel_id)
+            except Exception as ex:
+                logger.debug("Unable to pre-load Telegram dialogs for ID resolution: %s", ex)
+
             for channel in channel_list:
                 channel_ref = channel[1:] if channel.startswith("@") else channel
-                try:
-                    entity = await asyncio.wait_for(
-                        client.get_entity(channel_ref),
-                        timeout=max(0.5, TELEGRAM_PER_CHANNEL_TIMEOUT_SECONDS),
+
+                if channel.startswith("-100") and reachable_channel_ids and channel not in reachable_channel_ids:
+                    logger.warning(
+                        "Skipping Telegram channel %s: not found in authorized account dialogs (likely not joined).",
+                        channel,
                     )
+                    self._suppress_channel(channel, minutes=180)
+                    continue
+
+                try:
+                    entity = dialogs_by_channel_id.get(channel)
+                    if entity is None:
+                        entity = await asyncio.wait_for(
+                            client.get_entity(channel_ref),
+                            timeout=max(0.5, TELEGRAM_PER_CHANNEL_TIMEOUT_SECONDS),
+                        )
                     messages = await asyncio.wait_for(
                         client.get_messages(entity, limit=per_channel_limit),
                         timeout=max(0.5, TELEGRAM_PER_CHANNEL_TIMEOUT_SECONDS),
                     )
                 except asyncio.TimeoutError:
                     logger.warning("Timeout reading channel %s via Telegram client", channel)
+                    self._suppress_channel(channel, minutes=5)
                     continue
                 except Exception as ex:
                     logger.warning("Failed reading channel %s via Telegram client: %s", channel, ex)
+                    if "Cannot find any entity corresponding to" in str(ex):
+                        self._suppress_channel(channel, minutes=60)
                     continue
 
                 for message in messages:
@@ -399,9 +437,24 @@ class TelegramNewsService:
             return raw
         if raw.startswith("-100"):
             return raw
-        if raw.isdigit() or (raw.startswith("-") and raw[1:].isdigit()):
-            return raw
+        if raw.isdigit():
+            return f"-100{raw}" if len(raw) >= 9 else raw
+        if raw.startswith("-") and raw[1:].isdigit():
+            return f"-100{raw[1:]}" if len(raw) >= 10 else raw
         return f"@{raw}"
+
+    def _is_channel_suppressed(self, channel: str) -> bool:
+        until = self._channel_suppressed_until.get(channel)
+        if until is None:
+            return False
+        now = datetime.now(timezone.utc)
+        if now >= until:
+            self._channel_suppressed_until.pop(channel, None)
+            return False
+        return True
+
+    def _suppress_channel(self, channel: str, minutes: int) -> None:
+        self._channel_suppressed_until[channel] = datetime.now(timezone.utc) + timedelta(minutes=max(1, minutes))
 
     @staticmethod
     def _compact_whitespace(text: str) -> str:

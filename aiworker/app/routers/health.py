@@ -10,9 +10,6 @@ from app.ai.config import (
     TELEGRAM_API_HASH,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_LISTEN_CHANNELS,
-    EXTERNAL_NEWS_ENABLED,
-    EXTERNAL_NEWS_FEEDS,
-    EXTERNAL_NEWS_LOOKBACK_MINUTES,
 )
 
 
@@ -60,11 +57,5 @@ async def health() -> dict[str, object]:
             "clientConfigured": TELEGRAM_API_ID > 0 and bool(TELEGRAM_API_HASH),
             "channels": TELEGRAM_LISTEN_CHANNELS,
             "channelCount": len(TELEGRAM_LISTEN_CHANNELS),
-        },
-        "externalNews": {
-            "enabled": EXTERNAL_NEWS_ENABLED and len(EXTERNAL_NEWS_FEEDS) > 0,
-            "feedCount": len(EXTERNAL_NEWS_FEEDS),
-            "feeds": EXTERNAL_NEWS_FEEDS,
-            "lookbackMinutes": EXTERNAL_NEWS_LOOKBACK_MINUTES,
         },
     }

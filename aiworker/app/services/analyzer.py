@@ -1,6 +1,7 @@
 import logging
 import asyncio
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from app.ai.config import (
     AI_ANALYZERS,
@@ -13,11 +14,30 @@ from app.ai.config import (
 )
 from app.ai.provider_manager import AIProviderManager
 from app.models.contracts import MarketSnapshot, TradeSignal
-from app.services.external_news import ExternalNewsContext, ExternalNewsService
+from app.services.external_news import ExternalNewsContext
 from app.services.macro_intel import MacroIntelContext, MacroIntelService
 from app.services.telegram_news import TelegramNewsContext, TelegramNewsService
 
 logger = logging.getLogger(__name__)
+
+_PROMPT_TEXT_CACHE: dict[str, str] = {}
+
+
+def _load_short_prompt(filename: str) -> str:
+    cached = _PROMPT_TEXT_CACHE.get(filename)
+    if cached is not None:
+        return cached
+
+    here = Path(__file__).resolve()
+    repo_root = here.parents[3]
+    prompt_path = repo_root / "prompts" / filename
+    try:
+        text = prompt_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        text = ""
+
+    _PROMPT_TEXT_CACHE[filename] = text
+    return text
 
 
 class AnalyzerService:
@@ -25,7 +45,6 @@ class AnalyzerService:
         self._has_live_analyzers = len(AI_ANALYZERS) > 0
         self._manager = AIProviderManager(AI_ANALYZERS) if self._has_live_analyzers else None
         self._telegram_news = TelegramNewsService()
-        self._external_news = ExternalNewsService()
         self._macro_intel = MacroIntelService()
 
         if not self._has_live_analyzers:
@@ -100,6 +119,23 @@ class AnalyzerService:
             "spread": snapshot.spread,
             "spread_median_60m": snapshot.spreadMedian60m,
             "spread_max_60m": snapshot.spreadMax60m,
+            "spread_min_1m": snapshot.spreadMin1m,
+            "spread_avg_1m": snapshot.spreadAvg1m,
+            "spread_max_1m": snapshot.spreadMax1m,
+            "spread_min_5m": snapshot.spreadMin5m,
+            "spread_avg_5m": snapshot.spreadAvg5m,
+            "spread_max_5m": snapshot.spreadMax5m,
+            "tick_rate_per_30s": snapshot.tickRatePer30s,
+            "freeze_gap_detected": snapshot.freezeGapDetected,
+            "slippage_estimate_points": snapshot.slippageEstimatePoints,
+            "session_vwap": snapshot.sessionVwap,
+            "compression_ranges_m15": snapshot.compressionRangesM15,
+            "pending_orders": snapshot.pendingOrders,
+            "open_positions": snapshot.openPositions,
+            "order_execution_events": snapshot.orderExecutionEvents,
+            "free_margin": snapshot.freeMargin,
+            "equity": snapshot.equity,
+            "balance": snapshot.balance,
             "compression_count_m15": snapshot.compressionCountM15,
             "expansion_count_m15": snapshot.expansionCountM15,
             "impulse_strength_score": snapshot.impulseStrengthScore,
@@ -132,29 +168,22 @@ class AnalyzerService:
                 items=[],
             )
 
-        try:
-            external_news = await asyncio.wait_for(
-                self._external_news.collect_news_context(snapshot.symbol),
-                timeout=max(1.0, AI_NEWS_TIMEOUT_SECONDS),
-            )
-        except asyncio.TimeoutError:
-            logger.warning("External news context timed out after %.1fs; using safe fallback context.", AI_NEWS_TIMEOUT_SECONDS)
-            external_news = ExternalNewsContext(
-                enabled=False,
-                feed_count=0,
-                impact_tag="LOW",
-                risk_tag="CAUTION",
-                direction_bias="NEUTRAL",
-                news_state="QUIET",
-                buy_score=0.0,
-                sell_score=0.0,
-                dominance=0.0,
-                panic_suspected=False,
-                tags=["external_news_timeout"],
-                summary="External news timeout; fallback context used.",
-                headlines=[],
-                items=[],
-            )
+        external_news = ExternalNewsContext(
+            enabled=False,
+            feed_count=0,
+            impact_tag="LOW",
+            risk_tag="CAUTION",
+            direction_bias="NEUTRAL",
+            news_state="QUIET",
+            buy_score=0.0,
+            sell_score=0.0,
+            dominance=0.0,
+            panic_suspected=False,
+            tags=["external_news_disabled_prd"],
+            summary="External RSS news disabled per PRD; AI news relies on prompt-driven context.",
+            headlines=[],
+            items=[],
+        )
         market_context["telegram_news"] = {
             "impact_tag": telegram_news.impact_tag,
             "risk_tag": telegram_news.risk_tag,
@@ -249,6 +278,31 @@ class AnalyzerService:
             return _build_fallback_signal(snapshot, volatility_expansion, telegram_news, external_news)
 
         min_agreement = 1 if AI_STRATEGY == "single" else max(2, CONSENSUS_MIN_AGREEMENT)
+
+        pre_stage_prompts = {
+            "news": _load_short_prompt("short_prompt_news.md"),
+            "analyze": _load_short_prompt("short_prompt_analyze.md"),
+        }
+        pre_stage_votes: list[str] = []
+        for stage_name, stage_prompt in pre_stage_prompts.items():
+            if not stage_prompt.strip():
+                continue
+            stage_context = dict(market_context)
+            stage_context["_pipeline_stage"] = stage_name
+            stage_context["_extra_system_prompt"] = stage_prompt
+            try:
+                stage_decision = await asyncio.wait_for(
+                    self._manager.analyze_with_committee(
+                        stage_context,
+                        min_agreement=1,
+                        entry_tolerance_pct=CONSENSUS_ENTRY_TOLERANCE_PCT,
+                    ),
+                    timeout=max(5.0, AI_COMMITTEE_TIMEOUT_SECONDS),
+                )
+                pre_stage_votes.extend(stage_decision.provider_votes)
+            except asyncio.TimeoutError:
+                logger.warning("AI %s stage timed out after %.1fs", stage_name, AI_COMMITTEE_TIMEOUT_SECONDS)
+
         try:
             committee = await asyncio.wait_for(
                 self._manager.analyze_with_committee(
@@ -265,7 +319,7 @@ class AnalyzerService:
         if not committee.consensus_passed or committee.signal is None:
             if committee.agreement_count == 0:
                 fallback = _build_fallback_signal(snapshot, volatility_expansion, telegram_news, external_news)
-                fallback.providerVotes = list(dict.fromkeys((committee.provider_votes or []) + fallback.providerVotes))
+                fallback.providerVotes = list(dict.fromkeys((pre_stage_votes or []) + (fallback.providerVotes or [])))
                 fallback.summary = (
                     "Fallback simulation analyzer used after committee produced no usable signal. "
                     f"reason={committee.disagreement_reason or 'no_consensus'}"
@@ -298,7 +352,7 @@ class AnalyzerService:
                 agreementCount=committee.agreement_count,
                 requiredAgreement=committee.required_agreement,
                 disagreementReason=committee.disagreement_reason,
-                providerVotes=committee.provider_votes,
+                providerVotes=list(dict.fromkeys((pre_stage_votes or []) + (committee.provider_votes or []))),
                 modeHint=_resolve_mode_hint(snapshot, telegram_news, external_news),
                 modeConfidence=_resolve_mode_confidence(snapshot, telegram_news, external_news),
                 modeTtlSeconds=_resolve_mode_ttl(snapshot, telegram_news, external_news),
@@ -315,6 +369,96 @@ class AnalyzerService:
             )
 
         signal = committee.signal
+
+        validation_prompts = [
+            ("validate", _load_short_prompt("short_prompt_validate.md")),
+            ("study", _load_short_prompt("short_prompt_study.md")),
+            ("self_crosscheck", _load_short_prompt("short_prompt_self_crosscheck.md")),
+            ("capital_utilization", _load_short_prompt("short_prompt_captial_utilization.md")),
+        ]
+        validation_required = 3
+        validation_passed = 0
+        validation_votes: list[str] = []
+        for validation_name, validation_prompt in validation_prompts:
+            if not validation_prompt.strip():
+                continue
+
+            validation_context = dict(market_context)
+            validation_context["_pipeline_stage"] = f"validate:{validation_name}"
+            validation_context["_extra_system_prompt"] = validation_prompt
+            validation_context["candidate_signal"] = {
+                "rail": signal.rail,
+                "entry": signal.entry,
+                "tp": signal.tp,
+                "pe": signal.pe,
+                "ml": signal.ml,
+                "confidence": signal.confidence,
+                "reasoning": signal.reasoning,
+            }
+
+            try:
+                validation_decision = await asyncio.wait_for(
+                    self._manager.analyze_with_committee(
+                        validation_context,
+                        min_agreement=min_agreement,
+                        entry_tolerance_pct=CONSENSUS_ENTRY_TOLERANCE_PCT,
+                    ),
+                    timeout=max(5.0, AI_COMMITTEE_TIMEOUT_SECONDS),
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Validation stage %s timed out after %.1fs", validation_name, AI_COMMITTEE_TIMEOUT_SECONDS)
+                continue
+
+            validation_votes.extend(validation_decision.provider_votes)
+            if not validation_decision.consensus_passed or validation_decision.signal is None:
+                continue
+
+            candidate = validation_decision.signal
+            if candidate.rail != signal.rail:
+                continue
+            if signal.entry <= 0:
+                continue
+            entry_diff = abs(candidate.entry - signal.entry) / abs(signal.entry)
+            if entry_diff <= max(CONSENSUS_ENTRY_TOLERANCE_PCT * 2, 0.01):
+                validation_passed += 1
+
+        if validation_passed < validation_required:
+            return TradeSignal(
+                rail="NO_TRADE",
+                entry=0.0,
+                tp=0.0,
+                pe=snapshot.timestamp + timedelta(minutes=5),
+                ml=300,
+                confidence=0.0,
+                safetyTag="BLOCK",
+                directionBias="NEUTRAL",
+                alignmentScore=0.0,
+                newsImpactTag=_resolve_news_impact_tag(snapshot, telegram_news, external_news),
+                tvConfirmationTag=_resolve_tv_confirmation(snapshot),
+                newsTags=_resolve_news_tags(snapshot, volatility_expansion, telegram_news, external_news),
+                summary=(
+                    f"TABLE validation failed: passed={validation_passed}/{validation_required}. "
+                    "Blocked by cross-AI validation stages (validate/study/self_crosscheck/capital_utilization)."
+                ),
+                consensusPassed=False,
+                agreementCount=validation_passed,
+                requiredAgreement=validation_required,
+                disagreementReason="PRD_VALIDATE_STAGE_FAILED",
+                providerVotes=list(dict.fromkeys((pre_stage_votes or []) + (committee.provider_votes or []) + validation_votes)),
+                modeHint=_resolve_mode_hint(snapshot, telegram_news, external_news),
+                modeConfidence=_resolve_mode_confidence(snapshot, telegram_news, external_news),
+                modeTtlSeconds=_resolve_mode_ttl(snapshot, telegram_news, external_news),
+                modeKeywords=_resolve_mode_keywords(telegram_news, external_news),
+                regimeTag=regime_tag,
+                riskState=risk_state,
+                geoHeadline=macro_intel.geo_headline,
+                dxyBias=macro_intel.dxy_bias,
+                yieldsBias=macro_intel.yields_bias,
+                crossMetalsBias=macro_intel.cross_metals_bias,
+                cbFlow=macro_intel.cb_flow,
+                instPositioning=macro_intel.inst_positioning,
+                eventRisk=macro_intel.event_risk,
+            )
 
         pending_expiry = _parse_pe(snapshot.timestamp, signal.pe)
         max_life = _parse_ml(signal.ml)
@@ -337,7 +481,7 @@ class AnalyzerService:
             agreementCount=committee.agreement_count,
             requiredAgreement=committee.required_agreement,
             disagreementReason=committee.disagreement_reason,
-            providerVotes=committee.provider_votes,
+            providerVotes=list(dict.fromkeys((pre_stage_votes or []) + (committee.provider_votes or []) + validation_votes)),
             modeHint=_resolve_mode_hint(snapshot, telegram_news, external_news),
             modeConfidence=_resolve_mode_confidence(snapshot, telegram_news, external_news),
             modeTtlSeconds=_resolve_mode_ttl(snapshot, telegram_news, external_news),

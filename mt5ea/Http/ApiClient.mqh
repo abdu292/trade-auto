@@ -16,6 +16,7 @@ private:
     double m_spreadBuffer[SPREAD_BUFFER_SIZE];
     int    m_spreadBufferCount;
     int    m_spreadBufferIdx;
+    long   m_lastTickTimeMsc;
 
     void RecordSpread(double spread)
     {
@@ -51,6 +52,129 @@ private:
 
         outAvg = sum / n;
         if (outMin > outMax) outMin = outMax;
+    }
+
+    double ComputeSessionVwap(string symbol, int bars)
+    {
+        double sumPv = 0.0;
+        double sumV = 0.0;
+        for (int i = 1; i <= bars; i++)
+        {
+            double h = iHigh(symbol, PERIOD_M1, i);
+            double l = iLow(symbol, PERIOD_M1, i);
+            double c = iClose(symbol, PERIOD_M1, i);
+            long v = iVolume(symbol, PERIOD_M1, i);
+            if (h <= 0.0 || l <= 0.0 || c <= 0.0 || v <= 0)
+                continue;
+
+            double typical = (h + l + c) / 3.0;
+            sumPv += typical * (double)v;
+            sumV += (double)v;
+        }
+
+        if (sumV <= 0.0)
+            return iClose(symbol, PERIOD_M1, 1);
+        return sumPv / sumV;
+    }
+
+    string BuildCompressionRangesM15Json(string symbol, int count)
+    {
+        string json = "[";
+        for (int i = 1; i <= count; i++)
+        {
+            double h = iHigh(symbol, PERIOD_M15, i);
+            double l = iLow(symbol, PERIOD_M15, i);
+            double range = (h > 0.0 && l > 0.0) ? (h - l) : 0.0;
+            if (i > 1)
+                json += ",";
+            json += StringFormat("%.5f", range);
+        }
+        json += "]";
+        return json;
+    }
+
+    string BuildPendingOrdersJson(string symbol)
+    {
+        string json = "[";
+        int added = 0;
+        int total = OrdersTotal();
+        for (int i = 0; i < total; i++)
+        {
+            ulong ticket = OrderGetTicket(i);
+            if (ticket == 0 || !OrderSelect(ticket))
+                continue;
+
+            if (OrderGetString(ORDER_SYMBOL) != symbol)
+                continue;
+
+            long orderType = OrderGetInteger(ORDER_TYPE);
+            if (orderType != ORDER_TYPE_BUY_LIMIT && orderType != ORDER_TYPE_BUY_STOP)
+                continue;
+
+            string typeText = orderType == ORDER_TYPE_BUY_STOP ? "BUY_STOP" : "BUY_LIMIT";
+            double price = OrderGetDouble(ORDER_PRICE_OPEN);
+            double tp = OrderGetDouble(ORDER_TP);
+            datetime expiry = (datetime)OrderGetInteger(ORDER_TIME_EXPIRATION);
+            double volumeLots = OrderGetDouble(ORDER_VOLUME_CURRENT);
+            double gramsEq = MathMax(0.0, volumeLots * 100.0);
+
+            if (added > 0)
+                json += ",";
+            json += "{";
+            json += "\"type\":\"" + typeText + "\",";
+            json += StringFormat("\"price\":%.5f,", price);
+            json += StringFormat("\"tp\":%.5f,", tp);
+            if (expiry > 0)
+                json += "\"expiry\":\"" + ToIsoUtc(expiry) + "\",";
+            else
+                json += "\"expiry\":null,";
+            json += StringFormat("\"volumeGramsEquivalent\":%.2f", gramsEq);
+            json += "}";
+            added++;
+        }
+
+        json += "]";
+        return json;
+    }
+
+    string BuildOpenPositionsJson(string symbol)
+    {
+        string json = "[";
+        int added = 0;
+        int total = PositionsTotal();
+        for (int i = 0; i < total; i++)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if (ticket == 0 || !PositionSelectByTicket(ticket))
+                continue;
+
+            if (PositionGetString(POSITION_SYMBOL) != symbol)
+                continue;
+
+            double entry = PositionGetDouble(POSITION_PRICE_OPEN);
+            double tp = PositionGetDouble(POSITION_TP);
+            double volumeLots = PositionGetDouble(POSITION_VOLUME);
+            double pnl = PositionGetDouble(POSITION_PROFIT);
+            double current = SymbolInfoDouble(symbol, SYMBOL_BID);
+            double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+            double pnlPoints = 0.0;
+            if (point > 0.0 && current > 0.0 && entry > 0.0)
+                pnlPoints = (current - entry) / point;
+            if (MathAbs(pnlPoints) <= 0.0001)
+                pnlPoints = pnl;
+
+            if (added > 0)
+                json += ",";
+            json += "{";
+            json += StringFormat("\"entryPrice\":%.5f,", entry);
+            json += StringFormat("\"currentPnlPoints\":%.2f,", pnlPoints);
+            json += StringFormat("\"tp\":%.5f,", tp);
+            json += StringFormat("\"volumeGramsEquivalent\":%.2f", MathMax(0.0, volumeLots * 100.0));
+            json += "}";
+            added++;
+        }
+        json += "]";
+        return json;
     }
 
     string JsonGetString(string json, string key)
@@ -434,6 +558,7 @@ public:
         m_apiKey = apiKey;
         m_spreadBufferCount = 0;
         m_spreadBufferIdx = 0;
+        m_lastTickTimeMsc = 0;
         ArrayInitialize(m_spreadBuffer, 0.0);
         Print("ApiClient configured. BaseUrl=", m_baseUrl, ", ApiKeyLength=", StringLen(m_apiKey));
     }
@@ -650,6 +775,22 @@ public:
         bool isPostSpikePullback = !isExpansion && compressionCountM15 >= 2 && expansionCountM15 >= 1;
         bool isLondonNyOverlap = (mt5Struct.hour >= 12 && mt5Struct.hour <= 16);
 
+        // Tick quality metrics (PRD): tick-rate proxy + freeze/gap detector + slippage estimate
+        MqlTick tick;
+        SymbolInfoTick(symbol, tick);
+        long tickTimeMsc = (long)tick.time_msc;
+        long tickDeltaMsc = 0;
+        if (m_lastTickTimeMsc > 0 && tickTimeMsc > m_lastTickTimeMsc)
+            tickDeltaMsc = tickTimeMsc - m_lastTickTimeMsc;
+        m_lastTickTimeMsc = tickTimeMsc;
+        double tickRatePer30s = tickDeltaMsc > 0 ? MathMin(200.0, 30000.0 / (double)tickDeltaMsc) : 0.0;
+        bool freezeGapDetected = tickDeltaMsc > 4000;
+        double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+        double slippageEstimatePoints = point > 0.0 ? ((spread / point) * 0.25) : 0.0;
+
+        // Optional but helpful: session VWAP approximation from recent M1 bars
+        double sessionVwap = ComputeSessionVwap(symbol, 120);
+
         // Account state (free margin / equity / balance) for exposure cap enforcement
         double freeMargin = AccountInfoDouble(ACCOUNT_FREEMARGIN);
         double equity     = AccountInfoDouble(ACCOUNT_EQUITY);
@@ -662,23 +803,86 @@ public:
         long volumeH1  = iVolume(symbol, PERIOD_H1,  1);
         long volumeH4  = iVolume(symbol, PERIOD_H4,  1);
 
+        // Candle microstructure / indicator state per timeframe (PRD)
+        double ma20M5 = GetEmaApprox(symbol, PERIOD_M5, 20, 40);
+        double ma20M15 = GetEmaApprox(symbol, PERIOD_M15, 20, 50);
+        double ma20M30 = GetEmaApprox(symbol, PERIOD_M30, 20, 50);
+        double ma20H1 = GetEmaApprox(symbol, PERIOD_H1, 20, 60);
+        double ma20H4 = GetEmaApprox(symbol, PERIOD_H4, 20, 80);
+        double rsiM5 = GetRsiApprox(symbol, PERIOD_M5, 14);
+        double rsiM30 = GetRsiApprox(symbol, PERIOD_M30, 14);
+        double rsiH4 = GetRsiApprox(symbol, PERIOD_H4, 14);
+        double atrM5 = GetAtrApproxTf(symbol, PERIOD_M5, 14);
+        double atrM30 = GetAtrApproxTf(symbol, PERIOD_M30, 14);
+        double atrH4 = GetAtrApproxTf(symbol, PERIOD_H4, 14);
+
+        string pendingOrdersJson = BuildPendingOrdersJson(symbol);
+        string openPositionsJson = BuildOpenPositionsJson(symbol);
+        string executionEventsJson = "[]";
+        string compressionRangesJson = BuildCompressionRangesM15Json(symbol, 8);
+
         string payload = "{";
         payload += "\"symbol\":\"" + JsonEscape(symbol) + "\",";
         payload += "\"timeframeData\":[";
-        payload += StringFormat("{\"timeframe\":\"M5\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d}",
-                                iOpen(symbol, PERIOD_M5, 1), iHigh(symbol, PERIOD_M5, 1), iLow(symbol, PERIOD_M5, 1), iClose(symbol, PERIOD_M5, 1), volumeM5);
+        payload += StringFormat("{\"timeframe\":\"M5\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d,\"candleStartTime\":\"%s\",\"candleCloseTime\":\"%s\",\"candleBodySize\":%.5f,\"upperWickSize\":%.5f,\"lowerWickSize\":%.5f,\"candleRange\":%.5f,\"ma20Value\":%.5f,\"ma20Distance\":%.5f,\"rsi\":%.5f,\"atr\":%.5f}",
+                    iOpen(symbol, PERIOD_M5, 1), iHigh(symbol, PERIOD_M5, 1), iLow(symbol, PERIOD_M5, 1), iClose(symbol, PERIOD_M5, 1), volumeM5,
+                    ToIsoUtc(iTime(symbol, PERIOD_M5, 1)), ToIsoUtc(iTime(symbol, PERIOD_M5, 0)),
+                    MathAbs(iClose(symbol, PERIOD_M5, 1) - iOpen(symbol, PERIOD_M5, 1)),
+                    iHigh(symbol, PERIOD_M5, 1) - MathMax(iOpen(symbol, PERIOD_M5, 1), iClose(symbol, PERIOD_M5, 1)),
+                    MathMin(iOpen(symbol, PERIOD_M5, 1), iClose(symbol, PERIOD_M5, 1)) - iLow(symbol, PERIOD_M5, 1),
+                    iHigh(symbol, PERIOD_M5, 1) - iLow(symbol, PERIOD_M5, 1),
+                    ma20M5,
+                    iClose(symbol, PERIOD_M5, 1) - ma20M5,
+                    rsiM5,
+                    atrM5);
         payload += ",";
-        payload += StringFormat("{\"timeframe\":\"M15\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d}",
-                                iOpen(symbol, PERIOD_M15, 1), iHigh(symbol, PERIOD_M15, 1), iLow(symbol, PERIOD_M15, 1), iClose(symbol, PERIOD_M15, 1), volumeM15);
+        payload += StringFormat("{\"timeframe\":\"M15\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d,\"candleStartTime\":\"%s\",\"candleCloseTime\":\"%s\",\"candleBodySize\":%.5f,\"upperWickSize\":%.5f,\"lowerWickSize\":%.5f,\"candleRange\":%.5f,\"ma20Value\":%.5f,\"ma20Distance\":%.5f,\"rsi\":%.5f,\"atr\":%.5f}",
+                    iOpen(symbol, PERIOD_M15, 1), iHigh(symbol, PERIOD_M15, 1), iLow(symbol, PERIOD_M15, 1), iClose(symbol, PERIOD_M15, 1), volumeM15,
+                    ToIsoUtc(iTime(symbol, PERIOD_M15, 1)), ToIsoUtc(iTime(symbol, PERIOD_M15, 0)),
+                    MathAbs(iClose(symbol, PERIOD_M15, 1) - iOpen(symbol, PERIOD_M15, 1)),
+                    iHigh(symbol, PERIOD_M15, 1) - MathMax(iOpen(symbol, PERIOD_M15, 1), iClose(symbol, PERIOD_M15, 1)),
+                    MathMin(iOpen(symbol, PERIOD_M15, 1), iClose(symbol, PERIOD_M15, 1)) - iLow(symbol, PERIOD_M15, 1),
+                    iHigh(symbol, PERIOD_M15, 1) - iLow(symbol, PERIOD_M15, 1),
+                    ma20M15,
+                    iClose(symbol, PERIOD_M15, 1) - ma20M15,
+                    rsiM15,
+                    atrM15);
         payload += ",";
-        payload += StringFormat("{\"timeframe\":\"M30\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d}",
-                                iOpen(symbol, PERIOD_M30, 1), iHigh(symbol, PERIOD_M30, 1), iLow(symbol, PERIOD_M30, 1), iClose(symbol, PERIOD_M30, 1), volumeM30);
+        payload += StringFormat("{\"timeframe\":\"M30\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d,\"candleStartTime\":\"%s\",\"candleCloseTime\":\"%s\",\"candleBodySize\":%.5f,\"upperWickSize\":%.5f,\"lowerWickSize\":%.5f,\"candleRange\":%.5f,\"ma20Value\":%.5f,\"ma20Distance\":%.5f,\"rsi\":%.5f,\"atr\":%.5f}",
+                    iOpen(symbol, PERIOD_M30, 1), iHigh(symbol, PERIOD_M30, 1), iLow(symbol, PERIOD_M30, 1), iClose(symbol, PERIOD_M30, 1), volumeM30,
+                    ToIsoUtc(iTime(symbol, PERIOD_M30, 1)), ToIsoUtc(iTime(symbol, PERIOD_M30, 0)),
+                    MathAbs(iClose(symbol, PERIOD_M30, 1) - iOpen(symbol, PERIOD_M30, 1)),
+                    iHigh(symbol, PERIOD_M30, 1) - MathMax(iOpen(symbol, PERIOD_M30, 1), iClose(symbol, PERIOD_M30, 1)),
+                    MathMin(iOpen(symbol, PERIOD_M30, 1), iClose(symbol, PERIOD_M30, 1)) - iLow(symbol, PERIOD_M30, 1),
+                    iHigh(symbol, PERIOD_M30, 1) - iLow(symbol, PERIOD_M30, 1),
+                    ma20M30,
+                    iClose(symbol, PERIOD_M30, 1) - ma20M30,
+                    rsiM30,
+                    atrM30);
         payload += ",";
-        payload += StringFormat("{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d}",
-                                iOpen(symbol, PERIOD_H1, 1), iHigh(symbol, PERIOD_H1, 1), iLow(symbol, PERIOD_H1, 1), iClose(symbol, PERIOD_H1, 1), volumeH1);
+        payload += StringFormat("{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d,\"candleStartTime\":\"%s\",\"candleCloseTime\":\"%s\",\"candleBodySize\":%.5f,\"upperWickSize\":%.5f,\"lowerWickSize\":%.5f,\"candleRange\":%.5f,\"ma20Value\":%.5f,\"ma20Distance\":%.5f,\"rsi\":%.5f,\"atr\":%.5f}",
+                    iOpen(symbol, PERIOD_H1, 1), iHigh(symbol, PERIOD_H1, 1), iLow(symbol, PERIOD_H1, 1), iClose(symbol, PERIOD_H1, 1), volumeH1,
+                    ToIsoUtc(iTime(symbol, PERIOD_H1, 1)), ToIsoUtc(iTime(symbol, PERIOD_H1, 0)),
+                    MathAbs(iClose(symbol, PERIOD_H1, 1) - iOpen(symbol, PERIOD_H1, 1)),
+                    iHigh(symbol, PERIOD_H1, 1) - MathMax(iOpen(symbol, PERIOD_H1, 1), iClose(symbol, PERIOD_H1, 1)),
+                    MathMin(iOpen(symbol, PERIOD_H1, 1), iClose(symbol, PERIOD_H1, 1)) - iLow(symbol, PERIOD_H1, 1),
+                    iHigh(symbol, PERIOD_H1, 1) - iLow(symbol, PERIOD_H1, 1),
+                    ma20H1,
+                    iClose(symbol, PERIOD_H1, 1) - ma20H1,
+                    rsiH1,
+                    atrH1);
         payload += ",";
-        payload += StringFormat("{\"timeframe\":\"H4\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d}",
-                                iOpen(symbol, PERIOD_H4, 1), iHigh(symbol, PERIOD_H4, 1), iLow(symbol, PERIOD_H4, 1), iClose(symbol, PERIOD_H4, 1), volumeH4);
+        payload += StringFormat("{\"timeframe\":\"H4\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d,\"candleStartTime\":\"%s\",\"candleCloseTime\":\"%s\",\"candleBodySize\":%.5f,\"upperWickSize\":%.5f,\"lowerWickSize\":%.5f,\"candleRange\":%.5f,\"ma20Value\":%.5f,\"ma20Distance\":%.5f,\"rsi\":%.5f,\"atr\":%.5f}",
+                    iOpen(symbol, PERIOD_H4, 1), iHigh(symbol, PERIOD_H4, 1), iLow(symbol, PERIOD_H4, 1), iClose(symbol, PERIOD_H4, 1), volumeH4,
+                    ToIsoUtc(iTime(symbol, PERIOD_H4, 1)), ToIsoUtc(iTime(symbol, PERIOD_H4, 0)),
+                    MathAbs(iClose(symbol, PERIOD_H4, 1) - iOpen(symbol, PERIOD_H4, 1)),
+                    iHigh(symbol, PERIOD_H4, 1) - MathMax(iOpen(symbol, PERIOD_H4, 1), iClose(symbol, PERIOD_H4, 1)),
+                    MathMin(iOpen(symbol, PERIOD_H4, 1), iClose(symbol, PERIOD_H4, 1)) - iLow(symbol, PERIOD_H4, 1),
+                    iHigh(symbol, PERIOD_H4, 1) - iLow(symbol, PERIOD_H4, 1),
+                    ma20H4,
+                    iClose(symbol, PERIOD_H4, 1) - ma20H4,
+                    rsiH4,
+                    atrH4);
         payload += "],";
 
         payload += StringFormat("\"atr\":%.5f,", atr);
@@ -743,7 +947,15 @@ public:
         payload += "\"tvAlertType\":\"NONE\",";
         payload += StringFormat("\"freeMargin\":%.2f,", freeMargin);
         payload += StringFormat("\"equity\":%.2f,", equity);
-        payload += StringFormat("\"balance\":%.2f", balance);
+        payload += StringFormat("\"balance\":%.2f,", balance);
+        payload += StringFormat("\"tickRatePer30s\":%.2f,", tickRatePer30s);
+        payload += "\"freezeGapDetected\":" + (freezeGapDetected ? "true" : "false") + ",";
+        payload += StringFormat("\"slippageEstimatePoints\":%.2f,", slippageEstimatePoints);
+        payload += StringFormat("\"sessionVwap\":%.5f,", sessionVwap);
+        payload += "\"compressionRangesM15\":" + compressionRangesJson + ",";
+        payload += "\"pendingOrders\":" + pendingOrdersJson + ",";
+        payload += "\"openPositions\":" + openPositionsJson + ",";
+        payload += "\"orderExecutionEvents\":" + executionEventsJson;
         payload += "}";
 
         char postData[];

@@ -2,7 +2,7 @@ import json
 import logging
 from typing import Optional
 from openai import AsyncOpenAI, APIError
-from app.ai.providers.base_provider import AIProvider, TradeSignal, AIProviderConfig
+from app.ai.providers.base_provider import AIProvider, TradeSignal, AIProviderConfig, dump_market_context
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,11 @@ class GrokProvider(AIProvider):
     async def analyze(self, market_context: dict) -> Optional[TradeSignal]:
         """Call Grok API and parse response"""
         try:
-            user_prompt = f"Analyze this forex market: {json.dumps(market_context)}"
+            user_prompt = f"Analyze this forex market: {dump_market_context(market_context)}"
+            system_prompt = self._build_system_prompt()
+            extra_system_prompt = market_context.get("_extra_system_prompt")
+            if isinstance(extra_system_prompt, str) and extra_system_prompt.strip():
+                system_prompt = f"{system_prompt}\n\n{extra_system_prompt.strip()}"
             
             response = await self.client.chat.completions.create(
                 model=self.config.model,  # "grok-beta" or latest
@@ -33,7 +37,7 @@ class GrokProvider(AIProvider):
                 messages=[
                     {
                         "role": "system",
-                        "content": self._build_system_prompt()
+                        "content": system_prompt
                     },
                     {
                         "role": "user",

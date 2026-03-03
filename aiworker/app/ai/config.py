@@ -107,10 +107,10 @@ TELEGRAM_BEARISH_KEYWORDS = _read_csv_env(
 TELEGRAM_CHANNEL_WEIGHTS = _read_weight_map_env("TELEGRAM_CHANNEL_WEIGHTS", "")
 TELEGRAM_TRUSTED_CORE_CHANNELS = _read_csv_env("TELEGRAM_TRUSTED_CORE_CHANNELS", "")
 
-EXTERNAL_NEWS_ENABLED = os.getenv("EXTERNAL_NEWS_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+EXTERNAL_NEWS_ENABLED = os.getenv("EXTERNAL_NEWS_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
 EXTERNAL_NEWS_FEEDS = _read_csv_env(
     "EXTERNAL_NEWS_FEEDS",
-    "https://feeds.reuters.com/reuters/commoditiesNews,https://www.investing.com/rss/news_301.rss,https://www.forexlive.com/feed/news",
+    "",
 )
 EXTERNAL_NEWS_LOOKBACK_MINUTES = _read_int_env("EXTERNAL_NEWS_LOOKBACK_MINUTES", 360)
 EXTERNAL_NEWS_MAX_ITEMS = _read_int_env("EXTERNAL_NEWS_MAX_ITEMS", 30)

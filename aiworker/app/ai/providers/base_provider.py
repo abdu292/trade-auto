@@ -3,6 +3,8 @@ from typing import Optional
 from dataclasses import dataclass
 from pathlib import Path
 import os
+import json
+from datetime import date, datetime
 
 @dataclass
 class AIProviderConfig:
@@ -39,6 +41,16 @@ class TradeSignal:
             "confidence": self.confidence,
             "reasoning": self.reasoning
         }
+
+
+def _json_default(value):
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return str(value)
+
+
+def dump_market_context(market_context: dict) -> str:
+    return json.dumps(market_context, ensure_ascii=False, default=_json_default)
 
 
 _PROMPT_CACHE: dict[str, str] = {}

@@ -4,7 +4,7 @@ from typing import Optional
 
 from openai import APIError, AsyncOpenAI
 
-from app.ai.providers.base_provider import AIProvider, AIProviderConfig, TradeSignal, _load_prompt_for_role
+from app.ai.providers.base_provider import AIProvider, AIProviderConfig, TradeSignal, _load_prompt_for_role, dump_market_context
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,11 @@ DO NOT add any explanation outside the JSON."""
 
     async def analyze(self, market_context: dict) -> Optional[TradeSignal]:
         try:
-            user_prompt = f"Analyze this forex market: {json.dumps(market_context)}"
+            user_prompt = f"Analyze this forex market: {dump_market_context(market_context)}"
+            system_prompt = self._build_system_prompt()
+            extra_system_prompt = market_context.get("_extra_system_prompt")
+            if isinstance(extra_system_prompt, str) and extra_system_prompt.strip():
+                system_prompt = f"{system_prompt}\n\n{extra_system_prompt.strip()}"
 
             response = await self.client.chat.completions.create(
                 model=self.config.model,
@@ -85,7 +89,7 @@ DO NOT add any explanation outside the JSON."""
                 max_tokens=self.config.max_tokens,
                 timeout=self.config.timeout,
                 messages=[
-                    {"role": "system", "content": self._build_system_prompt()},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
             )
