@@ -1,3 +1,6 @@
+Whenever this requirement say "Screenshots", it should be corresponding structured data from MT5 taken. So make sure all the fields are taken correctly.
+
+
 Subject: vULTRA Automation Software — Multi-AI Orchestration Spec (ChatGPT + Grok + Perplexity + Gemini + Telegram + TradingView + MT5)
 
 بسم الله الرحمن الرحيم
