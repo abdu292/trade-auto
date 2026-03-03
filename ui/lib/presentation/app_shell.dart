@@ -111,7 +111,8 @@ class _AppShellState extends ConsumerState<AppShell> {
         ..invalidate(activeTradesProvider)
         ..invalidate(signalsProvider)
         ..invalidate(sessionsProvider)
-        ..invalidate(runtimeStatusProvider);
+        ..invalidate(runtimeStatusProvider)
+        ..invalidate(kpiProvider);
     }
   }
 
@@ -167,7 +168,9 @@ class _AppShellState extends ConsumerState<AppShell> {
         ..invalidate(hazardWindowsProvider)
         ..invalidate(activeTradesProvider)
         ..invalidate(signalsProvider)
-        ..invalidate(sessionsProvider);
+        ..invalidate(sessionsProvider)
+        ..invalidate(runtimeStatusProvider)
+        ..invalidate(kpiProvider);
     }
 
     final isCompact = MediaQuery.sizeOf(context).width < 900;
