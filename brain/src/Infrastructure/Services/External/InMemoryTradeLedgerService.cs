@@ -105,7 +105,7 @@ public sealed class InMemoryTradeLedgerService : ITradeLedgerService
         }
     }
 
-    public TradeSlipContract? ApplySellFill(Guid tradeId, decimal mt5SellPrice, DateTimeOffset mt5Time)
+    public TradeSlipContract? ApplySellFill(Guid tradeId, decimal mt5SellPrice, DateTimeOffset mt5Time, string closedSession = "")
     {
         lock (_gate)
         {

@@ -16,9 +16,14 @@ public static class MonitoringEndpoints
 
         monitoring.MapGet(
             "/ledger",
-            (ITradeLedgerService ledger) => TypedResults.Ok(ledger.GetState()))
+            IResult (ITradeLedgerService ledger, ILatestMarketSnapshotStore snapshotStore) =>
+            {
+                snapshotStore.TryGet(out var snapshot);
+                var bid = snapshot?.Bid ?? 0m;
+                return TypedResults.Ok(ledger.GetExtendedState(bid));
+            })
             .WithName("GetLedgerState")
-            .WithDescription("Returns deterministic ledger state (cash, grams, exposure, deployable cash).");
+            .WithDescription("Returns deterministic ledger state with extended capital metrics (cash, gold, equity, compounding).");
 
         monitoring.MapPost(
             "/ledger/deposit",
@@ -648,30 +653,56 @@ public static class MonitoringEndpoints
                 var todayRotations = todayClosed.Count;
                 var todayAvgProfit = todayRotations > 0 ? todayProfitAed / todayRotations : 0m;
                 var openBuyCount = openPositions.Count;
-                var todayHitRate = (double)todayRotations / Math.Max(1, openBuyCount + todayRotations);
+                // Hit rate: profitable rotations / total closed rotations today
+                var todayProfitableRotations = todayClosed.Count(x => x.NetProfitAed > 0m);
+                var todayHitRate = todayRotations > 0 ? (double)todayProfitableRotations / todayRotations : 0.0;
 
                 var weeklyClosed = closedPositions.Where(x => x.ClosedAtUtc >= ksaWeekStartUtc).ToList();
                 var weeklyProfitAed = weeklyClosed.Sum(x => x.NetProfitAed);
                 var weeklyRotations = weeklyClosed.Count;
 
-                // Sessions have overlapping KSA time ranges per spec; first match wins (JAPAN > INDIA > LONDON > NY).
+                // Session classification per PRD: JAPAN 03-12 KSA, INDIA 07-16, LONDON 10-19, NY 15-00
+                // When sessions overlap, prefer stored value; otherwise use KSA hour midpoint ordering (JAPAN → INDIA → LONDON → NY)
                 static string ClassifySession(DateTimeOffset? closedUtc, string stored)
                 {
                     if (!string.IsNullOrEmpty(stored)) return stored;
                     if (closedUtc is null) return "UNKNOWN";
                     var ksaHour = closedUtc.Value.ToOffset(TimeSpan.FromHours(3)).Hour;
-                    if (ksaHour >= 3 && ksaHour < 7) return "JAPAN";
-                    if (ksaHour >= 7 && ksaHour < 10) return "INDIA";
-                    if (ksaHour >= 10 && ksaHour < 15) return "LONDON";
-                    if (ksaHour >= 15 || ksaHour < 3) return "NY";
-                    return "JAPAN";
+                    // NY: 15:00-00:00 (hour 15-23)
+                    if (ksaHour >= 15) return "NY";
+                    // LONDON: 10:00-15:00
+                    if (ksaHour >= 10) return "LONDON";
+                    // INDIA: 07:00-10:00
+                    if (ksaHour >= 7) return "INDIA";
+                    // JAPAN: 03:00-07:00, or post-midnight NY (00:00-03:00)
+                    if (ksaHour >= 3) return "JAPAN";
+                    return "NY"; // 00:00-03:00 KSA = late NY
                 }
+
+                // Waterfall blocks per session from today's decision logs
+                var todayWaterfallLogs = await db.DecisionLogs
+                    .AsNoTracking()
+                    .Where(x => x.CreatedAtUtc >= ksaDayStartUtc && x.WaterfallRisk == "HIGH")
+                    .Select(x => new { x.CreatedAtUtc })
+                    .ToListAsync(cancellationToken);
 
                 var sessions = new[] { "JAPAN", "INDIA", "LONDON", "NY" };
                 var sessionStats = sessions.ToDictionary(s => s, s =>
                 {
                     var sp = todayClosed.Where(x => ClassifySession(x.ClosedAtUtc, x.ClosedSession) == s).ToList();
-                    return new { profitAed = decimal.Round(sp.Sum(x => x.NetProfitAed), 2), rotations = sp.Count };
+                    var wfBlocks = todayWaterfallLogs.Count(x =>
+                    {
+                        var ksaH = x.CreatedAtUtc.ToOffset(TimeSpan.FromHours(3)).Hour;
+                        return s switch
+                        {
+                            "JAPAN" => ksaH >= 3 && ksaH < 7,
+                            "INDIA" => ksaH >= 7 && ksaH < 10,
+                            "LONDON" => ksaH >= 10 && ksaH < 15,
+                            "NY" => ksaH >= 15 || ksaH < 3,
+                            _ => false,
+                        };
+                    });
+                    return new { profitAed = decimal.Round(sp.Sum(x => x.NetProfitAed), 2), rotations = sp.Count, waterfallBlocks = wfBlocks };
                 });
 
                 snapshotStore.TryGet(out var snapshot);

@@ -278,11 +278,15 @@ public static class Mt5Endpoints
 
                 if (normalizedStatus is "BUY_TRIGGERED" or "BUY_FILLED" or "FILLED_BUY")
                 {
+                    var openedSession = snapshotStore.TryGet(out var buySnap) && buySnap is not null
+                        ? buySnap.Session
+                        : string.Empty;
                     var buySlip = ledger.ApplyBuyFill(
                         tradeId,
                         request.Grams ?? 0m,
                         request.Mt5Price ?? 0m,
-                        mt5Time);
+                        mt5Time,
+                        openedSession);
 
                     await notification.NotifyAsync("BUY SLIP", buySlip.Message, cancellationToken);
 
@@ -324,10 +328,14 @@ public static class Mt5Endpoints
 
                 if (normalizedStatus is "TP_HIT" or "TP_FILLED" or "SELL_TP_FILLED")
                 {
+                    var closedSession = snapshotStore.TryGet(out var sellSnap) && sellSnap is not null
+                        ? sellSnap.Session
+                        : string.Empty;
                     var sellSlip = ledger.ApplySellFill(
                         tradeId,
                         request.Mt5Price ?? 0m,
-                        mt5Time);
+                        mt5Time,
+                        closedSession);
 
                     if (sellSlip is null)
                     {

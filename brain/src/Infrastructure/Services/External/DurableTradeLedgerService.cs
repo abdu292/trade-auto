@@ -172,7 +172,7 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
         }
     }
 
-    public TradeSlipContract? ApplySellFill(Guid tradeId, decimal mt5SellPrice, DateTimeOffset mt5Time)
+    public TradeSlipContract? ApplySellFill(Guid tradeId, decimal mt5SellPrice, DateTimeOffset mt5Time, string closedSession = "")
     {
         lock (_gate)
         {
@@ -192,7 +192,7 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
             var netProfit = credit - position.DebitAed;
 
             account.ApplySell(credit, position.Grams);
-            position.Close(mt5Time, mt5SellPrice, shopSell, credit, netProfit);
+            position.Close(mt5Time, mt5SellPrice, shopSell, credit, netProfit, closedSession);
             db.SaveChanges();
 
             var ksaTime = mt5Time.AddMinutes(50);

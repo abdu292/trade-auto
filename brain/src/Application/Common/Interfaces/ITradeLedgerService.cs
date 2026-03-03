@@ -8,7 +8,7 @@ public interface ITradeLedgerService
     LedgerStateContract GetExtendedState(decimal currentBidPrice);
     bool CanScaleIn(decimal currentPrice, RegimeClassificationContract regime, decimal minSpacingPercent, decimal exposureCapPercent);
     TradeSlipContract ApplyBuyFill(Guid tradeId, decimal grams, decimal mt5BuyPrice, DateTimeOffset mt5Time, string openedSession = "");
-    TradeSlipContract? ApplySellFill(Guid tradeId, decimal mt5SellPrice, DateTimeOffset mt5Time);
+    TradeSlipContract? ApplySellFill(Guid tradeId, decimal mt5SellPrice, DateTimeOffset mt5Time, string closedSession = "");
     /// <summary>Add capital (deposit) to ledger cash.</summary>
     TradeSlipContract AddCapital(decimal amountAed, string note, DateTimeOffset timestamp);
     /// <summary>Withdraw capital from ledger cash.</summary>
