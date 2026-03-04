@@ -13,6 +13,7 @@ public static class DecisionEngine
     private static readonly Lock WarModeGate = new();
     private static WarModeState _warModeState = new("UNKNOWN", 0.5m, DateTimeOffset.MinValue, []);
     private static bool _firstLegBanActive;
+    private static bool _deescalationRiskActive;
 
     public static DecisionResultContract Evaluate(
         MarketSnapshotContract snapshot,
@@ -24,6 +25,49 @@ public static class DecisionEngine
         if (!IsSupportedGoldSymbol(snapshot.Symbol))
         {
             return NoTrade("Only XAUUSD-family symbols are permitted.", aiSignal.AlignmentScore, snapshot);
+        }
+
+        // FIRST_LEG_BAN gate: blocks all trades until H1 reclaim + M15 base + M5 compression + news calm are confirmed
+        if (_firstLegBanActive)
+        {
+            if (!HasBaseFormedAfterFlush(snapshot))
+            {
+                return NoTrade(
+                    "TABLE ABORTED — FIRST_LEG_BAN (late in first move, no reclaim/base yet).",
+                    aiSignal.AlignmentScore,
+                    snapshot,
+                    cause: "FIRST_LEG_BAN",
+                    waterfallRisk: "HIGH",
+                    railPermissionA: "BLOCKED",
+                    railPermissionB: "BLOCKED");
+            }
+
+            lock (WarModeGate)
+            {
+                _firstLegBanActive = false;
+            }
+        }
+
+        // DEESCALATION_RISK gate: blocks all trades until structural flush + BottomPermission + sentiment normalized + news safe
+        if (_deescalationRiskActive)
+        {
+            if (!IsDeescalationRiskUnlocked(snapshot))
+            {
+                return NoTrade(
+                    "TABLE ABORTED — DEESCALATION_RISK (flush/base/sentiment not yet confirmed).",
+                    aiSignal.AlignmentScore,
+                    snapshot,
+                    engineState: "CAPITAL_PROTECTED",
+                    cause: "DEESC_KILL_SWITCH",
+                    waterfallRisk: "HIGH",
+                    railPermissionA: "BLOCKED",
+                    railPermissionB: "BLOCKED");
+            }
+
+            lock (WarModeGate)
+            {
+                _deescalationRiskActive = false;
+            }
         }
 
         var regimeTag = ResolveRegimeTag(aiSignal, regime);
@@ -89,6 +133,24 @@ public static class DecisionEngine
         if (score < 0.62m)
         {
             return NoTrade("Alignment below threshold.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
+        }
+
+        // FIRST_LEG_BAN activation: crowded/late first-leg entry — block and wait for reclaim/base
+        if (IsFirstLegBanConditionsMet(snapshot, aiSignal))
+        {
+            lock (WarModeGate)
+            {
+                _firstLegBanActive = true;
+            }
+
+            return NoTrade(
+                "TABLE ABORTED — FIRST_LEG_BAN (late in first move, no reclaim/base yet).",
+                score,
+                snapshot,
+                cause: "FIRST_LEG_BAN",
+                waterfallRisk: "HIGH",
+                railPermissionA: "BLOCKED",
+                railPermissionB: "BLOCKED");
         }
 
         var primaryClose = snapshot.AuthoritativeRate > 0m
@@ -185,33 +247,34 @@ public static class DecisionEngine
         var waterfallRisk = ResolveWaterfallRiskWar(snapshot, mode, aiSignal);
         var telegramState = NormalizeTelegramState(snapshot.TelegramState);
 
-        if (_firstLegBanActive)
-        {
-            if (!HasBaseFormedAfterFlush(snapshot))
-            {
-                return NoTrade(
-                    "First-leg ban active until base + reclaim/retest proof.",
-                    aiSignal.AlignmentScore,
-                    snapshot,
-                    cause: "FIRST_LEG_BAN",
-                    mode: mode,
-                    waterfallRisk: "HIGH",
-                    railPermissionA: "BLOCKED",
-                    railPermissionB: "BLOCKED");
-            }
-
-            lock (WarModeGate)
-            {
-                _firstLegBanActive = false;
-            }
-        }
-
-        var deEscTrigger = mode == "DEESCALATION_RISK" || waterfallRisk == "HIGH";
-        if (deEscTrigger)
+        // FIRST_LEG_BAN activation: crowded/late first-leg entry — block and wait for reclaim/base
+        if (IsFirstLegBanConditionsMet(snapshot, aiSignal))
         {
             lock (WarModeGate)
             {
                 _firstLegBanActive = true;
+            }
+
+            return NoTrade(
+                "TABLE ABORTED — FIRST_LEG_BAN (late in first move, no reclaim/base yet).",
+                aiSignal.AlignmentScore,
+                snapshot,
+                cause: "FIRST_LEG_BAN",
+                mode: mode,
+                waterfallRisk: "HIGH",
+                railPermissionA: "BLOCKED",
+                railPermissionB: "BLOCKED");
+        }
+
+        // DEESCALATION_RISK activation: de-escalation trap detected — block until flush + BottomPermission confirmed
+        var deEscActivate = mode == "DEESCALATION_RISK"
+            || waterfallRisk == "HIGH"
+            || IsDeescalationRiskConditionsMet(snapshot, mode, aiSignal);
+        if (deEscActivate)
+        {
+            lock (WarModeGate)
+            {
+                _deescalationRiskActive = true;
             }
 
             return NoTrade(
@@ -522,9 +585,112 @@ public static class DecisionEngine
 
     private static bool HasBaseFormedAfterFlush(MarketSnapshotContract snapshot)
     {
-        var compressionReady = snapshot.CompressionCountM15 >= 3 && snapshot.HasOverlapCandles;
-        var reclaim = snapshot.TvAlertType is "SHELF_RECLAIM" or "RETEST_HOLD";
-        return compressionReady && reclaim && !snapshot.HasPanicDropSequence;
+        // 1. H1 sweep + reclaim: price swept intraday swing low then closed back above it
+        var hasH1SweepReclaim = snapshot.HasLiquiditySweep
+            && snapshot.TvAlertType is "SHELF_RECLAIM" or "RETEST_HOLD";
+
+        // 2. M15 base: ≥ 2 overlapping candles off the low (proxies for consecutive strong green candles + higher low)
+        var hasM15Base = snapshot.CompressionCountM15 >= 2 && snapshot.HasOverlapCandles;
+
+        // 3. M5 compression: ≥ 6 overlapping M5 candles, contracting range, no new down-impulse (no big red ≥ 1.2×ATR_M5)
+        var hasM5Compression = snapshot.CompressionCountM5 >= 6
+            && snapshot.IsCompression
+            && !snapshot.IsAtrExpanding;
+
+        // 4. News calm: no major US data imminent, no war headline spike, spread at normal levels
+        var isNewsCalm = !snapshot.IsUsRiskWindow
+            && !snapshot.HasPanicDropSequence
+            && (snapshot.SpreadMedian60m == 0m || snapshot.Spread <= snapshot.SpreadMedian60m * 1.5m);
+
+        return hasH1SweepReclaim && hasM15Base && hasM5Compression && isNewsCalm;
+    }
+
+    /// <summary>
+    /// CR1 §1: Detects a late first-leg entry that should be blocked.
+    /// Activates FIRST_LEG_BAN when a strong H1 impulse is underway, the entry is late in the move
+    /// (no clean base yet), and Telegram consensus is strongly aligned with the impulse direction.
+    /// </summary>
+    private static bool IsFirstLegBanConditionsMet(MarketSnapshotContract snapshot, TradeSignalContract aiSignal)
+    {
+        // Condition 1: Strong H1 impulse already underway — H1 candle body ≥ 1.2×ATR(H1)
+        var h1Data = snapshot.TimeframeData
+            .FirstOrDefault(x => string.Equals(x.Timeframe, "H1", StringComparison.OrdinalIgnoreCase));
+        var h1Body = h1Data?.CandleBodySize ?? 0m;
+        var h1Atr = snapshot.AtrH1 > 0m ? snapshot.AtrH1 : (h1Data?.Atr ?? 0m);
+        if (h1Atr == 0m || h1Body < h1Atr * 1.2m) return false;
+
+        // Condition 2: Entry is late in the move — proxied by HasImpulseCandles + IsExpansion +
+        // ImpulseStrengthScore ≥ 0.6 (approximates price having moved ≥ 1–1.5×ATR_M15 from start);
+        // also requires no clean H1 reclaim or M15 base has formed yet
+        var lateInImpulse = snapshot.HasImpulseCandles
+            && snapshot.IsExpansion
+            && snapshot.ImpulseStrengthScore >= 0.6m;
+        var noCleanBase = !snapshot.HasLiquiditySweep
+            || snapshot.CompressionCountM15 < 2
+            || !snapshot.HasOverlapCandles;
+        if (!lateInImpulse || !noCleanBase) return false;
+
+        // Condition 3: Telegram consensus strongly aligned with the impulse
+        // STRONG_BUY ≈ BUY_CONSENSUS ≥ 80%; BUY ≈ BUY_CONSENSUS ≥ 70%
+        var telegram = NormalizeTelegramState(snapshot.TelegramState);
+        return telegram is "STRONG_BUY" or "BUY";
+    }
+
+    /// <summary>
+    /// CR1 §3: Detects de-escalation risk conditions that should activate the DEESCALATION_RISK kill-switch.
+    /// Triggers when WarPremium is fading while price is still elevated and sentiment remains bullish
+    /// but peace/de-escalation language is emerging.
+    /// </summary>
+    private static bool IsDeescalationRiskConditionsMet(MarketSnapshotContract snapshot, string mode, TradeSignalContract aiSignal)
+    {
+        // Condition 1: WarPremium status fading/liquidating (mode has shifted away from WAR_PREMIUM)
+        var warPremiumFading = !string.Equals(mode, "WAR_PREMIUM", StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(aiSignal.ModeHint, "DEESCALATION_RISK", StringComparison.OrdinalIgnoreCase)
+                || snapshot.HasPanicDropSequence);
+        if (!warPremiumFading) return false;
+
+        // Condition 2: Price still relatively high vs recent structure (not at fresh reclaimed base)
+        var priceStillHigh = snapshot.AdrUsedPct > 50m
+            || (snapshot.AdrUsedPct == 0m && snapshot.RsiH1 >= 60m);
+        var notAtFreshBase = !snapshot.HasLiquiditySweep || snapshot.CompressionCountM15 < 2;
+        if (!priceStillHigh || !notAtFreshBase) return false;
+
+        // Condition 3: Sentiment still bullish AND war headlines calming / peace language emerging
+        // Both must be present: bullish crowd PLUS de-escalation signal (not just one alone)
+        var sentimentBullish = NormalizeTelegramState(snapshot.TelegramState) is "STRONG_BUY" or "BUY";
+        var geoHeadline = (aiSignal.GeoHeadline ?? string.Empty).Trim().ToUpperInvariant();
+        var deescLanguage = geoHeadline is "DEESCALATION" or "CEASEFIRE" or "PEACE" or "TRUCE";
+        return sentimentBullish && deescLanguage;
+    }
+
+    /// <summary>
+    /// CR1 §4: Checks whether DEESCALATION_RISK can be unlocked.
+    /// Requires structural flush completion, full BottomPermission, normalized sentiment, and news safety.
+    /// </summary>
+    private static bool IsDeescalationRiskUnlocked(MarketSnapshotContract snapshot)
+    {
+        // 1. Structural flush completed: strong H4/H1 down leg, now near prior major support
+        var structuralFlush = snapshot.RsiH1 > 0m
+            && snapshot.RsiH1 < 45m
+            && !snapshot.IsExpansion
+            && !snapshot.HasPanicDropSequence;
+
+        // 2. BottomPermission confirmed: H1 sweep+reclaim, M15 base, M5 compression, momentum turning up
+        var bottomPermission = snapshot.HasLiquiditySweep
+            && snapshot.CompressionCountM15 >= 2
+            && snapshot.HasOverlapCandles
+            && snapshot.RsiH1 is > 0m and < 60m
+            && (snapshot.IsCompression || snapshot.CompressionCountM5 >= 3)
+            && !snapshot.IsAtrExpanding;
+
+        // 3. Sentiment normalized: BUY_CONSENSUS back to mixed/moderate (< 70–80%)
+        // STRONG_BUY ≈ ≥80%, BUY ≈ ≥70% — both must be absent for sentiment to be considered normalized
+        var sentimentNormalized = NormalizeTelegramState(snapshot.TelegramState) is not ("STRONG_BUY" or "BUY");
+
+        // 4. News safe: no imminent major US data or peace headline shock
+        var newsSafe = !snapshot.IsUsRiskWindow && !snapshot.HasPanicDropSequence;
+
+        return structuralFlush && bottomPermission && sentimentNormalized && newsSafe;
     }
 
     private static bool IsLidBreakConfirmed(MarketSnapshotContract snapshot)
