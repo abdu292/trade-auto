@@ -405,6 +405,80 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
           ),
           const SizedBox(height: 12),
           _SectionCard(
+            title: 'MT5 Open Positions',
+            child: runtime.when(
+              data: (state) {
+                if (state.openPositions.isEmpty) {
+                  return const Text('No open positions on MT5.');
+                }
+                return Column(
+                  children: state.openPositions.map((pos) {
+                    final pnlColor = pos.currentPnlPoints >= 0
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).colorScheme.error;
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        'Entry ${pos.entryPrice.toStringAsFixed(2)} → TP ${pos.tp.toStringAsFixed(2)}',
+                      ),
+                      subtitle: Text(
+                        'P&L ${pos.currentPnlPoints >= 0 ? "+" : ""}${pos.currentPnlPoints.toStringAsFixed(2)} pts • ${pos.volumeGramsEquivalent.toStringAsFixed(2)}g',
+                      ),
+                      trailing: Text(
+                        '${pos.currentPnlPoints >= 0 ? "+" : ""}${pos.currentPnlPoints.toStringAsFixed(2)}',
+                        style: TextStyle(
+                            color: pnlColor, fontWeight: FontWeight.bold),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => Text('Runtime error: $error'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _SectionCard(
+            title: 'MT5 Pending Orders',
+            child: runtime.when(
+              data: (state) {
+                if (state.pendingOrders.isEmpty) {
+                  return const Text('No pending orders on MT5.');
+                }
+                return Column(
+                  children: state.pendingOrders.map((order) {
+                    String expiryText;
+                    if (order.expiry != null) {
+                      final local = order.expiry!.toLocal();
+                      final y = local.year;
+                      final mo = local.month.toString().padLeft(2, '0');
+                      final d = local.day.toString().padLeft(2, '0');
+                      final h = local.hour.toString().padLeft(2, '0');
+                      final mi = local.minute.toString().padLeft(2, '0');
+                      expiryText = 'Exp $y-$mo-$d $h:$mi';
+                    } else {
+                      expiryText = 'No expiry';
+                    }
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '${order.type} @ ${order.price.toStringAsFixed(2)} → TP ${order.tp.toStringAsFixed(2)}',
+                      ),
+                      subtitle: Text(
+                        '${order.volumeGramsEquivalent.toStringAsFixed(2)}g • $expiryText',
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => Text('Runtime error: $error'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _SectionCard(
             title: 'Active Trades',
             child: trades.when(
               data: (items) {

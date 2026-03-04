@@ -175,6 +175,53 @@ class NotificationFeedItem {
       );
 }
 
+class PendingOrderSnapshot {
+  const PendingOrderSnapshot({
+    required this.type,
+    required this.price,
+    required this.tp,
+    this.expiry,
+    required this.volumeGramsEquivalent,
+  });
+
+  final String type;
+  final double price;
+  final double tp;
+  final DateTime? expiry;
+  final double volumeGramsEquivalent;
+
+  factory PendingOrderSnapshot.fromJson(Map<String, dynamic> json) =>
+      PendingOrderSnapshot(
+        type: _readString(json, 'type'),
+        price: _readDouble(json, 'price'),
+        tp: _readDouble(json, 'tp'),
+        expiry: _readNullableDateTime(json, 'expiry'),
+        volumeGramsEquivalent: _readDouble(json, 'volumeGramsEquivalent'),
+      );
+}
+
+class OpenPositionSnapshot {
+  const OpenPositionSnapshot({
+    required this.entryPrice,
+    required this.currentPnlPoints,
+    required this.tp,
+    required this.volumeGramsEquivalent,
+  });
+
+  final double entryPrice;
+  final double currentPnlPoints;
+  final double tp;
+  final double volumeGramsEquivalent;
+
+  factory OpenPositionSnapshot.fromJson(Map<String, dynamic> json) =>
+      OpenPositionSnapshot(
+        entryPrice: _readDouble(json, 'entryPrice'),
+        currentPnlPoints: _readDouble(json, 'currentPnlPoints'),
+        tp: _readDouble(json, 'tp'),
+        volumeGramsEquivalent: _readDouble(json, 'volumeGramsEquivalent'),
+      );
+}
+
 class PendingApproval {
   const PendingApproval({
     required this.id,
@@ -316,6 +363,10 @@ class RuntimeStatus {
     required this.positioningFlag,
     required this.macroCacheAgeMinutes,
     required this.activeBlockedHazardWindows,
+    this.tickRatePer30s = 0,
+    this.freezeGapDetected = false,
+    this.pendingOrders = const [],
+    this.openPositions = const [],
   });
 
   final String symbol;
@@ -340,8 +391,37 @@ class RuntimeStatus {
   final String positioningFlag;
   final int macroCacheAgeMinutes;
   final int activeBlockedHazardWindows;
+  final double tickRatePer30s;
+  final bool freezeGapDetected;
+  final List<PendingOrderSnapshot> pendingOrders;
+  final List<OpenPositionSnapshot> openPositions;
 
-  factory RuntimeStatus.fromJson(Map<String, dynamic> json) => RuntimeStatus(
+  factory RuntimeStatus.fromJson(Map<String, dynamic> json) {
+    final rawPending = json['pendingOrders'] ?? json['PendingOrders'];
+    final pendingOrders = <PendingOrderSnapshot>[];
+    if (rawPending is List) {
+      for (final item in rawPending) {
+        if (item is Map<String, dynamic>) {
+          pendingOrders.add(PendingOrderSnapshot.fromJson(item));
+        } else if (item is Map) {
+          pendingOrders.add(PendingOrderSnapshot.fromJson(
+              item.map((k, v) => MapEntry(k.toString(), v))));
+        }
+      }
+    }
+    final rawOpen = json['openPositions'] ?? json['OpenPositions'];
+    final openPositions = <OpenPositionSnapshot>[];
+    if (rawOpen is List) {
+      for (final item in rawOpen) {
+        if (item is Map<String, dynamic>) {
+          openPositions.add(OpenPositionSnapshot.fromJson(item));
+        } else if (item is Map) {
+          openPositions.add(OpenPositionSnapshot.fromJson(
+              item.map((k, v) => MapEntry(k.toString(), v))));
+        }
+      }
+    }
+    return RuntimeStatus(
         symbol: _readString(json, 'symbol'),
         session: _readString(json, 'session'),
         mt5ServerTime: _readNullableDateTime(json, 'mt5ServerTime'),
@@ -365,17 +445,22 @@ class RuntimeStatus {
         macroCacheAgeMinutes: _readInt(json, 'macroCacheAgeMinutes'),
         activeBlockedHazardWindows:
             _readInt(json, 'activeBlockedHazardWindows'),
+        tickRatePer30s: _readDouble(json, 'tickRatePer30s'),
+        freezeGapDetected: _readBool(json, 'freezeGapDetected'),
+        pendingOrders: pendingOrders,
+        openPositions: openPositions,
       );
+  }
 }
 
-    class RuntimeSettings {
-      const RuntimeSettings({required this.symbol});
+class RuntimeSettings {
+  const RuntimeSettings({required this.symbol});
 
-      final String symbol;
+  final String symbol;
 
-      factory RuntimeSettings.fromJson(Map<String, dynamic> json) =>
+  factory RuntimeSettings.fromJson(Map<String, dynamic> json) =>
       RuntimeSettings(symbol: _readString(json, 'symbol'));
-    }
+}
 
 class ReplayStatus {
   const ReplayStatus({
@@ -638,6 +723,10 @@ class KpiStats {
   final Map<String, SessionKpi> sessionStats;
   final double weeklyProfitAed;
   final int weeklyRotations;
+  final Map<String, SessionKpi> weeklySessionStats;
+  final String weeklyBestSession;
+  final String weeklyWorstSession;
+  final Map<String, int> weeklyNoTradeBlocks;
   final CompoundingStats compounding;
   final int openPositionsCount;
   final int openBuyCount;
@@ -651,6 +740,10 @@ class KpiStats {
     required this.sessionStats,
     required this.weeklyProfitAed,
     required this.weeklyRotations,
+    this.weeklySessionStats = const {},
+    this.weeklyBestSession = '',
+    this.weeklyWorstSession = '',
+    this.weeklyNoTradeBlocks = const {},
     required this.compounding,
     required this.openPositionsCount,
     required this.openBuyCount,
@@ -669,6 +762,28 @@ class KpiStats {
         }
       });
     }
+    final weeklySessionMap = <String, SessionKpi>{};
+    final rawWeeklySessions =
+        json['weeklySessionStats'] ?? json['WeeklySessionStats'];
+    if (rawWeeklySessions is Map) {
+      rawWeeklySessions.forEach((key, value) {
+        if (value is Map<String, dynamic>) {
+          weeklySessionMap[key.toString()] = SessionKpi.fromJson(value);
+        } else if (value is Map) {
+          weeklySessionMap[key.toString()] = SessionKpi.fromJson(
+              value.map((k, v) => MapEntry(k.toString(), v)));
+        }
+      });
+    }
+    final weeklyNoTradeMap = <String, int>{};
+    final rawNoTrade =
+        json['weeklyNoTradeBlocks'] ?? json['WeeklyNoTradeBlocks'];
+    if (rawNoTrade is Map) {
+      rawNoTrade.forEach((key, value) {
+        weeklyNoTradeMap[key.toString()] =
+            value is int ? value : int.tryParse(value.toString()) ?? 0;
+      });
+    }
     final compoundingRaw =
         json['compounding'] ?? json['Compounding'] ?? const <String, dynamic>{};
     final compoundingMap = compoundingRaw is Map<String, dynamic>
@@ -685,6 +800,10 @@ class KpiStats {
       sessionStats: sessionMap,
       weeklyProfitAed: _readDouble(json, 'weeklyProfitAed'),
       weeklyRotations: _readInt(json, 'weeklyRotations'),
+      weeklySessionStats: weeklySessionMap,
+      weeklyBestSession: _readString(json, 'weeklyBestSession'),
+      weeklyWorstSession: _readString(json, 'weeklyWorstSession'),
+      weeklyNoTradeBlocks: weeklyNoTradeMap,
       compounding: CompoundingStats.fromJson(compoundingMap),
       openPositionsCount: _readInt(json, 'openPositionsCount'),
       openBuyCount: _readInt(json, 'openBuyCount'),

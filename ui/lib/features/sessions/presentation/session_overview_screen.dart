@@ -169,8 +169,35 @@ class SessionOverviewScreen extends ConsumerWidget {
                                 visualDensity: VisualDensity.compact,
                                 label: Text(
                                     'Rotations: ${stats.weeklyRotations}')),
+                            if (stats.weeklyBestSession.isNotEmpty)
+                              Chip(
+                                  visualDensity: VisualDensity.compact,
+                                  label: Text(
+                                      '🏆 Best: ${stats.weeklyBestSession}')),
+                            if (stats.weeklyWorstSession.isNotEmpty)
+                              Chip(
+                                  visualDensity: VisualDensity.compact,
+                                  label: Text(
+                                      '📉 Worst: ${stats.weeklyWorstSession}')),
                           ],
                         ),
+                        if (stats.weeklyNoTradeBlocks.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Text('NO-TRADE Blocks This Week',
+                              style:
+                                  Theme.of(context).textTheme.titleSmall),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: stats.weeklyNoTradeBlocks.entries
+                                .map((e) => Chip(
+                                      visualDensity: VisualDensity.compact,
+                                      label: Text('${e.key}: ${e.value}'),
+                                    ))
+                                .toList(),
+                          ),
+                        ],
                       ],
                     ),
                     loading: () => const LinearProgressIndicator(),

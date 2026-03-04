@@ -3,6 +3,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../presentation/app_providers.dart';
 
+String _sessionPhase(String session, DateTime? ksaTime) {
+  if (ksaTime == null) return '';
+  final h = ksaTime.hour;
+  switch (session) {
+    case 'JAPAN':
+      if (h >= 3 && h < 5) return 'EARLY';
+      if (h >= 5 && h < 8) return 'MID';
+      if (h >= 8 && h < 10) return 'PEAK';
+      return 'LATE';
+    case 'INDIA':
+      if (h >= 7 && h < 9) return 'EARLY';
+      if (h >= 9 && h < 11) return 'MID';
+      if (h >= 11 && h < 14) return 'PEAK';
+      return 'LATE';
+    case 'LONDON':
+      if (h >= 10 && h < 12) return 'EARLY';
+      if (h >= 12 && h < 14) return 'MID';
+      if (h >= 14 && h < 17) return 'PEAK';
+      return 'LATE';
+    case 'NY':
+      if (h >= 15 && h < 16) return 'EARLY';
+      if (h >= 16 && h < 18) return 'MID';
+      if (h >= 18 && h < 22) return 'PEAK';
+      return 'LATE';
+    default:
+      return '';
+  }
+}
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key, required this.isEmergencyPaused});
 
@@ -17,6 +46,7 @@ class DashboardScreen extends ConsumerWidget {
     final aiHealth = ref.watch(aiHealthStatusProvider);
     final notifications = ref.watch(notificationsProvider);
     final kpi = ref.watch(kpiProvider);
+    final hazardWindows = ref.watch(hazardWindowsProvider);
 
     Future<void> refresh() async {
       ref
@@ -25,7 +55,8 @@ class DashboardScreen extends ConsumerWidget {
         ..invalidate(runtimeStatusProvider)
         ..invalidate(aiHealthStatusProvider)
         ..invalidate(notificationsProvider)
-        ..invalidate(kpiProvider);
+        ..invalidate(kpiProvider)
+        ..invalidate(hazardWindowsProvider);
     }
 
     return RefreshIndicator(
@@ -180,6 +211,31 @@ class DashboardScreen extends ConsumerWidget {
                       final noTrade =
                           rt.panicSuspected || hazardActive || isSellSignal;
 
+                      final phase = _sessionPhase(rt.session, rt.ksaTime);
+
+                      // Next hazard window – show start time (static, no stale countdown)
+                      final nextHazardText = hazardWindows.whenOrNull(
+                        data: (windows) {
+                          final now = DateTime.now().toUtc();
+                          final upcoming = windows
+                              .where((w) =>
+                                  w.isActive &&
+                                  w.isBlocked &&
+                                  w.startUtc.isAfter(now))
+                              .toList();
+                          if (upcoming.isEmpty) return null;
+                          upcoming.sort(
+                              (a, b) => a.startUtc.compareTo(b.startUtc));
+                          final next = upcoming.first;
+                          final ksaStart = next.startUtc
+                              .toLocal()
+                              .add(const Duration(hours: 3));
+                          final hh = ksaStart.hour.toString().padLeft(2, '0');
+                          final mm = ksaStart.minute.toString().padLeft(2, '0');
+                          return '⚠️ Next hazard: ${next.title} at $hh:$mm KSA';
+                        },
+                      );
+
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -188,7 +244,10 @@ class DashboardScreen extends ConsumerWidget {
                             runSpacing: 8,
                             children: [
                               _MetricChip(
-                                  label: 'Session', value: rt.session),
+                                  label: 'Session',
+                                  value: phase.isNotEmpty
+                                      ? '${rt.session} · $phase'
+                                      : rt.session),
                               _MetricChip(
                                   label: 'Mode', value: rt.macroBias),
                               _MetricChip(
@@ -249,6 +308,13 @@ class DashboardScreen extends ConsumerWidget {
                               '⏱ ${rt.activeBlockedHazardWindows} hazard window(s) active',
                               style: TextStyle(color: colorScheme.error),
                             ),
+                          if (nextHazardText != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              nextHazardText,
+                              style: TextStyle(color: colorScheme.tertiary),
+                            ),
+                          ],
                           const SizedBox(height: 4),
                           Container(
                             width: double.infinity,
@@ -521,6 +587,16 @@ class DashboardScreen extends ConsumerWidget {
                                     .toString()
                                     .substring(11, 19)
                                 : 'N/A'),
+                        _MetricChip(
+                            label: 'Ticks/min',
+                            value: (state.tickRatePer30s * 2)
+                                .toStringAsFixed(1)),
+                        _MetricChip(
+                            label: 'MT5 Feed',
+                            value: state.mt5ServerTime != null &&
+                                    !state.freezeGapDetected
+                                ? 'CONNECTED'
+                                : 'DEGRADED'),
                       ],
                     ),
                     loading: () => const LinearProgressIndicator(),
