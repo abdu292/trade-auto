@@ -25,6 +25,33 @@ function Test-PortListening {
     return $null -ne $lines
 }
 
+function Stop-PortListener {
+    param([int]$Port, [string]$ServiceName)
+
+    try {
+        $connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+        if ($null -eq $connections) {
+            return
+        }
+
+        $pids = $connections | Select-Object -ExpandProperty OwningProcess -Unique
+        foreach ($owningProcessId in $pids) {
+            if ($owningProcessId -gt 0) {
+                try {
+                    Stop-Process -Id $owningProcessId -Force -ErrorAction Stop
+                    Write-Host "$ServiceName existing listener stopped (PID=$owningProcessId, Port=$Port)." -ForegroundColor Yellow
+                }
+                catch {
+                    Write-Host "Failed to stop $ServiceName listener PID=$owningProcessId on port ${Port}: $($_.Exception.Message)" -ForegroundColor Red
+                }
+            }
+        }
+    }
+    catch {
+        Write-Host "Failed to inspect listeners for $ServiceName on port ${Port}: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
 $brainUri = [Uri]$BrainUrl
 $aiUri = [Uri]$AiWorkerUrl
 
@@ -39,19 +66,15 @@ else {
 
 Write-Host "Starting AI Worker..." -ForegroundColor Cyan
 if (Test-PortListening -Port $aiUri.Port) {
-    Write-Host "AI Worker appears to be already running on port $($aiUri.Port); skipping launch." -ForegroundColor Yellow
+    Stop-PortListener -Port $aiUri.Port -ServiceName "AI Worker"
 }
-else {
-    Start-Process -FilePath "powershell" -ArgumentList @("-NoExit", "-Command", $aiCmd) -WindowStyle Normal
-}
+Start-Process -FilePath "powershell" -ArgumentList @("-NoExit", "-Command", $aiCmd) -WindowStyle Normal
 
 Write-Host "Starting Brain..." -ForegroundColor Cyan
 if (Test-PortListening -Port $brainUri.Port) {
-    Write-Host "Brain appears to be already running on port $($brainUri.Port); skipping launch." -ForegroundColor Yellow
+    Stop-PortListener -Port $brainUri.Port -ServiceName "Brain"
 }
-else {
-    Start-Process -FilePath "powershell" -ArgumentList @("-NoExit", "-Command", $brainCmd) -WindowStyle Normal
-}
+Start-Process -FilePath "powershell" -ArgumentList @("-NoExit", "-Command", $brainCmd) -WindowStyle Normal
 
 Write-Host "Waiting for services to start..." -ForegroundColor Green
 

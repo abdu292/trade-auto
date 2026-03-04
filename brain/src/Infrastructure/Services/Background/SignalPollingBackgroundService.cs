@@ -236,16 +236,6 @@ public sealed class SignalPollingBackgroundService(
                     continue;
                 }
 
-                var modeSignal = await aiWorker.GetModeAsync(snapshot, stoppingToken);
-
-                var aiSignal = await aiWorker.AnalyzeAsync(snapshot, cycleId, stoppingToken);
-                var aiTrace = ParseAiTrace(aiSignal.AiTraceJson);
-                var aiRequest = TryGetTraceNode(aiTrace, "ai_request");
-                var providerTraces = TryGetTraceNode(aiTrace, "provider_traces");
-                var providerRequests = ExtractProviderTraceEntries(providerTraces, "AI_PROVIDER_REQUEST");
-                var providerResponses = ExtractProviderTraceEntries(providerTraces, "AI_PROVIDER_RESPONSE");
-                var aiUsed = ExtractAiUsed(providerTraces);
-
                 await timeline.WriteAsync(
                     eventType: "AI_ANALYZE_REQUEST",
                     stage: "ai",
@@ -257,11 +247,43 @@ public sealed class SignalPollingBackgroundService(
                     {
                         promptPolicy = "prompts/master_prompt*.md + prompts/short_prompt_*.md",
                         requestToAiWorker = snapshot,
-                        aiRequest,
-                        aiUsed,
-                        promptsSentToAi = providerRequests,
+                        dispatchState = "sent_to_aiworker",
                     },
                     cancellationToken: stoppingToken);
+
+                ModeSignalContract? modeSignal;
+                TradeSignalContract aiSignal;
+                try
+                {
+                    modeSignal = await aiWorker.GetModeAsync(snapshot, stoppingToken);
+                    aiSignal = await aiWorker.AnalyzeAsync(snapshot, cycleId, stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    await timeline.WriteAsync(
+                        eventType: "AI_ANALYZE_FAILED",
+                        stage: "ai",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            error = ex.Message,
+                            errorType = ex.GetType().Name,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    logger.LogWarning(ex, "AI analyze call failed for cycle {CycleId}.", cycleId);
+                    throw;
+                }
+
+                var aiTrace = ParseAiTrace(aiSignal.AiTraceJson);
+                var aiRequest = TryGetTraceNode(aiTrace, "ai_request");
+                var providerTraces = TryGetTraceNode(aiTrace, "provider_traces");
+                var providerRequests = ExtractProviderTraceEntries(providerTraces, "AI_PROVIDER_REQUEST");
+                var providerResponses = ExtractProviderTraceEntries(providerTraces, "AI_PROVIDER_RESPONSE");
+                var aiUsed = ExtractAiUsed(providerTraces);
 
                 await timeline.WriteAsync(
                     eventType: "AI_ANALYZE_RESPONSE",

@@ -26,6 +26,21 @@ _MAX_PROVIDER_TRACES = 120
 _MAX_TRACE_FIELD_CHARS = 3500
 
 
+def _json_default(value: object) -> object:
+    if isinstance(value, (datetime,)):
+        return value.isoformat()
+    if hasattr(value, "model_dump"):
+        try:
+            return value.model_dump()
+        except Exception:
+            return str(value)
+    return str(value)
+
+
+def _safe_json_dumps(payload: object) -> str:
+    return json.dumps(payload, ensure_ascii=False, default=_json_default)
+
+
 def _load_short_prompt(filename: str) -> str:
     cached = _PROMPT_TEXT_CACHE.get(filename)
     if cached is not None:
@@ -416,7 +431,7 @@ class AnalyzerService:
                 eventRisk=macro_intel.event_risk,
                 promptRefs=prompt_refs,
                 providerModels=provider_models,
-                aiTraceJson=json.dumps({
+                aiTraceJson=_safe_json_dumps({
                     "ai_request": _build_request_with_prompt_dispatch(),
                     "provider_traces": _compact_provider_traces(),
                     "stage": "pretable",
@@ -435,7 +450,7 @@ class AnalyzerService:
                             "summary": _build_pretable_summary(snapshot, regime_tag, risk_state, macro_intel),
                         },
                     }],
-                }, ensure_ascii=False),
+                }),
                 cycleId=snapshot.cycleId,
             )
 
@@ -539,7 +554,7 @@ class AnalyzerService:
                     "Fallback simulation analyzer used after committee produced no usable signal. "
                     f"reason={committee.disagreement_reason or 'no_consensus'}"
                 )
-                fallback.aiTraceJson = json.dumps({
+                fallback.aiTraceJson = _safe_json_dumps({
                     "ai_request": _build_request_with_prompt_dispatch(),
                     "provider_traces": _compact_provider_traces(),
                     "stage": "committee",
@@ -557,7 +572,7 @@ class AnalyzerService:
                             "reason": committee.disagreement_reason or "no_consensus",
                         },
                     }],
-                }, ensure_ascii=False)
+                })
                 return fallback
 
             logger.warning(
@@ -602,7 +617,7 @@ class AnalyzerService:
                 eventRisk=macro_intel.event_risk,
                 promptRefs=prompt_refs,
                 providerModels=provider_models,
-                aiTraceJson=json.dumps({
+                aiTraceJson=_safe_json_dumps({
                     "ai_request": _build_request_with_prompt_dispatch(),
                     "provider_traces": _compact_provider_traces(),
                     "stage": "committee",
@@ -613,7 +628,7 @@ class AnalyzerService:
                     "required_agreement": committee.required_agreement,
                     "reason": committee.disagreement_reason,
                     "events": stage_events,
-                }, ensure_ascii=False),
+                }),
                 cycleId=snapshot.cycleId,
             )
 
@@ -751,7 +766,7 @@ class AnalyzerService:
                 eventRisk=macro_intel.event_risk,
                 promptRefs=prompt_refs,
                 providerModels=provider_models,
-                aiTraceJson=json.dumps({
+                aiTraceJson=_safe_json_dumps({
                     "ai_request": _build_request_with_prompt_dispatch(),
                     "provider_traces": _compact_provider_traces(),
                     "stage": "validation",
@@ -770,7 +785,7 @@ class AnalyzerService:
                             "validation_required": validation_required,
                         },
                     }],
-                }, ensure_ascii=False),
+                }),
                 cycleId=snapshot.cycleId,
             )
 
@@ -811,7 +826,7 @@ class AnalyzerService:
             eventRisk=macro_intel.event_risk,
             promptRefs=prompt_refs,
             providerModels=provider_models,
-            aiTraceJson=json.dumps({
+            aiTraceJson=_safe_json_dumps({
                 "ai_request": _build_request_with_prompt_dispatch(),
                 "provider_traces": _compact_provider_traces(),
                 "stage": "final",
@@ -838,7 +853,7 @@ class AnalyzerService:
                         "validation_required": validation_required,
                     },
                 }],
-            }, ensure_ascii=False),
+            }),
             cycleId=snapshot.cycleId,
         )
 
@@ -1270,7 +1285,7 @@ def _build_fallback_signal(
         riskState="CAUTION",
         promptRefs=prompt_refs,
         providerModels=provider_models,
-        aiTraceJson=json.dumps({
+        aiTraceJson=_safe_json_dumps({
             "ai_request": {
                 "cycle_id": snapshot.cycleId,
                 "symbol": snapshot.symbol,
@@ -1284,6 +1299,6 @@ def _build_fallback_signal(
             "telegram_summary": telegram_news.summary,
             "external_news_summary": external_news.summary,
             "events": stage_events or [],
-        }, ensure_ascii=False),
+        }),
         cycleId=snapshot.cycleId,
     )

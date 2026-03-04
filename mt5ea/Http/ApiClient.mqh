@@ -874,6 +874,7 @@ public:
                     iClose(symbol, PERIOD_M15, 1) - ma20M15,
                     rsiM15,
                     atrM15);
+        payload += ",";
         payload += StringFormat("{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d,\"candleStartTime\":\"%s\",\"candleCloseTime\":\"%s\",\"candleBodySize\":%.5f,\"upperWickSize\":%.5f,\"lowerWickSize\":%.5f,\"candleRange\":%.5f,\"ma20Value\":%.5f,\"ma20Distance\":%.5f,\"rsi\":%.5f,\"atr\":%.5f}",
                     iOpen(symbol, PERIOD_H1, 1), iHigh(symbol, PERIOD_H1, 1), iLow(symbol, PERIOD_H1, 1), iClose(symbol, PERIOD_H1, 1), volumeH1,
                     ToIsoUtc(iTime(symbol, PERIOD_H1, 1)), ToIsoUtc(iTime(symbol, PERIOD_H1, 0)),
