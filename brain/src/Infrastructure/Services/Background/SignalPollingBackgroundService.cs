@@ -148,6 +148,35 @@ public sealed class SignalPollingBackgroundService(
                     logger.LogInformation("Watch/Waste kill-switch forcing cycle search (no ARMED order for >=25 minutes).");
                 }
 
+                // ── Rule engine: must generate a setup candidate before AI is invoked ──
+                var setupCandidate = RuleEngine.Evaluate(snapshot);
+
+                await timeline.WriteAsync(
+                    eventType: setupCandidate.IsValid ? "RULE_ENGINE_SETUP_CANDIDATE" : "RULE_ENGINE_ABORT",
+                    stage: "rule_engine",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        setupCandidate.IsValid,
+                        h1Context = setupCandidate.H1Context,
+                        m15Setup = setupCandidate.M15Setup,
+                        m5Entry = setupCandidate.M5Entry,
+                        abortReason = setupCandidate.AbortReason,
+                    },
+                    cancellationToken: stoppingToken);
+
+                if (!setupCandidate.IsValid && !forceWhereToTrade)
+                {
+                    logger.LogInformation(
+                        "RULE_ENGINE_ABORT — no setup candidate. Reason={Reason}",
+                        setupCandidate.AbortReason);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
                 var modeSignal = await aiWorker.GetModeAsync(snapshot, stoppingToken);
 
                 var aiSignal = await aiWorker.AnalyzeAsync(snapshot, cycleId, stoppingToken);

@@ -50,6 +50,7 @@ app.MapGroup("/api")
 	.MapMonitoringEndpoints();
 
 app.MapMt5Endpoints();
+app.MapReplayEndpoints();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

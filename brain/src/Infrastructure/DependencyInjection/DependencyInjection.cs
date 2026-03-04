@@ -58,6 +58,7 @@ public static class DependencyInjection
         services.AddScoped<IRuntimeTimelineWriter, RuntimeTimelineWriter>();
         services.AddScoped<IWhatsAppService, MockWhatsAppService>();
         services.AddScoped<ICalendarService, MockCalendarService>();
+        services.AddSingleton<IHistoricalReplayService, HistoricalReplayService>();
 
         services.AddHostedService<SessionSchedulerBackgroundService>();
         services.AddHostedService<SignalPollingBackgroundService>();
