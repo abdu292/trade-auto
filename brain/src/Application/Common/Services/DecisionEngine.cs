@@ -153,14 +153,67 @@ public static class DecisionEngine
                 railPermissionB: "BLOCKED");
         }
 
+        // Section 9.3: LIVE_IMPULSE ban — active H1 impulse in motion, no reclaim structure
+        if (IsLiveImpulseBan(snapshot))
+        {
+            return NoTrade(
+                "TABLE ABORTED — LIVE_IMPULSE (impulse in motion, no reclaim structure).",
+                score,
+                snapshot,
+                cause: "LIVE_IMPULSE",
+                waterfallRisk: "HIGH",
+                railPermissionA: "BLOCKED",
+                railPermissionB: "BLOCKED");
+        }
+
+        // Section 9.1: TOP_LIQUIDATION ban — parabolic rally, overbought, crowded sentiment
+        if (IsTopLiquidationBan(snapshot, telegramState))
+        {
+            return NoTrade(
+                "TABLE ABORTED — TOP_LIQUIDATION (parabolic rally/overbought/crowded).",
+                score,
+                snapshot,
+                cause: "TOP_LIQUIDATION",
+                waterfallRisk: "HIGH",
+                railPermissionA: "BLOCKED",
+                railPermissionB: "BLOCKED");
+        }
+
+        // Section 9.2: STRUCTURAL_BREAKDOWN ban — H4 support broken, H1 below MA, no base
+        if (IsStructuralBreakdownBan(snapshot))
+        {
+            return NoTrade(
+                "TABLE ABORTED — STRUCTURAL_BREAKDOWN (H4 support broken, no recovery base).",
+                score,
+                snapshot,
+                cause: "STRUCTURAL_BREAKDOWN",
+                waterfallRisk: "HIGH",
+                railPermissionA: "BLOCKED",
+                railPermissionB: "BLOCKED");
+        }
+
+        // Section 9.4: BottomPermission hard gate — must be TRUE before any TABLE
+        if (!IsBottomPermissionGranted(snapshot))
+        {
+            return NoTrade(
+                "TABLE ABORTED — BOTTOMPERMISSION_FALSE (no clean base/compression/sweep structure).",
+                score,
+                snapshot,
+                cause: "BOTTOMPERMISSION_FALSE",
+                waterfallRisk: waterfallRisk,
+                railPermissionA: "BLOCKED",
+                railPermissionB: "BLOCKED");
+        }
+
         var primaryClose = snapshot.AuthoritativeRate > 0m
             ? snapshot.AuthoritativeRate
             : snapshot.TimeframeData
             .FirstOrDefault(tf => string.Equals(tf.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.Close
             ?? snapshot.TimeframeData.First().Close;
 
-        var spikeCatchAllowed = IsSpikeCatchAllowedStandard(snapshot, cause, mode, waterfallRisk, telegramState);
-        var rail = spikeCatchAllowed && railPermissionB == "ALLOWED"
+        // Section 11.2: BuyStop — H1 above MA20, RSI 55-73, M15 compression ≥6, one at a time
+        var buyStopAllowed = IsBuyStopAllowed(snapshot, cause, mode, waterfallRisk, telegramState, ledgerState);
+        var rail = buyStopAllowed && railPermissionB == "ALLOWED"
             ? "BUY_STOP"
             : "BUY_LIMIT";
 
@@ -169,24 +222,50 @@ public static class DecisionEngine
             return NoTrade("Rail-B blocked by precedence gates.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
         }
 
-        var entry = rail == "BUY_STOP"
-            ? primaryClose + (snapshot.Atr * 0.45m)
-            : primaryClose - (snapshot.Atr * (railPermissionA == "AFTER_STRUCTURE" ? 0.95m : 0.55m));
-
-        var tpDistance = session switch
+        var atrM15 = snapshot.AtrM15 > 0m ? snapshot.AtrM15 : snapshot.Atr;
+        decimal entry;
+        decimal entryOffset;
+        if (rail == "BUY_STOP")
         {
-            "JAPAN" => Clamp(snapshot.Atr * 0.95m, 6m, 9m),
-            "INDIA" => Clamp(snapshot.Atr * 1.05m, 8m, 12m),
-            "LONDON" => Clamp(snapshot.Atr * 1.10m, 8m, 12m),
-            "NY" => Clamp(snapshot.Atr * 1.20m, 9m, 15m),
-            _ => Clamp(snapshot.Atr, 8m, 12m)
-        };
+            // Section 11.2: EntryOffset = max(2 USD, 0.25 × ATR_M15); EntryMT5 = LID + EntryOffset
+            entryOffset = Math.Max(2m, 0.25m * atrM15);
+            entry = primaryClose + entryOffset;
+        }
+        else
+        {
+            // Section 11.1: Buffer = max(1.5 USD, 0.2 × ATR_M15); EntryMT5 = support − Buffer
+            entryOffset = Math.Max(1.5m, 0.2m * atrM15);
+            entry = primaryClose - entryOffset;
+        }
+
+        // Section 11.1/11.2: TP caps per session (spec_v6 §3)
+        var sessionTpCap = GetSessionTpCap(session, snapshot.IsFriday);
+        decimal tpDistance;
+        if (rail == "BUY_STOP")
+        {
+            // Section 11.2: TP distance = EntryOffset × 3.5, capped by session cap
+            tpDistance = Math.Min(entryOffset * 3.5m, sessionTpCap);
+        }
+        else
+        {
+            // Section 11.1: BaseTP = 0.8 × ATR_M15 × 3, capped by session cap
+            tpDistance = Math.Min(0.8m * atrM15 * 3m, sessionTpCap);
+        }
 
         var tp = entry + tpDistance;
-        var bucket = "C1";
-        var sizeClass = ResolveSizeClassStandard(telegramState, waterfallRisk, railPermissionA);
 
-        var bucketCash = ledgerState.DeployableCashAed * 0.80m;
+        // Section 4: C1 bucket for standard rotation (80% of deployable)
+        var bucket = "C1";
+        // Always recompute from DeployableCashAed to ensure consistency; BucketC1Aed is the canonical value
+        var bucketCash = ledgerState.BucketC1Aed > 0m
+            ? ledgerState.BucketC1Aed
+            : decimal.Round(ledgerState.DeployableCashAed * 0.80m, 2);
+
+        // Section 11.2: BuyStop uses session-specific size bands; BuyLimit uses standard size class
+        var sizeClass = rail == "BUY_STOP"
+            ? ResolveBuyStopSizeClass(session, snapshot.IsFriday)
+            : ResolveSizeClassStandard(telegramState, waterfallRisk, railPermissionA);
+
         var maxGrams = ToMaxAffordableGrams(bucketCash, entry) - SafetyBufferGrams;
         var sizePct = ParseSizePercent(sizeClass);
         var gramsFromSizeClass = ToMaxAffordableGrams(bucketCash * sizePct, entry);
@@ -197,8 +276,17 @@ public static class DecisionEngine
             return NoTrade("Capacity below 100g minimum after spread/buffer.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
         }
 
-        var expiryBand = GetSessionExpiryBandStandard(session);
-        var expiry = snapshot.Timestamp.UtcDateTime.Add(expiryBand.Min);
+        // Section 12.1: Session expiry caps — Japan/India: 30m, London: 25m, NY: 20m, Friday: 15m
+        var expiryDuration = GetSessionExpiryDurationStandard(session, snapshot.IsFriday);
+        var expiryUtcOffset = new DateTimeOffset(snapshot.Timestamp.UtcDateTime.Add(expiryDuration), TimeSpan.Zero);
+
+        // Section 5.1: ExpiryServer = KSA − 50 min (UTC+2h10m); ExpiryKSA = UTC+3h
+        var expiryKsa = expiryUtcOffset.ToOffset(TimeSpan.FromHours(3));
+        var expiryServer = expiryUtcOffset.ToOffset(TimeSpan.FromHours(2).Add(TimeSpan.FromMinutes(10)));
+
+        // Section 3.2: ShopBuy = Entry + 0.80; ShopSell = TP − 0.80
+        var shopBuy = decimal.Round(entry + ShopSpreadUsdPerOz, 2);
+        var shopSell = decimal.Round(tp - ShopSpreadUsdPerOz, 2);
 
         return new DecisionResultContract(
             IsTradeAllowed: true,
@@ -218,13 +306,17 @@ public static class DecisionEngine
             Entry: decimal.Round(entry, 2),
             Tp: decimal.Round(tp, 2),
             Grams: decimal.Round(grams, 2),
-            ExpiryUtc: new DateTimeOffset(expiry, TimeSpan.Zero),
-            MaxLifeSeconds: (int)expiryBand.Max.TotalSeconds,
+            ExpiryUtc: expiryUtcOffset,
+            MaxLifeSeconds: (int)expiryDuration.TotalSeconds,
             AlignmentScore: score,
             TelegramState: telegramState,
             RailPermissionA: railPermissionA,
             RailPermissionB: railPermissionB,
-            RotationCapThisSession: 2);
+            RotationCapThisSession: 2,
+            ShopBuy: shopBuy,
+            ShopSell: shopSell,
+            ExpiryKSA: expiryKsa,
+            ExpiryServer: expiryServer);
     }
 
     private static bool IsSupportedGoldSymbol(string? symbol)
@@ -371,7 +463,8 @@ public static class DecisionEngine
             var entryBuffer = ResolveWarEntryBuffer(snapshot);
             var entry = primaryClose + entryBuffer;
             var tp = entry + tpDistances[stage];
-            var expiry = snapshot.Timestamp.UtcDateTime.Add(GetWarRailBExpiry(session));
+            var expiryWarB = snapshot.Timestamp.UtcDateTime.Add(GetWarRailBExpiry(session));
+            var expiryWarBOffset = new DateTimeOffset(expiryWarB, TimeSpan.Zero);
 
             return new DecisionResultContract(
                 IsTradeAllowed: true,
@@ -391,13 +484,17 @@ public static class DecisionEngine
                 Entry: decimal.Round(entry, 2),
                 Tp: decimal.Round(tp, 2),
                 Grams: decimal.Round(stageGrams, 2),
-                ExpiryUtc: new DateTimeOffset(expiry, TimeSpan.Zero),
+                ExpiryUtc: expiryWarBOffset,
                 MaxLifeSeconds: (int)GetWarRailBExpiry(session).TotalSeconds,
                 AlignmentScore: Math.Clamp(aiSignal.AlignmentScore, 0m, 1m),
                 TelegramState: telegramState,
                 RailPermissionA: "ALLOWED",
                 RailPermissionB: "ALLOWED",
-                RotationCapThisSession: 5);
+                RotationCapThisSession: 5,
+                ShopBuy: decimal.Round(entry + ShopSpreadUsdPerOz, 2),
+                ShopSell: decimal.Round(tp - ShopSpreadUsdPerOz, 2),
+                ExpiryKSA: expiryWarBOffset.ToOffset(TimeSpan.FromHours(3)),
+                ExpiryServer: expiryWarBOffset.ToOffset(TimeSpan.FromHours(2).Add(TimeSpan.FromMinutes(10))));
         }
 
         if (!IsShelfProof(snapshot))
@@ -431,7 +528,7 @@ public static class DecisionEngine
         var reloadEntry = primaryClose - Clamp(snapshot.AtrM15 > 0m ? snapshot.AtrM15 * 0.25m : 8m, 8m, 12m);
         var reloadTpDistance = Clamp(snapshot.AtrM15 > 0m ? snapshot.AtrM15 * 0.9m : 18m, 12m, 25m);
         var reloadTp = reloadEntry + reloadTpDistance;
-        var reloadExpiry = snapshot.Timestamp.UtcDateTime.Add(GetWarRailAExpiry(session));
+        var reloadExpiryOffset = new DateTimeOffset(snapshot.Timestamp.UtcDateTime.Add(GetWarRailAExpiry(session)), TimeSpan.Zero);
 
         return new DecisionResultContract(
             IsTradeAllowed: true,
@@ -451,13 +548,17 @@ public static class DecisionEngine
             Entry: decimal.Round(reloadEntry, 2),
             Tp: decimal.Round(reloadTp, 2),
             Grams: decimal.Round(reloadGrams, 2),
-            ExpiryUtc: new DateTimeOffset(reloadExpiry, TimeSpan.Zero),
+            ExpiryUtc: reloadExpiryOffset,
             MaxLifeSeconds: (int)GetWarRailAExpiry(session).TotalSeconds,
             AlignmentScore: Math.Clamp(aiSignal.AlignmentScore, 0m, 1m),
             TelegramState: telegramState,
             RailPermissionA: "ALLOWED",
             RailPermissionB: "BLOCKED",
-            RotationCapThisSession: 2);
+            RotationCapThisSession: 2,
+            ShopBuy: decimal.Round(reloadEntry + ShopSpreadUsdPerOz, 2),
+            ShopSell: decimal.Round(reloadTp - ShopSpreadUsdPerOz, 2),
+            ExpiryKSA: reloadExpiryOffset.ToOffset(TimeSpan.FromHours(3)),
+            ExpiryServer: reloadExpiryOffset.ToOffset(TimeSpan.FromHours(2).Add(TimeSpan.FromMinutes(10))));
     }
 
     private static string NormalizeSessionPhase(string? value)
@@ -731,15 +832,6 @@ public static class DecisionEngine
         _ => TimeSpan.FromMinutes(45)
     };
 
-    private static (TimeSpan Min, TimeSpan Max) GetSessionExpiryBandStandard(string session) => session.ToUpperInvariant() switch
-    {
-        "JAPAN" => (TimeSpan.FromMinutes(45), TimeSpan.FromMinutes(60)),
-        "INDIA" => (TimeSpan.FromMinutes(45), TimeSpan.FromMinutes(75)),
-        "LONDON" => (TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(55)),
-        "NY" => (TimeSpan.FromMinutes(20), TimeSpan.FromMinutes(45)),
-        _ => (TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(60))
-    };
-
     private static string NormalizeSession(string session)
     {
         var normalized = (session ?? string.Empty).Trim().ToUpperInvariant();
@@ -837,23 +929,185 @@ public static class DecisionEngine
         return "UNKNOWN";
     }
 
-    private static bool IsSpikeCatchAllowedStandard(
+    private static bool IsBuyStopAllowed(
         MarketSnapshotContract snapshot,
         string cause,
         string mode,
         string waterfallRisk,
-        string telegramState)
+        string telegramState,
+        LedgerStateContract ledgerState)
     {
+        // Section 11.2: Only one active BuyStop at a time; no stacking.
+        // Block if any buy position (open or pending) exists — BuyStop is for fresh continuation only.
+        if (ledgerState.OpenBuyCount > 0) return false;
         if (mode != "IMPULSE") return false;
         if (cause is not "TECH_BREAKOUT" and not "SCHEDULED_MACRO") return false;
         if (waterfallRisk != "LOW") return false;
+
+        // H1 above MA20
+        var h1 = snapshot.TimeframeData
+            .FirstOrDefault(x => string.Equals(x.Timeframe, "H1", StringComparison.OrdinalIgnoreCase));
+        var h1Close = h1?.Close ?? 0m;
+        if (snapshot.Ma20H1 > 0m && h1Close > 0m && h1Close <= snapshot.Ma20H1) return false;
+
+        // RSI(H1) between 55 and 73
+        if (snapshot.RsiH1 > 0m && (snapshot.RsiH1 < 55m || snapshot.RsiH1 > 73m)) return false;
+
+        // M15 compression ≥ 6 overlapping candles under lid
+        if (snapshot.CompressionCountM15 < 6) return false;
+
+        // No spread instability
         if (snapshot.SpreadMax60m > 0m && snapshot.SpreadMedian60m > 0m && snapshot.SpreadMax60m >= snapshot.SpreadMedian60m * 1.8m) return false;
-        if (snapshot.RsiH1 > 73m) return false;
+
+        // No panic or sell sentiment
         if (telegramState is "SELL" or "STRONG_SELL") return false;
         if (snapshot.PanicSuspected) return false;
-        if (snapshot.TvAlertType == "ADR_EXHAUSTION" || snapshot.TvAlertType == "RSI_OVERHEAT") return false;
-        if (snapshot.CompressionCountM15 < 3 || !snapshot.IsBreakoutConfirmed) return false;
-        return true;
+
+        return snapshot.IsBreakoutConfirmed;
+    }
+
+    /// <summary>
+    /// Section 9.3: LIVE_IMPULSE ban — active H1 impulse in motion with no reclaim structure.
+    /// Blocks all new entries until the impulse cools and a base forms.
+    /// </summary>
+    private static bool IsLiveImpulseBan(MarketSnapshotContract snapshot)
+    {
+        var h1 = snapshot.TimeframeData
+            .FirstOrDefault(x => string.Equals(x.Timeframe, "H1", StringComparison.OrdinalIgnoreCase));
+        var h1Body = h1?.CandleBodySize ?? 0m;
+        var h1Atr = snapshot.AtrH1 > 0m ? snapshot.AtrH1 : (h1?.Atr ?? 0m);
+
+        // H1 candle body ≥ 1.2×ATR_H1 indicates active impulse
+        var h1Impulse = h1Atr > 0m && h1Body >= h1Atr * 1.2m;
+
+        // ATR is expanding (momentum still in motion)
+        var expanding = snapshot.IsAtrExpanding || snapshot.IsExpansion;
+
+        // No reclaim structure formed yet (no sweep+reclaim or compression base)
+        var noReclaim = !snapshot.HasLiquiditySweep && snapshot.CompressionCountM15 < 2;
+
+        return h1Impulse && expanding && noReclaim;
+    }
+
+    /// <summary>
+    /// Section 9.1: TOP_LIQUIDATION ban — parabolic rally, extreme RSI, crowded sentiment, or failure signatures.
+    /// </summary>
+    private static bool IsTopLiquidationBan(MarketSnapshotContract snapshot, string telegramState)
+    {
+        // Parabolic: H1 RSI overbought extreme + ATR still expanding
+        var isParabolic = snapshot.RsiH1 >= 72m && snapshot.IsAtrExpanding;
+
+        // Late-stage push with crowded sentiment: ADR nearly exhausted + everyone buying
+        var isLateStage = snapshot.AdrUsedPct > 85m;
+        var isCrowded = telegramState is "STRONG_BUY";
+        var lateCrowdedPush = isLateStage && isCrowded;
+
+        // Explicit failure signatures from TradingView alerts
+        var hasFailure = snapshot.TvAlertType is "RSI_OVERHEAT" or "ADR_EXHAUSTION";
+
+        return isParabolic || lateCrowdedPush || hasFailure;
+    }
+
+    /// <summary>
+    /// Section 9.2: STRUCTURAL_BREAKDOWN ban — H4 key support broken, H1 below MA and cannot reclaim, no base.
+    /// </summary>
+    private static bool IsStructuralBreakdownBan(MarketSnapshotContract snapshot)
+    {
+        // H4 support broken: price below MA20_H4
+        var h4 = snapshot.TimeframeData
+            .FirstOrDefault(x => string.Equals(x.Timeframe, "H4", StringComparison.OrdinalIgnoreCase));
+        var h4Close = h4?.Close ?? 0m;
+        var h4Broken = snapshot.Ma20H4 > 0m && h4Close > 0m && h4Close < snapshot.Ma20H4;
+
+        // H1 below MA20 and no reclaim (cannot close back above)
+        var h1 = snapshot.TimeframeData
+            .FirstOrDefault(x => string.Equals(x.Timeframe, "H1", StringComparison.OrdinalIgnoreCase));
+        var h1Close = h1?.Close ?? 0m;
+        var h1BelowMa = snapshot.Ma20H1 > 0m && h1Close > 0m && h1Close < snapshot.Ma20H1;
+        var noReclaim = !snapshot.HasLiquiditySweep;
+
+        // No M15/M5 base supporting a long
+        var noBase = !snapshot.IsCompression && !snapshot.HasOverlapCandles && snapshot.CompressionCountM15 < 2;
+
+        return h4Broken && h1BelowMa && noReclaim && noBase;
+    }
+
+    /// <summary>
+    /// Section 9.4: BottomPermission hard gate — ALL of H1 sweep+reclaim, M15 base, M5 compression, and momentum must be TRUE.
+    /// </summary>
+    private static bool IsBottomPermissionGranted(MarketSnapshotContract snapshot)
+    {
+        // H1 sweep + reclaim: price swept intraday swing low then reclaimed
+        var hasH1SweepReclaim = snapshot.HasLiquiditySweep;
+
+        // M15 base structure: ≥2 overlapping candles with higher-low behaviour
+        var hasM15Base = snapshot.HasOverlapCandles && snapshot.CompressionCountM15 >= 2;
+
+        // M5 compression: ≥6 overlapping M5 candles, contracting range, no new down-impulse
+        var hasM5Compression = snapshot.IsCompression
+            && snapshot.CompressionCountM5 >= 6
+            && !snapshot.IsAtrExpanding;
+
+        // Momentum confirmation: RSI(M15) > 35 (not oversold) or RSI not available
+        var momentumOk = snapshot.RsiM15 == 0m || snapshot.RsiM15 > 35m;
+
+        return hasH1SweepReclaim && hasM15Base && hasM5Compression && momentumOk;
+    }
+
+    /// <summary>
+    /// Returns true when the session is in a Friday London or Friday NY window,
+    /// which triggers tighter expiry/TP/size caps per spec_v6 §3.
+    /// </summary>
+    private static bool IsFridayLondonOrNy(string session, bool isFriday)
+        => isFriday && session is "LONDON" or "NY";
+
+    /// <summary>
+    /// Section 11.1/11.2: Session TP cap (max USD distance from entry to TP) per spec_v6 §3/§5.
+    /// </summary>
+    private static decimal GetSessionTpCap(string session, bool isFriday)
+    {
+        if (IsFridayLondonOrNy(session, isFriday)) return 8m;
+        return session switch
+        {
+            "JAPAN" => 8m,
+            "INDIA" => 10m,
+            "LONDON" => 12m,
+            "NY" => 12m,
+            _ => 10m,
+        };
+    }
+
+    /// <summary>
+    /// Section 12.1: Session expiry caps — Japan/India: 30m, London: 25m, NY: 20m, Friday: 15m.
+    /// </summary>
+    private static TimeSpan GetSessionExpiryDurationStandard(string session, bool isFriday)
+    {
+        if (IsFridayLondonOrNy(session, isFriday)) return TimeSpan.FromMinutes(15);
+        return session switch
+        {
+            "JAPAN" => TimeSpan.FromMinutes(30),
+            "INDIA" => TimeSpan.FromMinutes(30),
+            "LONDON" => TimeSpan.FromMinutes(25),
+            "NY" => TimeSpan.FromMinutes(20),
+            _ => TimeSpan.FromMinutes(25),
+        };
+    }
+
+    /// <summary>
+    /// Section 11.2: BuyStop size bands per session (% of C1 bucket).
+    /// Japan: 25%, India: 30%, London: 20%, NY: 15%, Friday London/NY: 13%.
+    /// </summary>
+    private static string ResolveBuyStopSizeClass(string session, bool isFriday)
+    {
+        if (IsFridayLondonOrNy(session, isFriday)) return "13%";
+        return session switch
+        {
+            "JAPAN" => "25%",
+            "INDIA" => "30%",
+            "LONDON" => "20%",
+            "NY" => "15%",
+            _ => "20%",
+        };
     }
 
     private static string ResolveSizeClassStandard(string telegramState, string waterfallRisk, string railPermissionA)
@@ -873,7 +1127,11 @@ public static class DecisionEngine
 
     private static decimal ParseSizePercent(string sizeClass) => sizeClass switch
     {
+        "13%" => 0.13m,
+        "15%" => 0.15m,
+        "20%" => 0.20m,
         "25%" => 0.25m,
+        "30%" => 0.30m,
         "50%" => 0.50m,
         "75%" => 0.75m,
         "100%" => 1.00m,

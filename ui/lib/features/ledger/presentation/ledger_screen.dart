@@ -48,6 +48,8 @@ class _LedgerSummaryCard extends StatelessWidget {
     final exposure = (state.openExposurePercent as num).toDouble();
     final deployable = (state.deployableCashAed as num).toDouble();
     final openBuys = state.openBuyCount as int;
+    final bucketC1 = (state.bucketC1Aed as num).toDouble();
+    final bucketC2 = (state.bucketC2Aed as num).toDouble();
 
     return Card(
       child: Padding(
@@ -63,6 +65,11 @@ class _LedgerSummaryCard extends StatelessWidget {
                 exposure > 60 ? cs.error : cs.onSurface),
             _row('Deployable Cash', 'AED ${deployable.toStringAsFixed(2)}', cs.primary),
             _row('Open Buy Count', openBuys.toString(), cs.onSurface),
+            const Divider(height: 20),
+            Text('Capacity Buckets (Section 4)', style: tt.labelMedium?.copyWith(color: cs.outline)),
+            const SizedBox(height: 6),
+            _row('C1 Bucket (80%)', 'AED ${bucketC1.toStringAsFixed(2)}', cs.primary),
+            _row('C2 Bucket (20%)', 'AED ${bucketC2.toStringAsFixed(2)}', cs.secondary),
           ],
         ),
       ),

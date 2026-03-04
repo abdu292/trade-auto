@@ -81,6 +81,11 @@ public static class Mt5Endpoints
                     riskState = trade.RiskState,
                     sizeClass = trade.SizeClass,
                     telegramState = trade.TelegramState,
+                    // Section 8.2: Full TABLE columns
+                    shopBuy = trade.ShopBuy,
+                    shopSell = trade.ShopSell,
+                    expiryKsa = trade.ExpiryKSA,
+                    expiryServer = trade.ExpiryServer,
                 });
             })
             .WithName("GetPendingTrades")

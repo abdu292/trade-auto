@@ -117,6 +117,8 @@ class LedgerState {
     this.pendingReservedAed = 0,
     this.startingInvestmentAed = 0,
     this.equityMultiple = 0,
+    this.bucketC1Aed = 0,
+    this.bucketC2Aed = 0,
   });
 
   final double cashAed;
@@ -132,6 +134,9 @@ class LedgerState {
   final double pendingReservedAed;
   final double startingInvestmentAed;
   final double equityMultiple;
+  // Section 4: C1/C2 bucket split (C1=80%, C2=20% of deployable cash)
+  final double bucketC1Aed;
+  final double bucketC2Aed;
 
   factory LedgerState.fromJson(Map<String, dynamic> json) => LedgerState(
         cashAed: _readDouble(json, 'cashAed'),
@@ -147,6 +152,8 @@ class LedgerState {
         pendingReservedAed: _readDouble(json, 'pendingReservedAed'),
         startingInvestmentAed: _readDouble(json, 'startingInvestmentAed'),
         equityMultiple: _readDouble(json, 'equityMultiple'),
+        bucketC1Aed: _readDouble(json, 'bucketC1Aed'),
+        bucketC2Aed: _readDouble(json, 'bucketC2Aed'),
       );
 }
 

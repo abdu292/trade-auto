@@ -214,7 +214,12 @@ public sealed record DecisionResultContract(
     string TelegramState,
     string RailPermissionA,
     string RailPermissionB,
-    int RotationCapThisSession);
+    int RotationCapThisSession,
+    // Section 8.2: Full TABLE columns — shop prices and dual-timezone expiry
+    decimal ShopBuy = 0m,
+    decimal ShopSell = 0m,
+    DateTimeOffset ExpiryKSA = default,
+    DateTimeOffset ExpiryServer = default);
 
 public sealed record LedgerStateContract(
     decimal CashAed,
@@ -229,7 +234,10 @@ public sealed record LedgerStateContract(
     decimal OpenPositionsAed = 0m,
     decimal PendingReservedAed = 0m,
     decimal StartingInvestmentAed = 0m,
-    decimal EquityMultiple = 0m);
+    decimal EquityMultiple = 0m,
+    // Section 4: C1/C2 bucket capacity (C1=80%, C2=20% of deployable cash)
+    decimal BucketC1Aed = 0m,
+    decimal BucketC2Aed = 0m);
 
 public sealed record TradeSlipContract(
     string SlipType,
@@ -296,4 +304,9 @@ public sealed record PendingTradeContract(
     string Summary = "",
     string ModeHint = "UNKNOWN",
     decimal ModeConfidence = 0.5m,
-    string? CycleId = null);
+    string? CycleId = null,
+    // Section 8.2: Full TABLE columns — shop prices and dual-timezone expiry
+    decimal ShopBuy = 0m,
+    decimal ShopSell = 0m,
+    DateTimeOffset ExpiryKSA = default,
+    DateTimeOffset ExpiryServer = default);
