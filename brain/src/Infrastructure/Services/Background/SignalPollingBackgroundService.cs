@@ -655,7 +655,11 @@ public sealed class SignalPollingBackgroundService(
                     Summary: aiSignal.Summary,
                     ModeHint: aiSignal.ModeHint,
                     ModeConfidence: aiSignal.ModeConfidence,
-                    CycleId: cycleId);
+                    CycleId: cycleId,
+                    ShopBuy: decision.ShopBuy,
+                    ShopSell: decision.ShopSell,
+                    ExpiryKSA: decision.ExpiryKSA,
+                    ExpiryServer: decision.ExpiryServer);
 
                 var executionMode = ResolveExecutionMode(configuration["Execution:Mode"]);
                 var hybridSessions = ResolveHybridAutoSessions(configuration["Execution:HybridAutoSessions"]);

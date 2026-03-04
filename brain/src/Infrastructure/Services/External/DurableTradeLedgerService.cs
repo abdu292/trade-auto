@@ -15,6 +15,9 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
 
     private readonly Lock _gate = new();
 
+    private const decimal C1BucketFraction = 0.80m;
+    private const decimal C2BucketFraction = 0.20m;
+
     public LedgerStateContract GetState()
     {
         lock (_gate)
@@ -29,12 +32,15 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
                 .ToList();
 
             var exposure = GetExposurePercentUnsafe(account.CashAed, openPositions.Sum(x => x.DebitAed));
+            var deployable = decimal.Round(Math.Max(0m, account.CashAed), 2);
             return new LedgerStateContract(
                 CashAed: decimal.Round(account.CashAed, 2),
                 GoldGrams: decimal.Round(account.GoldGrams, 2),
                 OpenExposurePercent: decimal.Round(exposure, 2),
-                DeployableCashAed: decimal.Round(Math.Max(0m, account.CashAed), 2),
-                OpenBuyCount: openPositions.Count);
+                DeployableCashAed: deployable,
+                OpenBuyCount: openPositions.Count,
+                BucketC1Aed: decimal.Round(deployable * C1BucketFraction, 2),
+                BucketC2Aed: decimal.Round(deployable * C2BucketFraction, 2));
         }
     }
 
@@ -63,21 +69,24 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
             var equityMultiple = startingInvestment > 0m
                 ? decimal.Round(netEquityAed / startingInvestment, 4)
                 : 0m;
+            var deployable = decimal.Round(Math.Max(0m, account.CashAed), 2);
 
             return new LedgerStateContract(
                 CashAed: decimal.Round(account.CashAed, 2),
                 GoldGrams: decimal.Round(account.GoldGrams, 2),
                 OpenExposurePercent: decimal.Round(exposure, 2),
-                DeployableCashAed: decimal.Round(Math.Max(0m, account.CashAed), 2),
+                DeployableCashAed: deployable,
                 OpenBuyCount: openPositions.Count,
                 GoldAedEquivalent: goldAedEquivalent,
                 NetEquityAed: netEquityAed,
-                PurchasePowerAed: decimal.Round(account.CashAed, 2),
+                PurchasePowerAed: deployable,
                 DeployedAed: openPositionsAed,
                 OpenPositionsAed: openPositionsAed,
                 PendingReservedAed: 0m,
                 StartingInvestmentAed: decimal.Round(startingInvestment, 2),
-                EquityMultiple: equityMultiple);
+                EquityMultiple: equityMultiple,
+                BucketC1Aed: decimal.Round(deployable * C1BucketFraction, 2),
+                BucketC2Aed: decimal.Round(deployable * C2BucketFraction, 2));
         }
     }
 

@@ -23,12 +23,15 @@ public sealed class InMemoryTradeLedgerService : ITradeLedgerService
         lock (_gate)
         {
             var exposure = GetExposurePercentUnsafe();
+            var deployable = decimal.Round(Math.Max(0m, _cashAed), 2);
             return new LedgerStateContract(
                 CashAed: decimal.Round(_cashAed, 2),
                 GoldGrams: decimal.Round(_goldGrams, 2),
                 OpenExposurePercent: decimal.Round(exposure, 2),
-                DeployableCashAed: decimal.Round(Math.Max(0m, _cashAed), 2),
-                OpenBuyCount: _openPositions.Count);
+                DeployableCashAed: deployable,
+                OpenBuyCount: _openPositions.Count,
+                BucketC1Aed: decimal.Round(deployable * 0.80m, 2),
+                BucketC2Aed: decimal.Round(deployable * 0.20m, 2));
         }
     }
 
