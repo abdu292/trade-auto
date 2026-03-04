@@ -26,6 +26,9 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     private volatile bool _isPaused;
     private CancellationTokenSource? _replayCts;
 
+    // initial ledger balance (configurable via start request)
+    private decimal _initialCashAed = 50000m;
+
     private string _symbol = string.Empty;
     private int _totalCandles;
     private int _processedCandles;
@@ -153,6 +156,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         // Capture delay to avoid closure issues
         var speedMultiplier = Math.Max(1, request.SpeedMultiplier);
         var useAI = request.UseMockAI ? false : request.UseAI;
+        _initialCashAed = request.InitialCashAed;
 
         _ = Task.Run(async () =>
         {
@@ -405,11 +409,13 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
 
         // ── Step 3: Decision engine ──
         var regime = RegimeRiskClassifier.Classify(snapshot);
+        // ledger start balance may be overridden by the start request
+        var startingCash = _initialCashAed;
         var ledger = new LedgerStateContract(
-            CashAed: 50000m,
+            CashAed: startingCash,
             GoldGrams: 0m,
             OpenExposurePercent: 0m,
-            DeployableCashAed: 50000m,
+            DeployableCashAed: startingCash,
             OpenBuyCount: 0);
 
         var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, ledger);

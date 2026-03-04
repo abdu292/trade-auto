@@ -53,7 +53,8 @@ public sealed record ReplayStartRequest(
     DateTimeOffset? To = null,
     int SpeedMultiplier = 100,
     bool UseAI = true,
-    bool UseMockAI = false);
+    bool UseMockAI = false,
+    decimal InitialCashAed = 50000m);  // starting deployable cash for the ledger
 
 public sealed record ReplayStatusContract(
     bool IsRunning,

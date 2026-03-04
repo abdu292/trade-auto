@@ -15,14 +15,14 @@ public static class ReplayEndpoints
             "/import",
             async Task<IResult> (
                 IHistoricalReplayService replay,
-                HttpRequest request,
+                IFormFile file,
                 string symbol,
                 string timeframe,
                 CancellationToken cancellationToken) =>
             {
-                if (request.ContentLength == 0 || request.Body == null)
+                if (file == null || file.Length == 0)
                 {
-                    return TypedResults.BadRequest(new { error = "Request body must contain CSV candle data." });
+                    return TypedResults.BadRequest(new { error = "A CSV file must be uploaded using the 'file' form field." });
                 }
 
                 var symNorm = (symbol ?? string.Empty).Trim().ToUpperInvariant();
@@ -36,7 +36,8 @@ public static class ReplayEndpoints
 
                 try
                 {
-                    var count = await replay.ImportCandlesAsync(symNorm, tfNorm, request.Body, cancellationToken);
+                    using var stream = file.OpenReadStream();
+                    var count = await replay.ImportCandlesAsync(symNorm, tfNorm, stream, cancellationToken);
                     var totals = replay.GetImportedCounts(symNorm);
 
                     return TypedResults.Ok(new
@@ -55,9 +56,11 @@ public static class ReplayEndpoints
                     return TypedResults.BadRequest(new { error = ex.Message });
                 }
             })
+            .DisableAntiforgery()
             .WithName("ImportReplayCandles")
             .WithDescription(
                 "Import MT5-exported CSV candle data for historical replay. " +
+                "Upload the file using multipart/form-data with field name 'file'. " +
                 "Accepted formats: MT5 (Date,Time,Open,High,Low,Close,Volume) or ISO (timestamp,open,high,low,close[,volume]). " +
                 "Call once per timeframe (M5, M15, H1) before starting replay.");
 
@@ -90,6 +93,7 @@ public static class ReplayEndpoints
                 "Start historical candle replay. Replay drives the full decision pipeline (rule engine → AI → decision engine) " +
                 "using imported CSV data. Real trade execution is always disabled. " +
                 "Real AI is used by default; set useMockAI=true for explicit mock mode. " +
+                "You can also override the starting ledger cash via InitialCashAed. " +
                 "Decision timeline events are recorded in the database and viewable at GET /api/monitoring/timeline.");
 
         // ── Pause replay ───────────────────────────────────────────────────
