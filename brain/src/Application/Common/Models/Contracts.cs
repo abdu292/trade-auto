@@ -84,6 +84,7 @@ public sealed record MarketSnapshotContract(
     decimal SpreadMedian60m = 0m,
     decimal SpreadMax60m = 0m,
     int CompressionCountM15 = 0,
+    int CompressionCountM5 = 0,
     int ExpansionCountM15 = 0,
     decimal ImpulseStrengthScore = 0m,
     string TelegramState = "QUIET",
