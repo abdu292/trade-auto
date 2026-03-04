@@ -5,6 +5,7 @@ import '../core/network/api_client.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/ledger/presentation/ledger_screen.dart';
 import '../features/risk/presentation/risk_control_screen.dart';
+import '../features/replay/presentation/replay_screen.dart';
 import '../features/sessions/presentation/session_overview_screen.dart';
 import '../features/strategies/presentation/strategy_control_screen.dart';
 import '../features/trades/presentation/trades_screen.dart';
@@ -26,6 +27,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     'Strategies',
     'Risk',
     'Trades',
+    'Replay',
     'Sessions',
     'Ledger',
   ];
@@ -110,6 +112,8 @@ class _AppShellState extends ConsumerState<AppShell> {
         ..invalidate(hazardWindowsProvider)
         ..invalidate(activeTradesProvider)
         ..invalidate(signalsProvider)
+        ..invalidate(replayStatusProvider)
+        ..invalidate(timelineProvider)
         ..invalidate(sessionsProvider)
         ..invalidate(runtimeStatusProvider)
         ..invalidate(kpiProvider);
@@ -126,6 +130,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       const StrategyControlScreen(),
       const RiskControlScreen(),
       const TradesScreen(),
+      const ReplayScreen(),
       const SessionOverviewScreen(),
       const LedgerScreen(),
     ];
@@ -147,6 +152,10 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: Icon(Icons.swap_horiz_outlined),
           selectedIcon: Icon(Icons.swap_horiz),
           label: 'Trades'),
+        NavigationDestination(
+          icon: Icon(Icons.replay_outlined),
+          selectedIcon: Icon(Icons.replay),
+          label: 'Replay'),
       NavigationDestination(
           icon: Icon(Icons.schedule_outlined),
           selectedIcon: Icon(Icons.schedule),
@@ -168,6 +177,8 @@ class _AppShellState extends ConsumerState<AppShell> {
         ..invalidate(hazardWindowsProvider)
         ..invalidate(activeTradesProvider)
         ..invalidate(signalsProvider)
+        ..invalidate(replayStatusProvider)
+        ..invalidate(timelineProvider)
         ..invalidate(sessionsProvider)
         ..invalidate(runtimeStatusProvider)
         ..invalidate(kpiProvider);
@@ -270,6 +281,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                           NavigationRailDestination(
                               icon: Icon(Icons.swap_horiz),
                               label: Text('Trades')),
+                            NavigationRailDestination(
+                              icon: Icon(Icons.replay),
+                              label: Text('Replay')),
                           NavigationRailDestination(
                               icon: Icon(Icons.schedule),
                               label: Text('Sessions')),

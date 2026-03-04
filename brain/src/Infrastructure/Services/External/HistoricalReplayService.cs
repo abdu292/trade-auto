@@ -152,7 +152,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
 
         // Capture delay to avoid closure issues
         var speedMultiplier = Math.Max(1, request.SpeedMultiplier);
-        var useAI = request.UseAI;
+        var useAI = request.UseMockAI ? false : request.UseAI;
 
         _ = Task.Run(async () =>
         {
@@ -275,6 +275,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         using var scope = _serviceProvider.CreateScope();
         var timeline = scope.ServiceProvider.GetRequiredService<IRuntimeTimelineWriter>();
         var aiWorker = scope.ServiceProvider.GetRequiredService<IAIWorkerClient>();
+        var economicNews = scope.ServiceProvider.GetRequiredService<IEconomicNewsService>();
 
         var cycleId = $"replay_{snapshot.Timestamp:yyyyMMddHHmmss}_{snapshot.Symbol}";
 
@@ -317,6 +318,38 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         }
 
         Interlocked.Increment(ref _setupCandidatesFound);
+
+        var newsRisk = await economicNews.AssessAsync(snapshot.Timestamp, ct);
+        await timeline.WriteAsync(
+            eventType: "REPLAY_NEWS_CHECK",
+            stage: "news",
+            source: "forexfactory",
+            symbol: snapshot.Symbol,
+            cycleId: cycleId,
+            tradeId: null,
+            payload: new
+            {
+                blocked = newsRisk.IsBlocked,
+                newsRisk.Reason,
+                newsRisk.NearbyEvents,
+                newsRisk.RefreshedAtUtc,
+                newsRisk.IsStale,
+            },
+            cancellationToken: ct);
+
+        if (newsRisk.IsBlocked)
+        {
+            await timeline.WriteAsync(
+                eventType: "CYCLE_ABORTED",
+                stage: "news",
+                source: "replay_engine",
+                symbol: snapshot.Symbol,
+                cycleId: cycleId,
+                tradeId: null,
+                payload: new { reason = newsRisk.Reason, newsRisk.NearbyEvents },
+                cancellationToken: ct);
+            return;
+        }
 
         // ── Step 2: AI analysis (or mock) ──
         TradeSignalContract aiSignal;

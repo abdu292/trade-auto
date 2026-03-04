@@ -52,7 +52,8 @@ public sealed record ReplayStartRequest(
     DateTimeOffset? From = null,
     DateTimeOffset? To = null,
     int SpeedMultiplier = 100,
-    bool UseAI = false);
+    bool UseAI = true,
+    bool UseMockAI = false);
 
 public sealed record ReplayStatusContract(
     bool IsRunning,

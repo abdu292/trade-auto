@@ -63,3 +63,11 @@ final hazardWindowsProvider = FutureProvider<List<HazardWindow>>((ref) {
 final kpiProvider = FutureProvider<KpiStats>((ref) {
   return ref.watch(brainApiProvider).getKpiStats();
 });
+
+final replayStatusProvider = FutureProvider<ReplayStatusResponse>((ref) {
+  return ref.watch(brainApiProvider).getReplayStatus();
+});
+
+final timelineProvider = FutureProvider<List<RuntimeTimelineItem>>((ref) {
+  return ref.watch(brainApiProvider).getTimelineEvents(take: 200);
+});

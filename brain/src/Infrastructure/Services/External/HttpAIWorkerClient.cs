@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Net.Http;
 using Brain.Application.Common.Interfaces;
 using Brain.Application.Common.Models;
 using Microsoft.Extensions.Configuration;
@@ -12,6 +13,9 @@ namespace Brain.Infrastructure.Services.External;
 /// </summary>
 public sealed class HttpAIWorkerClient : IAIWorkerClient
 {
+    private const int MaxAnalyzeResponseBytes = 1_500_000;
+    private const int MaxModeResponseBytes = 250_000;
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<HttpAIWorkerClient> _logger;
     private readonly string _baseUrl;
@@ -172,14 +176,19 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 Encoding.UTF8,
                 "application/json");
 
-            var response = await _httpClient.PostAsync(
-                $"{_baseUrl}/analyze",
-                jsonContent,
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/analyze")
+            {
+                Content = jsonContent,
+            };
+
+            using var response = await _httpClient.SendAsync(
+                requestMessage,
+                HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
 
             response.EnsureSuccessStatusCode();
 
-            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            var responseBody = await ReadResponseBodyLimitedAsync(response, MaxAnalyzeResponseBytes, cancellationToken);
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var result = JsonSerializer.Deserialize<TradeSignalResponse>(responseBody, options);
 
@@ -269,9 +278,14 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 Encoding.UTF8,
                 "application/json");
 
-            var response = await _httpClient.PostAsync(
-                $"{_baseUrl}/mode",
-                jsonContent,
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/mode")
+            {
+                Content = jsonContent,
+            };
+
+            using var response = await _httpClient.SendAsync(
+                requestMessage,
+                HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -279,7 +293,7 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 return null;
             }
 
-            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            var responseBody = await ReadResponseBodyLimitedAsync(response, MaxModeResponseBytes, cancellationToken);
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var result = JsonSerializer.Deserialize<ModeSignalResponse>(responseBody, options);
             if (result is null)
@@ -310,6 +324,33 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         }
 
         return "http://127.0.0.1:8001";
+    }
+
+    private static async Task<string> ReadResponseBodyLimitedAsync(HttpResponseMessage response, int maxBytes, CancellationToken cancellationToken)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var ms = new MemoryStream();
+        var buffer = new byte[8192];
+        var total = 0;
+
+        while (true)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
+            if (read <= 0)
+            {
+                break;
+            }
+
+            total += read;
+            if (total > maxBytes)
+            {
+                throw new InvalidOperationException($"AI worker response exceeded {maxBytes} bytes limit.");
+            }
+
+            ms.Write(buffer, 0, read);
+        }
+
+        return Encoding.UTF8.GetString(ms.ToArray());
     }
 
     /// <summary>

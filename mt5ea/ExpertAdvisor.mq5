@@ -129,7 +129,7 @@ void OnTick()
     lastM15Bar = currentM15Bar;
     lastH1Bar = currentH1Bar;
 
-    if ((now - lastSnapshotPush >= SnapshotPushSeconds) || candleAlignedPush)
+    if (candleAlignedPush)
     {
         g_api.PostMarketSnapshot(_Symbol);
         lastSnapshotPush = now;

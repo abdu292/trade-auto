@@ -22,6 +22,8 @@ from app.services.telegram_news import TelegramNewsContext, TelegramNewsService
 logger = logging.getLogger(__name__)
 
 _PROMPT_TEXT_CACHE: dict[str, str] = {}
+_MAX_PROVIDER_TRACES = 120
+_MAX_TRACE_FIELD_CHARS = 3500
 
 
 def _load_short_prompt(filename: str) -> str:
@@ -57,7 +59,15 @@ class AnalyzerService:
         if snapshot.symbol.upper() != "XAUUSD":
             raise ValueError("Only XAUUSD is supported")
 
-        primary_tf = snapshot.timeframeData[0]
+        allowed_tfs = {"H1", "M15", "M5"}
+        scoped_timeframes = [
+            item for item in snapshot.timeframeData
+            if (item.timeframe or "").upper() in allowed_tfs
+        ]
+        if not scoped_timeframes:
+            scoped_timeframes = snapshot.timeframeData
+
+        primary_tf = scoped_timeframes[0]
         volatility_expansion = snapshot.volatilityExpansion
         if volatility_expansion is None:
             volatility_expansion = (snapshot.atr / snapshot.adr) if snapshot.adr > 0 else 0.0
@@ -71,7 +81,7 @@ class AnalyzerService:
             "high": primary_tf.high,
             "low": primary_tf.low,
             "close": primary_tf.close,
-            "timeframes": [item.model_dump() for item in snapshot.timeframeData],
+            "timeframes": [item.model_dump() for item in scoped_timeframes],
             "ma20": snapshot.ma20,
             "ma20_h4": snapshot.ma20H4,
             "ma20_h1": snapshot.ma20H1,
@@ -161,6 +171,29 @@ class AnalyzerService:
             "authoritative_rate": authoritative_rate,
         }
         market_context["_ai_provider_traces"] = []
+
+        def _compact_provider_traces() -> list[dict[str, object]]:
+            raw = market_context.get("_ai_provider_traces", [])
+            if not isinstance(raw, list):
+                return []
+
+            compact: list[dict[str, object]] = []
+            for item in raw[:_MAX_PROVIDER_TRACES]:
+                if not isinstance(item, dict):
+                    continue
+
+                normalized: dict[str, object] = {}
+                for key, value in item.items():
+                    if isinstance(value, str):
+                        if len(value) > _MAX_TRACE_FIELD_CHARS:
+                            normalized[key] = value[:_MAX_TRACE_FIELD_CHARS] + "...<truncated>"
+                        else:
+                            normalized[key] = value
+                    else:
+                        normalized[key] = value
+                compact.append(normalized)
+
+            return compact
 
         try:
             telegram_news = await asyncio.wait_for(
@@ -274,7 +307,7 @@ class AnalyzerService:
         }
 
         def _build_request_with_prompt_dispatch() -> dict[str, object]:
-            provider_traces = market_context.get("_ai_provider_traces", [])
+            provider_traces = _compact_provider_traces()
             dispatch: list[dict[str, object]] = []
             ai_used: list[dict[str, str]] = []
             seen_dispatch: set[str] = set()
@@ -385,7 +418,7 @@ class AnalyzerService:
                 providerModels=provider_models,
                 aiTraceJson=json.dumps({
                     "ai_request": _build_request_with_prompt_dispatch(),
-                    "provider_traces": market_context.get("_ai_provider_traces", []),
+                    "provider_traces": _compact_provider_traces(),
                     "stage": "pretable",
                     "result": "blocked",
                     "reason": "RISK_BLOCKED_PRETABLE",
@@ -415,7 +448,7 @@ class AnalyzerService:
                 prompt_refs,
                 provider_models,
                 stage_events,
-                market_context.get("_ai_provider_traces", []),
+                _compact_provider_traces(),
             )
 
         min_agreement = 1 if AI_STRATEGY == "single" else max(2, CONSENSUS_MIN_AGREEMENT)
@@ -499,7 +532,7 @@ class AnalyzerService:
                     prompt_refs,
                     provider_models,
                     stage_events,
-                    market_context.get("_ai_provider_traces", []),
+                    _compact_provider_traces(),
                 )
                 fallback.providerVotes = list(dict.fromkeys((pre_stage_votes or []) + (fallback.providerVotes or [])))
                 fallback.summary = (
@@ -508,7 +541,7 @@ class AnalyzerService:
                 )
                 fallback.aiTraceJson = json.dumps({
                     "ai_request": _build_request_with_prompt_dispatch(),
-                    "provider_traces": market_context.get("_ai_provider_traces", []),
+                    "provider_traces": _compact_provider_traces(),
                     "stage": "committee",
                     "result": "fallback",
                     "reason": committee.disagreement_reason or "no_consensus",
@@ -571,7 +604,7 @@ class AnalyzerService:
                 providerModels=provider_models,
                 aiTraceJson=json.dumps({
                     "ai_request": _build_request_with_prompt_dispatch(),
-                    "provider_traces": market_context.get("_ai_provider_traces", []),
+                    "provider_traces": _compact_provider_traces(),
                     "stage": "committee",
                     "result": "failed",
                     "pre_stage_votes": pre_stage_votes,
@@ -720,7 +753,7 @@ class AnalyzerService:
                 providerModels=provider_models,
                 aiTraceJson=json.dumps({
                     "ai_request": _build_request_with_prompt_dispatch(),
-                    "provider_traces": market_context.get("_ai_provider_traces", []),
+                    "provider_traces": _compact_provider_traces(),
                     "stage": "validation",
                     "result": "failed",
                     "validation_passed": validation_passed,
@@ -780,7 +813,7 @@ class AnalyzerService:
             providerModels=provider_models,
             aiTraceJson=json.dumps({
                 "ai_request": _build_request_with_prompt_dispatch(),
-                "provider_traces": market_context.get("_ai_provider_traces", []),
+                "provider_traces": _compact_provider_traces(),
                 "stage": "final",
                 "result": "trade_signal",
                 "pre_stage_votes": pre_stage_votes,

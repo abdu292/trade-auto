@@ -55,6 +55,9 @@ public static class DependencyInjection
         }
 
         services.AddScoped<IMarketDataProvider, Mt5MarketDataProvider>();
+        services.AddHttpClient<ForexFactoryNewsService>()
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+        services.AddSingleton<IEconomicNewsService, ForexFactoryNewsService>();
         services.AddScoped<IRuntimeTimelineWriter, RuntimeTimelineWriter>();
         services.AddScoped<IWhatsAppService, MockWhatsAppService>();
         services.AddScoped<ICalendarService, MockCalendarService>();

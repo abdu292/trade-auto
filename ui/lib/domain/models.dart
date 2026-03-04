@@ -377,6 +377,113 @@ class RuntimeStatus {
       RuntimeSettings(symbol: _readString(json, 'symbol'));
     }
 
+class ReplayStatus {
+  const ReplayStatus({
+    required this.isRunning,
+    required this.isPaused,
+    required this.symbol,
+    required this.totalCandles,
+    required this.processedCandles,
+    required this.cyclesTriggered,
+    required this.setupCandidatesFound,
+    required this.tradesArmed,
+    this.replayFrom,
+    this.replayTo,
+    this.startedUtc,
+    required this.driverTimeframe,
+  });
+
+  final bool isRunning;
+  final bool isPaused;
+  final String symbol;
+  final int totalCandles;
+  final int processedCandles;
+  final int cyclesTriggered;
+  final int setupCandidatesFound;
+  final int tradesArmed;
+  final DateTime? replayFrom;
+  final DateTime? replayTo;
+  final DateTime? startedUtc;
+  final String driverTimeframe;
+
+  factory ReplayStatus.fromJson(Map<String, dynamic> json) => ReplayStatus(
+        isRunning: _readBool(json, 'isRunning'),
+        isPaused: _readBool(json, 'isPaused'),
+        symbol: _readString(json, 'symbol'),
+        totalCandles: _readInt(json, 'totalCandles'),
+        processedCandles: _readInt(json, 'processedCandles'),
+        cyclesTriggered: _readInt(json, 'cyclesTriggered'),
+        setupCandidatesFound: _readInt(json, 'setupCandidatesFound'),
+        tradesArmed: _readInt(json, 'tradesArmed'),
+        replayFrom: _readNullableDateTime(json, 'replayFrom'),
+        replayTo: _readNullableDateTime(json, 'replayTo'),
+        startedUtc: _readNullableDateTime(json, 'startedUtc'),
+        driverTimeframe: _readString(json, 'driverTimeframe'),
+      );
+}
+
+class ReplayStatusResponse {
+  const ReplayStatusResponse({
+    required this.status,
+    required this.importedCandles,
+  });
+
+  final ReplayStatus status;
+  final Map<String, int> importedCandles;
+
+  factory ReplayStatusResponse.fromJson(Map<String, dynamic> json) {
+    final statusMap = _readMap(json, 'status');
+    final importedRaw = json['importedCandles'] ?? json['ImportedCandles'];
+    final imported = <String, int>{};
+    if (importedRaw is Map) {
+      importedRaw.forEach((key, value) {
+        imported[key.toString()] = value is num ? value.toInt() : int.tryParse(value.toString()) ?? 0;
+      });
+    }
+
+    return ReplayStatusResponse(
+      status: ReplayStatus.fromJson(statusMap),
+      importedCandles: imported,
+    );
+  }
+}
+
+class RuntimeTimelineItem {
+  const RuntimeTimelineItem({
+    required this.id,
+    required this.eventType,
+    required this.stage,
+    required this.source,
+    required this.symbol,
+    this.cycleId,
+    this.tradeId,
+    required this.createdAtUtc,
+    required this.payload,
+  });
+
+  final String id;
+  final String eventType;
+  final String stage;
+  final String source;
+  final String symbol;
+  final String? cycleId;
+  final String? tradeId;
+  final DateTime createdAtUtc;
+  final Map<String, dynamic> payload;
+
+  factory RuntimeTimelineItem.fromJson(Map<String, dynamic> json) => RuntimeTimelineItem(
+        id: _readString(json, 'id'),
+        eventType: _readString(json, 'eventType'),
+        stage: _readString(json, 'stage'),
+        source: _readString(json, 'source'),
+        symbol: _readString(json, 'symbol'),
+        cycleId: _readNullableString(json, 'cycleId'),
+        tradeId: _readNullableString(json, 'tradeId'),
+        createdAtUtc: _readDateTime(json, 'createdAtUtc'),
+        payload: _readMap(json, 'payload'),
+      );
+}
+
 class HazardWindow {
   const HazardWindow({
     required this.id,

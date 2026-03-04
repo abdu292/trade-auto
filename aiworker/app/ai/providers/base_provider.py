@@ -115,6 +115,10 @@ def _load_prompt_for_role(role: str = "standard") -> str:
 
 
 class AIProvider(ABC):
+    _MAX_TRACE_ITEMS = 120
+    _MAX_PROMPT_CHARS = 4000
+    _MAX_RESPONSE_CHARS = 6000
+
     """Base class for all AI providers"""
 
     # Subclasses override this to load their provider-specific master prompt.
@@ -184,7 +188,17 @@ DO NOT add any explanation outside the JSON."""
         sink = market_context.get("_ai_provider_traces")
         if not isinstance(sink, list):
             return
+        if len(sink) >= self._MAX_TRACE_ITEMS:
+            return
         sink.append(trace)
+
+    @staticmethod
+    def _truncate(text: str, max_chars: int) -> str:
+        if not isinstance(text, str):
+            return ""
+        if len(text) <= max_chars:
+            return text
+        return text[:max_chars] + "...<truncated>"
 
     def _trace_request(self, market_context: dict, system_prompt: str, user_prompt: str) -> None:
         self._append_provider_trace(
@@ -195,8 +209,8 @@ DO NOT add any explanation outside the JSON."""
                 "analyzer": self.config.name,
                 "provider": self.config.provider,
                 "model": self.config.model,
-                "system_prompt": system_prompt,
-                "user_prompt": user_prompt,
+                "system_prompt": self._truncate(system_prompt, self._MAX_PROMPT_CHARS),
+                "user_prompt": self._truncate(user_prompt, self._MAX_PROMPT_CHARS),
             },
         )
 
@@ -209,7 +223,7 @@ DO NOT add any explanation outside the JSON."""
                 "analyzer": self.config.name,
                 "provider": self.config.provider,
                 "model": self.config.model,
-                "raw_response": raw_response,
+                "raw_response": self._truncate(raw_response, self._MAX_RESPONSE_CHARS),
                 "parsed_signal": parsed_signal.to_dict() if parsed_signal is not None else None,
             },
         )

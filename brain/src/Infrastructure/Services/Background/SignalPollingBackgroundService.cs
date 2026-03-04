@@ -43,6 +43,7 @@ public sealed class SignalPollingBackgroundService(
             using var scope = scopeFactory.CreateScope();
             var marketData = scope.ServiceProvider.GetRequiredService<IMarketDataProvider>();
             var aiWorker = scope.ServiceProvider.GetRequiredService<IAIWorkerClient>();
+            var economicNews = scope.ServiceProvider.GetRequiredService<IEconomicNewsService>();
             var pendingTrades = scope.ServiceProvider.GetRequiredService<IPendingTradeStore>();
             var approvals = scope.ServiceProvider.GetRequiredService<ITradeApprovalStore>();
             var ledger = scope.ServiceProvider.GetRequiredService<ITradeLedgerService>();
@@ -173,6 +174,64 @@ public sealed class SignalPollingBackgroundService(
                     logger.LogInformation(
                         "RULE_ENGINE_ABORT — no setup candidate. Reason={Reason}",
                         setupCandidate.AbortReason);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
+                var newsRisk = await economicNews.AssessAsync(snapshot.Timestamp, stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "NEWS_CHECK",
+                    stage: "news",
+                    source: "forexfactory",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        blocked = newsRisk.IsBlocked,
+                        newsRisk.Reason,
+                        newsRisk.NearbyEvents,
+                        newsRisk.RefreshedAtUtc,
+                        newsRisk.IsStale,
+                    },
+                    cancellationToken: stoppingToken);
+
+                if (newsRisk.IsBlocked)
+                {
+                    db.DecisionLogs.Add(DecisionLog.Create(
+                        symbol: snapshot.Symbol,
+                        status: "NO_TRADE",
+                        engineState: "CAPITAL_PROTECTED",
+                        mode: "EXHAUSTION",
+                        cause: "NEWS_RISK_BLOCK",
+                        waterfallRisk: "LOW",
+                        telegramState: snapshot.TelegramState,
+                        railPermissionA: "BLOCKED",
+                        railPermissionB: "BLOCKED",
+                        reason: newsRisk.Reason,
+                        entry: 0m,
+                        tp: 0m,
+                        grams: 0m,
+                        rotationCapThisSession: 0,
+                        forceWhereToTrade: forceWhereToTrade,
+                        snapshotHash: ComputeSnapshotHash(snapshot)));
+                    await db.SaveChangesAsync(stoppingToken);
+
+                    await timeline.WriteAsync(
+                        eventType: "CYCLE_ABORTED",
+                        stage: "news",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            reason = newsRisk.Reason,
+                            newsRisk.NearbyEvents,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    logger.LogInformation("NO_TRADE due to economic news block. Reason={Reason}", newsRisk.Reason);
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -877,7 +936,14 @@ public sealed class SignalPollingBackgroundService(
 
     private static ExecutionMode ResolveExecutionMode(string? value)
     {
-        return ExecutionMode.Manual;
+        var normalized = (value ?? "AUTO").Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "AUTO" => ExecutionMode.Auto,
+            "HYBRID" => ExecutionMode.Hybrid,
+            "MANUAL" => ExecutionMode.Manual,
+            _ => ExecutionMode.Auto,
+        };
     }
 
     private static HashSet<string> ResolveHybridAutoSessions(string? value)

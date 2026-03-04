@@ -132,6 +132,86 @@ class BrainApi {
     return KpiStats.fromJson(_asMap(response.data));
   }
 
+  Future<ReplayStatusResponse> getReplayStatus({String? symbol}) async {
+    final response = await _dio.get(
+      '/api/replay/status',
+      queryParameters: symbol == null || symbol.isEmpty ? null : {'symbol': symbol},
+    );
+    return ReplayStatusResponse.fromJson(_asMap(response.data));
+  }
+
+  Future<ReplayStatusResponse> startReplay({
+    required String symbol,
+    int speedMultiplier = 100,
+    bool useAI = true,
+    bool useMockAI = false,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final response = await _dio.post('/api/replay/start', data: {
+      'symbol': symbol,
+      'speedMultiplier': speedMultiplier,
+      'useAI': useAI,
+      'useMockAI': useMockAI,
+      'from': from?.toUtc().toIso8601String(),
+      'to': to?.toUtc().toIso8601String(),
+    });
+    final data = _asMap(response.data);
+    return ReplayStatusResponse(
+      status: ReplayStatus.fromJson(_asMap(data['status'])),
+      importedCandles: const {},
+    );
+  }
+
+  Future<ReplayStatusResponse> pauseReplay() async {
+    final response = await _dio.post('/api/replay/pause');
+    final data = _asMap(response.data);
+    return ReplayStatusResponse(
+      status: ReplayStatus.fromJson(_asMap(data['status'])),
+      importedCandles: const {},
+    );
+  }
+
+  Future<ReplayStatusResponse> resumeReplay() async {
+    final response = await _dio.post('/api/replay/resume');
+    final data = _asMap(response.data);
+    return ReplayStatusResponse(
+      status: ReplayStatus.fromJson(_asMap(data['status'])),
+      importedCandles: const {},
+    );
+  }
+
+  Future<ReplayStatusResponse> stopReplay() async {
+    final response = await _dio.post('/api/replay/stop');
+    final data = _asMap(response.data);
+    return ReplayStatusResponse(
+      status: ReplayStatus.fromJson(_asMap(data['status'])),
+      importedCandles: const {},
+    );
+  }
+
+  Future<List<RuntimeTimelineItem>> getTimelineEvents({
+    int take = 200,
+    String? cycleId,
+  }) async {
+    final response = await _dio.get('/api/monitoring/timeline', queryParameters: {
+      'take': take,
+      if (cycleId != null && cycleId.isNotEmpty) 'cycleId': cycleId,
+    });
+
+    final map = _asMap(response.data);
+    final events = map['events'];
+    if (events is! List) {
+      return const [];
+    }
+
+    return events
+        .whereType<Map>()
+        .map((event) => RuntimeTimelineItem.fromJson(
+            event.map((key, value) => MapEntry(key.toString(), value))))
+        .toList();
+  }
+
   Future<LedgerState> ledgerDeposit(
       {required double amountAed, required String note}) async {
     final response = await _dio.post('/api/monitoring/ledger/deposit',

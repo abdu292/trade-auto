@@ -89,6 +89,7 @@ public static class ReplayEndpoints
             .WithDescription(
                 "Start historical candle replay. Replay drives the full decision pipeline (rule engine → AI → decision engine) " +
                 "using imported CSV data. Real trade execution is always disabled. " +
+                "Real AI is used by default; set useMockAI=true for explicit mock mode. " +
                 "Decision timeline events are recorded in the database and viewable at GET /api/monitoring/timeline.");
 
         // ── Pause replay ───────────────────────────────────────────────────

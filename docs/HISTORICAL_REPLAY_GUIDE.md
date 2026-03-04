@@ -1,5 +1,10 @@
 # Historical Replay Guide
 
+## Which guide should I use?
+
+- Start with `docs/PRD3_E2E_TEST_GUIDE.md` if your goal is to run tests immediately.
+- Use this file as the detailed reference (CSV formats, architecture notes, troubleshooting depth).
+
 ## Overview
 
 The Trade Auto system supports **historical replay mode**: import MT5-exported candle data as CSV files and replay them through the exact same decision pipeline used for live trading.
@@ -78,11 +83,21 @@ The importer also accepts ISO 8601 timestamps in a single column:
 
 ---
 
-## Step 2 — Start the Backend
+## Step 2 — Start Services (Brain + AI Worker)
+
+Preferred startup:
+
+- Windows local: run `./start-local.ps1` from repository root.
+- Linux/container entrypoint script: `scripts/start-brain-ai.sh`.
+
+Manual fallback:
 
 ```bash
-cd brain
-dotnet run --project src/Web
+cd aiworker
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+
+# in a second terminal
+dotnet run --project brain/src/Web/Web.csproj
 ```
 
 The API will be available at `http://localhost:5000`. Open Swagger UI at `http://localhost:5000/swagger`.
@@ -142,7 +157,8 @@ curl -X POST "http://localhost:5000/api/replay/start" \
     "from": "2024-01-01T00:00:00Z",
     "to": "2024-03-31T23:59:59Z",
     "speedMultiplier": 200,
-    "useAI": false
+    "useAI": true,
+    "useMockAI": false
   }'
 ```
 
@@ -154,12 +170,13 @@ curl -X POST "http://localhost:5000/api/replay/start" \
 | `from`          | datetime | null     | Start of replay window (UTC). Null = beginning of imported data. |
 | `to`            | datetime | null     | End of replay window (UTC). Null = end of imported data. |
 | `speedMultiplier` | int    | 100      | Speed factor. `1` = real-time (1 candle/sec), `200` = 200x faster, `0` = maximum speed |
-| `useAI`         | bool     | false    | Call the real AI worker during replay. `false` uses a mock pass-through signal to test the rule engine and decision engine without AI cost. |
+| `useAI`         | bool     | true     | Call the real AI worker during replay. |
+| `useMockAI`     | bool     | false    | Explicitly force mock AI mode for low-cost dry runs. |
 
 ### Recommended workflow
 
-- Start with `useAI: false` to rapidly iterate on rule engine tuning
-- Once rule engine output looks correct, set `useAI: true` for full end-to-end validation
+- Default mode is real AI (`useAI: true`, `useMockAI: false`) for full end-to-end validation
+- Set `useMockAI: true` only when you explicitly want a low-cost dry run
 
 ---
 

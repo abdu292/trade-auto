@@ -874,19 +874,6 @@ public:
                     iClose(symbol, PERIOD_M15, 1) - ma20M15,
                     rsiM15,
                     atrM15);
-        payload += ",";
-        payload += StringFormat("{\"timeframe\":\"M30\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d,\"candleStartTime\":\"%s\",\"candleCloseTime\":\"%s\",\"candleBodySize\":%.5f,\"upperWickSize\":%.5f,\"lowerWickSize\":%.5f,\"candleRange\":%.5f,\"ma20Value\":%.5f,\"ma20Distance\":%.5f,\"rsi\":%.5f,\"atr\":%.5f}",
-                    iOpen(symbol, PERIOD_M30, 1), iHigh(symbol, PERIOD_M30, 1), iLow(symbol, PERIOD_M30, 1), iClose(symbol, PERIOD_M30, 1), volumeM30,
-                    ToIsoUtc(iTime(symbol, PERIOD_M30, 1)), ToIsoUtc(iTime(symbol, PERIOD_M30, 0)),
-                    MathAbs(iClose(symbol, PERIOD_M30, 1) - iOpen(symbol, PERIOD_M30, 1)),
-                    iHigh(symbol, PERIOD_M30, 1) - MathMax(iOpen(symbol, PERIOD_M30, 1), iClose(symbol, PERIOD_M30, 1)),
-                    MathMin(iOpen(symbol, PERIOD_M30, 1), iClose(symbol, PERIOD_M30, 1)) - iLow(symbol, PERIOD_M30, 1),
-                    iHigh(symbol, PERIOD_M30, 1) - iLow(symbol, PERIOD_M30, 1),
-                    ma20M30,
-                    iClose(symbol, PERIOD_M30, 1) - ma20M30,
-                    rsiM30,
-                    atrM30);
-        payload += ",";
         payload += StringFormat("{\"timeframe\":\"H1\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d,\"candleStartTime\":\"%s\",\"candleCloseTime\":\"%s\",\"candleBodySize\":%.5f,\"upperWickSize\":%.5f,\"lowerWickSize\":%.5f,\"candleRange\":%.5f,\"ma20Value\":%.5f,\"ma20Distance\":%.5f,\"rsi\":%.5f,\"atr\":%.5f}",
                     iOpen(symbol, PERIOD_H1, 1), iHigh(symbol, PERIOD_H1, 1), iLow(symbol, PERIOD_H1, 1), iClose(symbol, PERIOD_H1, 1), volumeH1,
                     ToIsoUtc(iTime(symbol, PERIOD_H1, 1)), ToIsoUtc(iTime(symbol, PERIOD_H1, 0)),
@@ -898,18 +885,6 @@ public:
                     iClose(symbol, PERIOD_H1, 1) - ma20H1,
                     rsiH1,
                     atrH1);
-        payload += ",";
-        payload += StringFormat("{\"timeframe\":\"H4\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d,\"candleStartTime\":\"%s\",\"candleCloseTime\":\"%s\",\"candleBodySize\":%.5f,\"upperWickSize\":%.5f,\"lowerWickSize\":%.5f,\"candleRange\":%.5f,\"ma20Value\":%.5f,\"ma20Distance\":%.5f,\"rsi\":%.5f,\"atr\":%.5f}",
-                    iOpen(symbol, PERIOD_H4, 1), iHigh(symbol, PERIOD_H4, 1), iLow(symbol, PERIOD_H4, 1), iClose(symbol, PERIOD_H4, 1), volumeH4,
-                    ToIsoUtc(iTime(symbol, PERIOD_H4, 1)), ToIsoUtc(iTime(symbol, PERIOD_H4, 0)),
-                    MathAbs(iClose(symbol, PERIOD_H4, 1) - iOpen(symbol, PERIOD_H4, 1)),
-                    iHigh(symbol, PERIOD_H4, 1) - MathMax(iOpen(symbol, PERIOD_H4, 1), iClose(symbol, PERIOD_H4, 1)),
-                    MathMin(iOpen(symbol, PERIOD_H4, 1), iClose(symbol, PERIOD_H4, 1)) - iLow(symbol, PERIOD_H4, 1),
-                    iHigh(symbol, PERIOD_H4, 1) - iLow(symbol, PERIOD_H4, 1),
-                    ma20H4,
-                    iClose(symbol, PERIOD_H4, 1) - ma20H4,
-                    rsiH4,
-                    atrH4);
         payload += "],";
 
         payload += StringFormat("\"atr\":%.5f,", atr);
