@@ -795,6 +795,29 @@ public static class MonitoringEndpoints
                     return new { profitAed = decimal.Round(sp.Sum(x => x.NetProfitAed), 2), rotations = sp.Count, waterfallBlocks = wfBlocks };
                 });
 
+                // Weekly per-session profit stats + best/worst session
+                var weeklySessionStats = sessions.ToDictionary(s => s, s =>
+                {
+                    var sp = weeklyClosed.Where(x => ClassifySession(x.ClosedAtUtc, x.ClosedSession) == s).ToList();
+                    return new { profitAed = decimal.Round(sp.Sum(x => x.NetProfitAed), 2), rotations = sp.Count };
+                });
+                var bestSession = weeklySessionStats.Count > 0
+                    ? weeklySessionStats.OrderByDescending(kv => kv.Value.profitAed).First().Key
+                    : "N/A";
+                var worstSession = weeklySessionStats.Count > 0
+                    ? weeklySessionStats.OrderBy(kv => kv.Value.profitAed).First().Key
+                    : "N/A";
+
+                // Weekly no-trade blocks by cause
+                var weeklyNoTradeLogs = await db.DecisionLogs
+                    .AsNoTracking()
+                    .Where(x => x.CreatedAtUtc >= ksaWeekStartUtc && x.Status == "NO_TRADE")
+                    .Select(x => new { x.Cause })
+                    .ToListAsync(cancellationToken);
+                var weeklyNoTradeBlocks = weeklyNoTradeLogs
+                    .GroupBy(x => string.IsNullOrWhiteSpace(x.Cause) ? "UNKNOWN" : x.Cause)
+                    .ToDictionary(g => g.Key, g => g.Count());
+
                 snapshotStore.TryGet(out var snapshot);
                 var currentBid = snapshot?.Bid ?? 0m;
                 var extState = ledger.GetExtendedState(currentBid);
@@ -820,6 +843,10 @@ public static class MonitoringEndpoints
                     sessionStats,
                     weeklyProfitAed = decimal.Round(weeklyProfitAed, 2),
                     weeklyRotations,
+                    weeklySessionStats,
+                    weeklyBestSession = bestSession,
+                    weeklyWorstSession = worstSession,
+                    weeklyNoTradeBlocks,
                     compounding = new
                     {
                         startingInvestmentAed = decimal.Round(startingInvestment, 2),

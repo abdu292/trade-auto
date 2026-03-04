@@ -366,6 +366,17 @@ class _AnomalyAlertsCard extends ConsumerWidget {
               data: (rt) {
                 final alerts = <_Alert>[];
 
+                if (rt.mt5ServerTime != null &&
+                    (rt.freezeGapDetected || rt.tickRatePer30s == 0)) {
+                  alerts.add(_Alert(
+                    icon: Icons.signal_wifi_off,
+                    label: rt.freezeGapDetected
+                        ? 'Tick drought: freeze gap detected'
+                        : 'Tick drought: no ticks received (rate=0)',
+                    color: cs.error,
+                  ));
+                }
+
                 final spreadSpike = rt.spreadMedian60m > 0 &&
                     rt.spread > 2 * rt.spreadMedian60m;
                 if (spreadSpike) {
