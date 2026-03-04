@@ -110,6 +110,7 @@ public sealed record MarketSnapshotContract(
     decimal RateDeltaUsd = 0m,
     string RateAuthority = "MT5",
     decimal AuthoritativeRate = 0m,
+    string? CycleId = null,
     // Compression metric support (PRD)
     IReadOnlyCollection<decimal>? CompressionRangesM15 = null,
     // Pending/open/execution snapshots (PRD)
@@ -168,7 +169,11 @@ public sealed record TradeSignalContract(
     string CrossMetalsBias = "NEUTRAL",
     string CbFlow = "UNKNOWN",
     string InstPositioning = "UNKNOWN",
-    string EventRisk = "LOW");
+    string EventRisk = "LOW",
+    IReadOnlyCollection<string>? PromptRefs = null,
+    IReadOnlyCollection<string>? ProviderModels = null,
+    string? AiTraceJson = null,
+    string? CycleId = null);
 
 public sealed record ModeSignalContract(
     string Mode,
@@ -289,4 +294,5 @@ public sealed record PendingTradeContract(
     IReadOnlyCollection<string>? ProviderVotes = null,
     string Summary = "",
     string ModeHint = "UNKNOWN",
-    decimal ModeConfidence = 0.5m);
+    decimal ModeConfidence = 0.5m,
+    string? CycleId = null);

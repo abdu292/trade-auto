@@ -65,6 +65,7 @@ await using (var scope = app.Services.CreateAsyncScope())
 			_ = await dbContext.MacroCacheStates.AsNoTracking().AnyAsync();
 			_ = await dbContext.LedgerAccounts.AsNoTracking().AnyAsync();
 			_ = await dbContext.LedgerPositions.AsNoTracking().AnyAsync();
+			_ = await dbContext.RuntimeTimelineEvents.AsNoTracking().AnyAsync();
 		}
 		catch (SqlException ex) when (ex.Number == 208)
 		{

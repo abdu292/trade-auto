@@ -14,7 +14,7 @@ public sealed class AnalyzeSnapshotCommandHandler(
     public async Task<TradeSignalDto> Handle(AnalyzeSnapshotCommand request, CancellationToken cancellationToken)
     {
         var snapshot = request.Snapshot;
-        var signal = await aiWorkerClient.AnalyzeAsync(snapshot, cancellationToken);
+        var signal = await aiWorkerClient.AnalyzeAsync(snapshot, cycleId: null, cancellationToken);
 
         var entity = TradeSignal.Create(
             snapshot.Symbol,

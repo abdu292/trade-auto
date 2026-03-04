@@ -69,7 +69,7 @@ CONSENSUS_ENTRY_TOLERANCE_PCT = float(os.getenv("CONSENSUS_ENTRY_TOLERANCE_PCT",
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_BOT_BASE_URL = os.getenv("TELEGRAM_BOT_BASE_URL", "https://api.telegram.org")
-TELEGRAM_READ_MODE = os.getenv("TELEGRAM_READ_MODE", "bot").strip().lower()
+TELEGRAM_READ_MODE = "client"
 TELEGRAM_API_ID = _read_int_env("TELEGRAM_API_ID", 0)
 TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH", "").strip()
 TELEGRAM_SESSION_STRING = os.getenv("TELEGRAM_SESSION_STRING", "").strip()

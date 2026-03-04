@@ -20,7 +20,7 @@ public static class Mt5Endpoints
 
         mt5Group.MapGet(
             "/pending-trades",
-            IResult (IPendingTradeStore pendingTradeStore, ILogger<object> logger) =>
+            async Task<IResult> (IPendingTradeStore pendingTradeStore, ILogger<object> logger, IRuntimeTimelineWriter timeline, CancellationToken cancellationToken) =>
             {
                 logger.LogInformation("→ GET /mt5/pending-trades");
 
@@ -33,9 +33,33 @@ public static class Mt5Endpoints
                 logger.LogInformation("← GET /mt5/pending-trades returns {TradeId} {Type} @ {Price}",
                     trade.Id, trade.Type, trade.Price);
 
+                await timeline.WriteAsync(
+                    eventType: "MT5_PENDING_TRADE_DEQUEUED",
+                    stage: "mt5_bridge",
+                    source: "brain",
+                    symbol: trade.Symbol,
+                    cycleId: trade.CycleId,
+                    tradeId: trade.Id.ToString(),
+                    payload: new
+                    {
+                        trade.Id,
+                        trade.CycleId,
+                        trade.Type,
+                        trade.Symbol,
+                        trade.Price,
+                        trade.Tp,
+                        trade.Expiry,
+                        trade.Ml,
+                        trade.Grams,
+                        trade.EngineState,
+                        trade.Cause,
+                    },
+                    cancellationToken);
+
                 return TypedResults.Ok(new
                 {
                     id = trade.Id,
+                    cycleId = trade.CycleId,
                     type = trade.Type,
                     symbol = trade.Symbol,
                     price = trade.Price,
@@ -81,6 +105,7 @@ public static class Mt5Endpoints
             async Task<IResult> (
                 Mt5MarketSnapshotRequest request,
                 ILatestMarketSnapshotStore snapshotStore,
+                IRuntimeTimelineWriter timeline,
                 ILogger<object> logger,
                 IHttpClientFactory httpClientFactory,
                 CancellationToken cancellationToken) =>
@@ -269,6 +294,37 @@ public static class Mt5Endpoints
                     OrderExecutionEvents: executionEvents);
 
                 snapshotStore.Upsert(snapshot);
+
+                await timeline.WriteAsync(
+                    eventType: "MT5_MARKET_SNAPSHOT_RECEIVED",
+                    stage: "mt5_ingest",
+                    source: "mt5",
+                    symbol: snapshot.Symbol,
+                    cycleId: null,
+                    tradeId: null,
+                    payload: new
+                    {
+                        snapshot.Symbol,
+                        snapshot.Timestamp,
+                        snapshot.Mt5ServerTime,
+                        snapshot.KsaTime,
+                        snapshot.UaeTime,
+                        snapshot.IndiaTime,
+                        snapshot.Bid,
+                        snapshot.Ask,
+                        snapshot.Spread,
+                        snapshot.TimeframeData,
+                        snapshot.PendingOrders,
+                        snapshot.OpenPositions,
+                        snapshot.OrderExecutionEvents,
+                        snapshot.TelegramState,
+                        snapshot.Session,
+                        snapshot.SessionPhase,
+                        snapshot.RateAuthority,
+                        snapshot.AuthoritativeRate,
+                    },
+                    cancellationToken);
+
                 var tickTelemetry = snapshotStore.GetTickTelemetry(1);
                 logger.LogInformation(
                     "→ POST /mt5/market-snapshot stored {Symbol} snapshot #{TickCount} ({TimeframeCount} TFs, session={Session}/{Phase}, regimeVol={VolatilityExpansion:0.00}, spread={Spread:0.000}, lagMs={LagMs:0}, mt5={Mt5Time}, ksa={KsaTime}, india={IndiaTime}, authority={RateAuthority}, rateDelta={RateDelta:0.00}, timeSkewMs={TimeSkew:0})",
@@ -299,6 +355,7 @@ public static class Mt5Endpoints
                 ILogger<object> logger,
                 ITradeLedgerService ledger,
                 ILatestMarketSnapshotStore snapshotStore,
+                IRuntimeTimelineWriter timeline,
                 IApplicationDbContext db,
                 INotificationService notification,
                 CancellationToken cancellationToken) =>
@@ -328,6 +385,24 @@ public static class Mt5Endpoints
                 logger.LogInformation(
                     "→ POST /mt5/trade-status: TradeId={TradeId}, Status={Status}",
                     request.TradeId, request.Status);
+
+                await timeline.WriteAsync(
+                    eventType: "MT5_TRADE_STATUS_RECEIVED",
+                    stage: "execution",
+                    source: "mt5",
+                    symbol: snapshotStore.TryGet(out var seenSnapshot) && seenSnapshot is not null ? seenSnapshot.Symbol : "XAUUSD",
+                    cycleId: null,
+                    tradeId: request.TradeId,
+                    payload: new
+                    {
+                        request.TradeId,
+                        request.Status,
+                        request.Mt5Price,
+                        request.Grams,
+                        request.Mt5Time,
+                        request.Ticket,
+                    },
+                    cancellationToken);
 
                 var normalizedStatus = request.Status.Trim().ToUpperInvariant();
                 var mt5Time = request.Mt5Time ?? DateTimeOffset.UtcNow;

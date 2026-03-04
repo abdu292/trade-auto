@@ -5,7 +5,7 @@ namespace Brain.Infrastructure.Services.External;
 
 public sealed class MockAIWorkerClient : IAIWorkerClient
 {
-    public Task<TradeSignalContract> AnalyzeAsync(MarketSnapshotContract snapshot, CancellationToken cancellationToken)
+    public Task<TradeSignalContract> AnalyzeAsync(MarketSnapshotContract snapshot, string? cycleId, CancellationToken cancellationToken)
     {
         var result = new TradeSignalContract(
             Rail: "BUY_LIMIT",
@@ -23,7 +23,8 @@ public sealed class MockAIWorkerClient : IAIWorkerClient
             AgreementCount: 2,
             RequiredAgreement: 2,
             DisagreementReason: null,
-            ProviderVotes: ["mock-grok:BUY_LIMIT@entry", "mock-openai:BUY_LIMIT@entry"]);
+            ProviderVotes: ["mock-grok:BUY_LIMIT@entry", "mock-openai:BUY_LIMIT@entry"],
+            CycleId: cycleId);
 
         return Task.FromResult(result);
     }

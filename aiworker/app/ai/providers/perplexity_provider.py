@@ -27,6 +27,7 @@ class PerplexityProvider(AIProvider):
             extra_system_prompt = market_context.get("_extra_system_prompt")
             if isinstance(extra_system_prompt, str) and extra_system_prompt.strip():
                 system_prompt = f"{system_prompt}\n\n{extra_system_prompt.strip()}"
+            self._trace_request(market_context, system_prompt, user_prompt)
             
             response = await self.client.chat.completions.create(
                 model=self.config.model,  # "pplx-70b-online" or "pplx-70b"
@@ -47,14 +48,18 @@ class PerplexityProvider(AIProvider):
             
             response_text = response.choices[0].message.content
             logger.info(f"Perplexity response: {response_text}")
-            
-            return await self.validate_response(response_text)
+
+            signal = await self.validate_response(response_text)
+            self._trace_response(market_context, response_text or "", signal)
+            return signal
         
         except APIError as e:
             logger.error(f"Perplexity API error: {str(e)}")
+            self._trace_error(market_context, str(e))
             return None
         except Exception as e:
             logger.error(f"Perplexity provider error: {str(e)}")
+            self._trace_error(market_context, str(e))
             return None
     
     async def validate_response(self, response: str) -> Optional[TradeSignal]:

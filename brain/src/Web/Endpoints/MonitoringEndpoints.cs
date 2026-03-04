@@ -4,6 +4,7 @@ using Brain.Application.Common.Services;
 using Brain.Domain.Entities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
 using System.Text.Json;
 
 namespace Brain.Web.Endpoints;
@@ -268,6 +269,86 @@ public static class MonitoringEndpoints
             })
             .WithName("GetTickIngestionTelemetry")
             .WithDescription("Returns MT5 tick ingestion rate/freshness and recent ingested tick snapshots.");
+
+        monitoring.MapGet(
+            "/timeline",
+            async Task<IResult> (IApplicationDbContext db, string? cycleId, string? tradeId, int take = 200, CancellationToken cancellationToken = default) =>
+            {
+                var query = db.RuntimeTimelineEvents
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.CreatedAtUtc)
+                    .AsQueryable();
+
+                if (!string.IsNullOrWhiteSpace(cycleId))
+                {
+                    query = query.Where(x => x.CycleId == cycleId);
+                }
+
+                if (!string.IsNullOrWhiteSpace(tradeId))
+                {
+                    query = query.Where(x => x.TradeId == tradeId);
+                }
+
+                var events = await query
+                    .Take(Math.Clamp(take, 1, 1000))
+                    .ToListAsync(cancellationToken);
+
+                var ordered = events.OrderBy(x => x.CreatedAtUtc).ToList();
+
+                return TypedResults.Ok(new
+                {
+                    count = ordered.Count,
+                    filters = new { cycleId, tradeId, take = Math.Clamp(take, 1, 1000) },
+                    events = ordered.Select(x => new
+                    {
+                        x.Id,
+                        x.EventType,
+                        x.Stage,
+                        x.Source,
+                        x.Symbol,
+                        x.CycleId,
+                        x.TradeId,
+                        createdAtUtc = x.CreatedAtUtc,
+                        createdAtKsa = x.CreatedAtUtc.ToOffset(TimeSpan.FromHours(3)),
+                        createdAtDubai = x.CreatedAtUtc.ToOffset(TimeSpan.FromHours(4)),
+                        createdAtIndia = x.CreatedAtUtc.ToOffset(TimeSpan.FromMinutes(330)),
+                        payload = ParseJsonOrRaw(x.PayloadJson),
+                    }),
+                });
+            })
+            .WithName("GetRuntimeTimeline")
+            .WithDescription("Returns end-to-end runtime timeline events with cycle/trade correlation IDs.");
+
+        monitoring.MapGet(
+            "/timeline/markdown",
+            async Task<IResult> (IApplicationDbContext db, string? cycleId, string? tradeId, int take = 200, CancellationToken cancellationToken = default) =>
+            {
+                var query = db.RuntimeTimelineEvents
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.CreatedAtUtc)
+                    .AsQueryable();
+
+                if (!string.IsNullOrWhiteSpace(cycleId))
+                {
+                    query = query.Where(x => x.CycleId == cycleId);
+                }
+
+                if (!string.IsNullOrWhiteSpace(tradeId))
+                {
+                    query = query.Where(x => x.TradeId == tradeId);
+                }
+
+                var events = await query
+                    .Take(Math.Clamp(take, 1, 1000))
+                    .ToListAsync(cancellationToken);
+
+                var ordered = events.OrderBy(x => x.CreatedAtUtc).ToList();
+                var markdown = BuildTimelineMarkdown(ordered);
+
+                return TypedResults.Text(markdown, "text/markdown");
+            })
+            .WithName("GetRuntimeTimelineMarkdown")
+            .WithDescription("Returns human-readable timeline markdown with UTC, KSA(AST), Dubai(GST), and India(IST) times.");
 
         monitoring.MapGet(
             "/runtime-settings",
@@ -756,6 +837,65 @@ public static class MonitoringEndpoints
             .WithDescription("Returns today/weekly KPI metrics, session stats, and compounding data.");
 
         return group;
+    }
+
+    private static object ParseJsonOrRaw(string payload)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<object>(payload) ?? new { raw = payload };
+        }
+        catch
+        {
+            return new { raw = payload };
+        }
+    }
+
+    private static string BuildTimelineMarkdown(IReadOnlyCollection<RuntimeTimelineEvent> events)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Runtime Timeline");
+        sb.AppendLine();
+        sb.AppendLine($"Total events: {events.Count}");
+        sb.AppendLine();
+
+        foreach (var item in events)
+        {
+            var utc = item.CreatedAtUtc;
+            var ksa = utc.ToOffset(TimeSpan.FromHours(3));
+            var dubai = utc.ToOffset(TimeSpan.FromHours(4));
+            var india = utc.ToOffset(TimeSpan.FromMinutes(330));
+
+            sb.AppendLine($"- Time UTC {utc:yyyy-MM-dd HH:mm:ss} | KSA(AST) {ksa:HH:mm:ss} | Dubai(GST) {dubai:HH:mm:ss} | India(IST) {india:HH:mm:ss}");
+            sb.AppendLine($"  Event: {item.EventType} [{item.Stage}] source={item.Source} symbol={item.Symbol}");
+            sb.AppendLine($"  Summary: {DescribeEvent(item)}");
+            sb.AppendLine($"  Correlation: cycle_id={item.CycleId ?? "-"}, trade_id={item.TradeId ?? "-"}");
+            sb.AppendLine($"  Data: {item.PayloadJson}");
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    private static string DescribeEvent(RuntimeTimelineEvent item)
+    {
+        return item.EventType switch
+        {
+            "MT5_MARKET_SNAPSHOT_RECEIVED" => "MT5 sent a market snapshot to Brain.",
+            "CYCLE_STARTED" => "Brain started a new decision cycle using latest market data.",
+            "AI_ANALYZE_REQUEST" => "Brain sent snapshot + prompt policy to AI worker.",
+            "TELEGRAM_INTERPRETED" => "AI worker interpreted Telegram channels into a market stance.",
+            "AI_PRE_STAGE_COMPLETED" => "AI pre-stage completed and produced provider votes.",
+            "AI_COMMITTEE_EVALUATED" => "AI committee compared provider outputs and checked agreement.",
+            "AI_VALIDATION_EVALUATED" => "Validation stage compared candidate signal consistency.",
+            "AI_ANALYZE_RESPONSE" => "Brain received the AI decision payload.",
+            "AI_CONSENSUS_FAILED" => "Trade was blocked because AI quorum failed.",
+            "DECISION_EVALUATED" => "Decision engine evaluated risk and trade permissions.",
+            "TRADE_ROUTED" => "Trade was routed to MT5 queue or manual approval queue.",
+            "MT5_PENDING_TRADE_DEQUEUED" => "MT5 EA pulled a pending trade from Brain.",
+            "MT5_TRADE_STATUS_RECEIVED" => "MT5 sent execution status back to Brain.",
+            _ => $"Recorded event {item.EventType} at stage {item.Stage}.",
+        };
     }
 }
 

@@ -114,6 +114,7 @@ class MarketSnapshot(BaseModel):
     rateDeltaUsd: float = 0.0
     rateAuthority: str = "MT5"
     authoritativeRate: float = 0.0
+    cycleId: str | None = None
     # Compression and order/account snapshots (PRD)
     compressionRangesM15: list[float] = Field(default_factory=list)
     pendingOrders: list[dict[str, Any]] = Field(default_factory=list)
@@ -173,3 +174,7 @@ class TradeSignal(BaseModel):
     cbFlow: str = "UNKNOWN"
     instPositioning: str = "UNKNOWN"
     eventRisk: str = "LOW"
+    promptRefs: list[str] = Field(default_factory=list)
+    providerModels: list[str] = Field(default_factory=list)
+    aiTraceJson: str | None = None
+    cycleId: str | None = None

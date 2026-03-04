@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace Brain.Infrastructure.Services.Background;
 
@@ -50,9 +51,12 @@ public sealed class SignalPollingBackgroundService(
             var simulator = scope.ServiceProvider.GetRequiredService<IMarketSimulationService>();
             var runtimeSettings = scope.ServiceProvider.GetRequiredService<ITradingRuntimeSettingsStore>();
             var db = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+            var timeline = scope.ServiceProvider.GetRequiredService<IRuntimeTimelineWriter>();
 
             try
             {
+                var cycleId = $"cyc_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}";
+
                 // Check study lock (PRD point 4): after 2 consecutive waterfall failures,
                 // the system pauses new signal generation and requires STUDY & SELF_CROSSCHECK.
                 bool isStudyLockActive;
@@ -79,7 +83,36 @@ public sealed class SignalPollingBackgroundService(
                 }
 
                 var symbol = runtimeSettings.GetSymbol();
-                var snapshot = await marketData.GetSnapshotAsync(symbol, stoppingToken);
+                var rawSnapshot = await marketData.GetSnapshotAsync(symbol, stoppingToken);
+                var snapshot = rawSnapshot with { CycleId = cycleId };
+
+                await timeline.WriteAsync(
+                    eventType: "CYCLE_STARTED",
+                    stage: "polling",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        snapshot.Symbol,
+                        snapshot.Session,
+                        snapshot.SessionPhase,
+                        snapshot.Timestamp,
+                        snapshot.Mt5ServerTime,
+                        snapshot.KsaTime,
+                        snapshot.UaeTime,
+                        snapshot.IndiaTime,
+                        snapshot.Bid,
+                        snapshot.Ask,
+                        snapshot.Spread,
+                        snapshot.Atr,
+                        snapshot.Adr,
+                        snapshot.TelegramState,
+                        snapshot.RateAuthority,
+                        snapshot.AuthoritativeRate,
+                    },
+                    cancellationToken: stoppingToken);
                 var normalizedSession = MapSessionType(snapshot.Session);
                 var sessionEnabled = await db.SessionStates
                     .AsNoTracking()
@@ -116,7 +149,64 @@ public sealed class SignalPollingBackgroundService(
                 }
 
                 var modeSignal = await aiWorker.GetModeAsync(snapshot, stoppingToken);
-                var aiSignal = await aiWorker.AnalyzeAsync(snapshot, stoppingToken);
+
+                var aiSignal = await aiWorker.AnalyzeAsync(snapshot, cycleId, stoppingToken);
+                var aiTrace = ParseAiTrace(aiSignal.AiTraceJson);
+                var aiRequest = TryGetTraceNode(aiTrace, "ai_request");
+                var providerTraces = TryGetTraceNode(aiTrace, "provider_traces");
+                var providerRequests = ExtractProviderTraceEntries(providerTraces, "AI_PROVIDER_REQUEST");
+                var providerResponses = ExtractProviderTraceEntries(providerTraces, "AI_PROVIDER_RESPONSE");
+                var aiUsed = ExtractAiUsed(providerTraces);
+
+                await timeline.WriteAsync(
+                    eventType: "AI_ANALYZE_REQUEST",
+                    stage: "ai",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        promptPolicy = "prompts/master_prompt*.md + prompts/short_prompt_*.md",
+                        requestToAiWorker = snapshot,
+                        aiRequest,
+                        aiUsed,
+                        promptsSentToAi = providerRequests,
+                    },
+                    cancellationToken: stoppingToken);
+
+                await timeline.WriteAsync(
+                    eventType: "AI_ANALYZE_RESPONSE",
+                    stage: "ai",
+                    source: "aiworker",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        aiSignal.Rail,
+                        aiSignal.Entry,
+                        aiSignal.Tp,
+                        aiSignal.Confidence,
+                        aiSignal.ConsensusPassed,
+                        aiSignal.AgreementCount,
+                        aiSignal.RequiredAgreement,
+                        aiSignal.DisagreementReason,
+                        aiSignal.ProviderVotes,
+                        aiSignal.PromptRefs,
+                        aiSignal.ProviderModels,
+                        aiSignal.CycleId,
+                        aiRequest,
+                        aiUsed,
+                        providerTraces,
+                        exactAiResponses = providerResponses,
+                        aiTrace,
+                        aiSignal.Summary,
+                    },
+                    cancellationToken: stoppingToken);
+
+                await EmitAiStageEventsAsync(timeline, snapshot.Symbol, cycleId, aiSignal, stoppingToken);
+
                 if (modeSignal is not null)
                 {
                     aiSignal = aiSignal with
@@ -161,6 +251,24 @@ public sealed class SignalPollingBackgroundService(
                         aiSignal.AgreementCount,
                         aiSignal.RequiredAgreement,
                         loggedReason);
+
+                    await timeline.WriteAsync(
+                        eventType: "AI_CONSENSUS_FAILED",
+                        stage: "consensus",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            aiSignal.AgreementCount,
+                            aiSignal.RequiredAgreement,
+                            aiSignal.DisagreementReason,
+                            aiSignal.ProviderVotes,
+                            reason = loggedReason,
+                        },
+                        cancellationToken: stoppingToken);
+
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -188,6 +296,32 @@ public sealed class SignalPollingBackgroundService(
 
                 var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, state, activeStrategy);
                 var snapshotHash = ComputeSnapshotHash(snapshot);
+
+                await timeline.WriteAsync(
+                    eventType: "DECISION_EVALUATED",
+                    stage: "decision",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        decision.IsTradeAllowed,
+                        decision.Status,
+                        decision.EngineState,
+                        decision.Cause,
+                        decision.Reason,
+                        decision.Mode,
+                        decision.WaterfallRisk,
+                        decision.Rail,
+                        decision.Entry,
+                        decision.Tp,
+                        decision.Grams,
+                        decision.TelegramState,
+                        snapshotHash,
+                    },
+                    cancellationToken: stoppingToken);
+
                 LogTransitionsIfChanged(db, snapshot, decision, forceWhereToTrade, snapshotHash);
 
                 var simulatorRunning = simulator.GetStatus().IsRunning;
@@ -410,7 +544,8 @@ public sealed class SignalPollingBackgroundService(
                     ProviderVotes: aiSignal.ProviderVotes,
                     Summary: aiSignal.Summary,
                     ModeHint: aiSignal.ModeHint,
-                    ModeConfidence: aiSignal.ModeConfidence);
+                    ModeConfidence: aiSignal.ModeConfidence,
+                    CycleId: cycleId);
 
                 var executionMode = ResolveExecutionMode(configuration["Execution:Mode"]);
                 var hybridSessions = ResolveHybridAutoSessions(configuration["Execution:HybridAutoSessions"]);
@@ -451,6 +586,30 @@ public sealed class SignalPollingBackgroundService(
                     forceWhereToTrade: forceWhereToTrade,
                     snapshotHash: snapshotHash));
                 await db.SaveChangesAsync(stoppingToken);
+
+                await timeline.WriteAsync(
+                    eventType: "TRADE_ROUTED",
+                    stage: "routing",
+                    source: "brain",
+                    symbol: pending.Symbol,
+                    cycleId: cycleId,
+                    tradeId: pending.Id.ToString(),
+                    payload: new
+                    {
+                        pending.Id,
+                        pending.CycleId,
+                        pending.Type,
+                        pending.Price,
+                        pending.Tp,
+                        pending.Grams,
+                        pending.Session,
+                        pending.SessionPhase,
+                        pending.EngineState,
+                        pending.Cause,
+                        route = directToMt5 ? "MT5_PENDING" : "APPROVAL_QUEUE",
+                        executionMode = executionMode.ToString().ToUpperInvariant(),
+                    },
+                    cancellationToken: stoppingToken);
 
                 logger.LogInformation(
                     "Trade {TradeId} {Type} {Symbol} @ {Price} TP={Tp} grams={Grams} state={State} cause={Cause} session={Session} score={Score:0.00} routed={Route} mode={Mode}",
@@ -499,6 +658,192 @@ public sealed class SignalPollingBackgroundService(
         }
 
         return DateTimeOffset.UtcNow - _lastArmedAtUtc >= TimeSpan.FromMinutes(25);
+    }
+
+    private static object? ParseAiTrace(string? traceJson)
+    {
+        if (string.IsNullOrWhiteSpace(traceJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<object>(traceJson);
+        }
+        catch
+        {
+            return new { raw = traceJson };
+        }
+    }
+
+    private static object? TryGetTraceNode(object? traceObject, string propertyName)
+    {
+        if (traceObject is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var json = JsonSerializer.Serialize(traceObject);
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty(propertyName, out var node))
+            {
+                return JsonSerializer.Deserialize<object>(node.GetRawText());
+            }
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyCollection<object> ExtractProviderTraceEntries(object? providerTraces, string eventType)
+    {
+        if (providerTraces is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            var json = JsonSerializer.Serialize(providerTraces);
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            var list = new List<object>();
+            foreach (var item in doc.RootElement.EnumerateArray())
+            {
+                if (!item.TryGetProperty("eventType", out var eventTypeElement))
+                {
+                    continue;
+                }
+
+                if (!string.Equals(eventTypeElement.GetString(), eventType, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var parsed = JsonSerializer.Deserialize<object>(item.GetRawText());
+                if (parsed is not null)
+                {
+                    list.Add(parsed);
+                }
+            }
+
+            return list;
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static IReadOnlyCollection<object> ExtractAiUsed(object? providerTraces)
+    {
+        var requestEntries = ExtractProviderTraceEntries(providerTraces, "AI_PROVIDER_REQUEST");
+        var used = new List<object>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in requestEntries)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(entry);
+                using var doc = JsonDocument.Parse(json);
+                var analyzer = doc.RootElement.TryGetProperty("analyzer", out var analyzerElement)
+                    ? analyzerElement.GetString() ?? string.Empty
+                    : string.Empty;
+                var provider = doc.RootElement.TryGetProperty("provider", out var providerElement)
+                    ? providerElement.GetString() ?? string.Empty
+                    : string.Empty;
+                var model = doc.RootElement.TryGetProperty("model", out var modelElement)
+                    ? modelElement.GetString() ?? string.Empty
+                    : string.Empty;
+
+                var key = $"{analyzer}|{provider}|{model}";
+                if (string.IsNullOrWhiteSpace(key) || !seen.Add(key))
+                {
+                    continue;
+                }
+
+                used.Add(new
+                {
+                    analyzer,
+                    provider,
+                    model,
+                });
+            }
+            catch
+            {
+                // Ignore malformed traces.
+            }
+        }
+
+        return used;
+    }
+
+    private async Task EmitAiStageEventsAsync(
+        IRuntimeTimelineWriter timeline,
+        string symbol,
+        string cycleId,
+        TradeSignalContract aiSignal,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(aiSignal.AiTraceJson))
+        {
+            return;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(aiSignal.AiTraceJson);
+            if (!doc.RootElement.TryGetProperty("events", out var eventsElement)
+                || eventsElement.ValueKind != JsonValueKind.Array)
+            {
+                return;
+            }
+
+            foreach (var item in eventsElement.EnumerateArray())
+            {
+                var eventType = item.TryGetProperty("eventType", out var eventTypeElement)
+                    ? eventTypeElement.GetString()
+                    : "AI_STAGE_EVENT";
+                var stage = item.TryGetProperty("stage", out var stageElement)
+                    ? stageElement.GetString()
+                    : "ai_stage";
+                var source = item.TryGetProperty("source", out var sourceElement)
+                    ? sourceElement.GetString()
+                    : "aiworker";
+
+                object payload = new { raw = item.GetRawText() };
+                if (item.TryGetProperty("payload", out var payloadElement))
+                {
+                    payload = JsonSerializer.Deserialize<object>(payloadElement.GetRawText())
+                        ?? new { raw = payloadElement.GetRawText() };
+                }
+
+                await timeline.WriteAsync(
+                    eventType: string.IsNullOrWhiteSpace(eventType) ? "AI_STAGE_EVENT" : eventType,
+                    stage: string.IsNullOrWhiteSpace(stage) ? "ai_stage" : stage,
+                    source: string.IsNullOrWhiteSpace(source) ? "aiworker" : source,
+                    symbol: symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: payload,
+                    cancellationToken: cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to emit AI stage subevents for cycle {CycleId}", cycleId);
+        }
     }
 
     private static ExecutionMode ResolveExecutionMode(string? value)

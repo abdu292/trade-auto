@@ -55,6 +55,7 @@ public static class DependencyInjection
         }
 
         services.AddScoped<IMarketDataProvider, Mt5MarketDataProvider>();
+        services.AddScoped<IRuntimeTimelineWriter, RuntimeTimelineWriter>();
         services.AddScoped<IWhatsAppService, MockWhatsAppService>();
         services.AddScoped<ICalendarService, MockCalendarService>();
 

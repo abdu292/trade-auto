@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -159,6 +160,7 @@ class AnalyzerService:
             "rate_authority": snapshot.rateAuthority,
             "authoritative_rate": authoritative_rate,
         }
+        market_context["_ai_provider_traces"] = []
 
         try:
             telegram_news = await asyncio.wait_for(
@@ -253,6 +255,98 @@ class AnalyzerService:
         indicators_regime = _classify_indicators_regime(snapshot, macro_intel)
         risk_state = _classify_risk_state(snapshot, macro_intel, telegram_news, external_news)
         regime_tag = _resolve_regime_tag(snapshot, macro_intel, indicators_regime, risk_state)
+        prompt_refs = [
+            "prompts/master_prompt.md",
+            "prompts/short_prompt_news.md",
+            "prompts/short_prompt_analyze.md",
+            "prompts/short_prompt_validate.md",
+            "prompts/short_prompt_study.md",
+            "prompts/short_prompt_self_crosscheck.md",
+            "prompts/short_prompt_captial_utilization.md",
+        ]
+        provider_models = [item.name for item in AI_ANALYZERS]
+        ai_request = {
+            "cycle_id": snapshot.cycleId,
+            "symbol": snapshot.symbol,
+            "market_context": {k: v for k, v in market_context.items() if not k.startswith("_")},
+            "prompt_refs": prompt_refs,
+            "provider_models": provider_models,
+        }
+
+        def _build_request_with_prompt_dispatch() -> dict[str, object]:
+            provider_traces = market_context.get("_ai_provider_traces", [])
+            dispatch: list[dict[str, object]] = []
+            ai_used: list[dict[str, str]] = []
+            seen_dispatch: set[str] = set()
+            seen_ai: set[str] = set()
+
+            for trace in provider_traces:
+                if not isinstance(trace, dict):
+                    continue
+                if trace.get("eventType") != "AI_PROVIDER_REQUEST":
+                    continue
+                analyzer = str(trace.get("analyzer", ""))
+                provider = str(trace.get("provider", ""))
+                model = str(trace.get("model", ""))
+                key = f"{analyzer}|{provider}|{model}"
+
+                if key and key not in seen_dispatch:
+                    seen_dispatch.add(key)
+                    dispatch.append(
+                        {
+                            "analyzer": analyzer,
+                            "provider": provider,
+                            "model": model,
+                            "system_prompt": trace.get("system_prompt"),
+                            "user_prompt": trace.get("user_prompt"),
+                        }
+                    )
+
+                if key and key not in seen_ai:
+                    seen_ai.add(key)
+                    ai_used.append(
+                        {
+                            "analyzer": analyzer,
+                            "provider": provider,
+                            "model": model,
+                        }
+                    )
+
+            return {
+                **ai_request,
+                "ai_used": ai_used,
+                "prompt_dispatch": dispatch,
+            }
+        stage_events: list[dict[str, object]] = [
+            {
+                "eventType": "TELEGRAM_INTERPRETED",
+                "stage": "telegram",
+                "source": "aiworker",
+                "payload": {
+                    "telegram_state": telegram_news.telegram_state,
+                    "impact_tag": telegram_news.impact_tag,
+                    "risk_tag": telegram_news.risk_tag,
+                    "direction_bias": telegram_news.direction_bias,
+                    "panic_suspected": telegram_news.panic_suspected,
+                    "summary": telegram_news.summary,
+                },
+            },
+            {
+                "eventType": "MACRO_CONTEXT_BUILT",
+                "stage": "macro",
+                "source": "aiworker",
+                "payload": {
+                    "geo_headline": macro_intel.geo_headline,
+                    "dxy_bias": macro_intel.dxy_bias,
+                    "yields_bias": macro_intel.yields_bias,
+                    "cross_metals_bias": macro_intel.cross_metals_bias,
+                    "cb_flow": macro_intel.cb_flow,
+                    "inst_positioning": macro_intel.inst_positioning,
+                    "event_risk": macro_intel.event_risk,
+                    "summary": macro_intel.summary,
+                },
+            },
+        ]
 
         if risk_state == "BLOCK":
             return TradeSignal(
@@ -287,10 +381,42 @@ class AnalyzerService:
                 cbFlow=macro_intel.cb_flow,
                 instPositioning=macro_intel.inst_positioning,
                 eventRisk=macro_intel.event_risk,
+                promptRefs=prompt_refs,
+                providerModels=provider_models,
+                aiTraceJson=json.dumps({
+                    "ai_request": _build_request_with_prompt_dispatch(),
+                    "provider_traces": market_context.get("_ai_provider_traces", []),
+                    "stage": "pretable",
+                    "result": "blocked",
+                    "reason": "RISK_BLOCKED_PRETABLE",
+                    "telegram_state": telegram_news.telegram_state,
+                    "telegram_summary": telegram_news.summary,
+                    "macro_summary": macro_intel.summary,
+                    "events": stage_events + [{
+                        "eventType": "RISK_BLOCKED_PRETABLE",
+                        "stage": "pretable",
+                        "source": "aiworker",
+                        "payload": {
+                            "regime_tag": regime_tag,
+                            "risk_state": risk_state,
+                            "summary": _build_pretable_summary(snapshot, regime_tag, risk_state, macro_intel),
+                        },
+                    }],
+                }, ensure_ascii=False),
+                cycleId=snapshot.cycleId,
             )
 
         if not self._has_live_analyzers or self._manager is None:
-            return _build_fallback_signal(snapshot, volatility_expansion, telegram_news, external_news)
+            return _build_fallback_signal(
+                snapshot,
+                volatility_expansion,
+                telegram_news,
+                external_news,
+                prompt_refs,
+                provider_models,
+                stage_events,
+                market_context.get("_ai_provider_traces", []),
+            )
 
         min_agreement = 1 if AI_STRATEGY == "single" else max(2, CONSENSUS_MIN_AGREEMENT)
 
@@ -315,8 +441,27 @@ class AnalyzerService:
                     timeout=max(5.0, AI_COMMITTEE_TIMEOUT_SECONDS),
                 )
                 pre_stage_votes.extend(stage_decision.provider_votes)
+                stage_events.append({
+                    "eventType": "AI_PRE_STAGE_COMPLETED",
+                    "stage": f"pre:{stage_name}",
+                    "source": "aiworker",
+                    "payload": {
+                        "provider_votes": stage_decision.provider_votes,
+                        "agreement_count": stage_decision.agreement_count,
+                        "required_agreement": stage_decision.required_agreement,
+                        "consensus_passed": stage_decision.consensus_passed,
+                    },
+                })
             except asyncio.TimeoutError:
                 logger.warning("AI %s stage timed out after %.1fs", stage_name, AI_COMMITTEE_TIMEOUT_SECONDS)
+                stage_events.append({
+                    "eventType": "AI_PRE_STAGE_TIMEOUT",
+                    "stage": f"pre:{stage_name}",
+                    "source": "aiworker",
+                    "payload": {
+                        "timeout_seconds": AI_COMMITTEE_TIMEOUT_SECONDS,
+                    },
+                })
 
         try:
             committee = await asyncio.wait_for(
@@ -331,14 +476,55 @@ class AnalyzerService:
             logger.warning("AI committee timed out after %.1fs", AI_COMMITTEE_TIMEOUT_SECONDS)
             committee = self._manager.timeout_decision(required_agreement=min_agreement)
 
+        stage_events.append({
+            "eventType": "AI_COMMITTEE_EVALUATED",
+            "stage": "committee",
+            "source": "aiworker",
+            "payload": {
+                "agreement_count": committee.agreement_count,
+                "required_agreement": committee.required_agreement,
+                "consensus_passed": committee.consensus_passed,
+                "disagreement_reason": committee.disagreement_reason,
+                "provider_votes": committee.provider_votes,
+            },
+        })
+
         if not committee.consensus_passed or committee.signal is None:
             if committee.agreement_count == 0:
-                fallback = _build_fallback_signal(snapshot, volatility_expansion, telegram_news, external_news)
+                fallback = _build_fallback_signal(
+                    snapshot,
+                    volatility_expansion,
+                    telegram_news,
+                    external_news,
+                    prompt_refs,
+                    provider_models,
+                    stage_events,
+                    market_context.get("_ai_provider_traces", []),
+                )
                 fallback.providerVotes = list(dict.fromkeys((pre_stage_votes or []) + (fallback.providerVotes or [])))
                 fallback.summary = (
                     "Fallback simulation analyzer used after committee produced no usable signal. "
                     f"reason={committee.disagreement_reason or 'no_consensus'}"
                 )
+                fallback.aiTraceJson = json.dumps({
+                    "ai_request": _build_request_with_prompt_dispatch(),
+                    "provider_traces": market_context.get("_ai_provider_traces", []),
+                    "stage": "committee",
+                    "result": "fallback",
+                    "reason": committee.disagreement_reason or "no_consensus",
+                    "pre_stage_votes": pre_stage_votes,
+                    "committee_votes": committee.provider_votes,
+                    "agreement_count": committee.agreement_count,
+                    "required_agreement": committee.required_agreement,
+                    "events": stage_events + [{
+                        "eventType": "AI_FALLBACK_TRIGGERED",
+                        "stage": "fallback",
+                        "source": "aiworker",
+                        "payload": {
+                            "reason": committee.disagreement_reason or "no_consensus",
+                        },
+                    }],
+                }, ensure_ascii=False)
                 return fallback
 
             logger.warning(
@@ -381,6 +567,21 @@ class AnalyzerService:
                 cbFlow=macro_intel.cb_flow,
                 instPositioning=macro_intel.inst_positioning,
                 eventRisk=macro_intel.event_risk,
+                promptRefs=prompt_refs,
+                providerModels=provider_models,
+                aiTraceJson=json.dumps({
+                    "ai_request": _build_request_with_prompt_dispatch(),
+                    "provider_traces": market_context.get("_ai_provider_traces", []),
+                    "stage": "committee",
+                    "result": "failed",
+                    "pre_stage_votes": pre_stage_votes,
+                    "committee_votes": committee.provider_votes,
+                    "agreement_count": committee.agreement_count,
+                    "required_agreement": committee.required_agreement,
+                    "reason": committee.disagreement_reason,
+                    "events": stage_events,
+                }, ensure_ascii=False),
+                cycleId=snapshot.cycleId,
             )
 
         signal = committee.signal
@@ -422,20 +623,62 @@ class AnalyzerService:
                 )
             except asyncio.TimeoutError:
                 logger.warning("Validation stage %s timed out after %.1fs", validation_name, AI_COMMITTEE_TIMEOUT_SECONDS)
+                stage_events.append({
+                    "eventType": "AI_VALIDATION_TIMEOUT",
+                    "stage": f"validate:{validation_name}",
+                    "source": "aiworker",
+                    "payload": {
+                        "timeout_seconds": AI_COMMITTEE_TIMEOUT_SECONDS,
+                    },
+                })
                 continue
 
             validation_votes.extend(validation_decision.provider_votes)
             if not validation_decision.consensus_passed or validation_decision.signal is None:
+                stage_events.append({
+                    "eventType": "AI_VALIDATION_REJECTED",
+                    "stage": f"validate:{validation_name}",
+                    "source": "aiworker",
+                    "payload": {
+                        "consensus_passed": validation_decision.consensus_passed,
+                        "agreement_count": validation_decision.agreement_count,
+                        "required_agreement": validation_decision.required_agreement,
+                        "provider_votes": validation_decision.provider_votes,
+                    },
+                })
                 continue
 
             candidate = validation_decision.signal
             if candidate.rail != signal.rail:
+                stage_events.append({
+                    "eventType": "AI_VALIDATION_MISMATCH",
+                    "stage": f"validate:{validation_name}",
+                    "source": "aiworker",
+                    "payload": {
+                        "candidate_rail": candidate.rail,
+                        "signal_rail": signal.rail,
+                        "provider_votes": validation_decision.provider_votes,
+                    },
+                })
                 continue
             if signal.entry <= 0:
                 continue
             entry_diff = abs(candidate.entry - signal.entry) / abs(signal.entry)
             if entry_diff <= max(CONSENSUS_ENTRY_TOLERANCE_PCT * 2, 0.01):
                 validation_passed += 1
+
+            stage_events.append({
+                "eventType": "AI_VALIDATION_EVALUATED",
+                "stage": f"validate:{validation_name}",
+                "source": "aiworker",
+                "payload": {
+                    "entry_diff_pct": entry_diff,
+                    "accepted": entry_diff <= max(CONSENSUS_ENTRY_TOLERANCE_PCT * 2, 0.01),
+                    "validation_passed": validation_passed,
+                    "validation_required": validation_required,
+                    "provider_votes": validation_decision.provider_votes,
+                },
+            })
 
         if validation_passed < validation_required:
             return TradeSignal(
@@ -473,6 +716,29 @@ class AnalyzerService:
                 cbFlow=macro_intel.cb_flow,
                 instPositioning=macro_intel.inst_positioning,
                 eventRisk=macro_intel.event_risk,
+                promptRefs=prompt_refs,
+                providerModels=provider_models,
+                aiTraceJson=json.dumps({
+                    "ai_request": _build_request_with_prompt_dispatch(),
+                    "provider_traces": market_context.get("_ai_provider_traces", []),
+                    "stage": "validation",
+                    "result": "failed",
+                    "validation_passed": validation_passed,
+                    "validation_required": validation_required,
+                    "pre_stage_votes": pre_stage_votes,
+                    "committee_votes": committee.provider_votes,
+                    "validation_votes": validation_votes,
+                    "events": stage_events + [{
+                        "eventType": "AI_VALIDATION_FAILED",
+                        "stage": "validation",
+                        "source": "aiworker",
+                        "payload": {
+                            "validation_passed": validation_passed,
+                            "validation_required": validation_required,
+                        },
+                    }],
+                }, ensure_ascii=False),
+                cycleId=snapshot.cycleId,
             )
 
         pending_expiry = _parse_pe(snapshot.timestamp, signal.pe)
@@ -510,6 +776,37 @@ class AnalyzerService:
             cbFlow=macro_intel.cb_flow,
             instPositioning=macro_intel.inst_positioning,
             eventRisk=macro_intel.event_risk,
+            promptRefs=prompt_refs,
+            providerModels=provider_models,
+            aiTraceJson=json.dumps({
+                "ai_request": _build_request_with_prompt_dispatch(),
+                "provider_traces": market_context.get("_ai_provider_traces", []),
+                "stage": "final",
+                "result": "trade_signal",
+                "pre_stage_votes": pre_stage_votes,
+                "committee_votes": committee.provider_votes,
+                "validation_votes": validation_votes,
+                "validation_passed": validation_passed,
+                "validation_required": validation_required,
+                "agreement_count": committee.agreement_count,
+                "required_agreement": committee.required_agreement,
+                "telegram_summary": telegram_news.summary,
+                "macro_summary": macro_intel.summary,
+                "events": stage_events + [{
+                    "eventType": "AI_FINAL_SIGNAL_READY",
+                    "stage": "final",
+                    "source": "aiworker",
+                    "payload": {
+                        "rail": signal.rail,
+                        "entry": signal.entry,
+                        "tp": signal.tp,
+                        "confidence": signal.confidence,
+                        "validation_passed": validation_passed,
+                        "validation_required": validation_required,
+                    },
+                }],
+            }, ensure_ascii=False),
+            cycleId=snapshot.cycleId,
         )
 
 
@@ -871,6 +1168,10 @@ def _build_fallback_signal(
     volatility_expansion: float,
     telegram_news: TelegramNewsContext,
     external_news: ExternalNewsContext,
+    prompt_refs: list[str],
+    provider_models: list[str],
+    stage_events: list[dict[str, object]] | None = None,
+    provider_traces: list[dict[str, object]] | None = None,
 ) -> TradeSignal:
     primary_tf = snapshot.timeframeData[0]
     current_price = float(primary_tf.close)
@@ -934,4 +1235,22 @@ def _build_fallback_signal(
         modeKeywords=_resolve_mode_keywords(telegram_news, external_news),
         regimeTag="STANDARD",
         riskState="CAUTION",
+        promptRefs=prompt_refs,
+        providerModels=provider_models,
+        aiTraceJson=json.dumps({
+            "ai_request": {
+                "cycle_id": snapshot.cycleId,
+                "symbol": snapshot.symbol,
+                "prompt_refs": prompt_refs,
+                "provider_models": provider_models,
+            },
+            "provider_traces": provider_traces or [],
+            "stage": "fallback",
+            "result": "trade_signal",
+            "reason": "no_live_analyzers",
+            "telegram_summary": telegram_news.summary,
+            "external_news_summary": external_news.summary,
+            "events": stage_events or [],
+        }, ensure_ascii=False),
+        cycleId=snapshot.cycleId,
     )

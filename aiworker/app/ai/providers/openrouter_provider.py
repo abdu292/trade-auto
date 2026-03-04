@@ -82,6 +82,7 @@ DO NOT add any explanation outside the JSON."""
             extra_system_prompt = market_context.get("_extra_system_prompt")
             if isinstance(extra_system_prompt, str) and extra_system_prompt.strip():
                 system_prompt = f"{system_prompt}\n\n{extra_system_prompt.strip()}"
+            self._trace_request(market_context, system_prompt, user_prompt)
 
             response = await self.client.chat.completions.create(
                 model=self.config.model,
@@ -96,12 +97,16 @@ DO NOT add any explanation outside the JSON."""
 
             response_text = self._extract_response_text(response)
             logger.info("OpenRouter response: %s", response_text)
-            return await self.validate_response(response_text)
+            signal = await self.validate_response(response_text)
+            self._trace_response(market_context, response_text or "", signal)
+            return signal
         except APIError as ex:
             logger.error("OpenRouter API error: %s", str(ex))
+            self._trace_error(market_context, str(ex))
             return None
         except Exception as ex:
             logger.error("OpenRouter provider error: %s", str(ex))
+            self._trace_error(market_context, str(ex))
             return None
 
     def _extract_response_text(self, response) -> str:

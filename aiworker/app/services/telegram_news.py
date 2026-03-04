@@ -52,7 +52,6 @@ class TelegramNewsContext:
 class TelegramNewsService:
     def __init__(self) -> None:
         self._enabled = self._is_reader_enabled()
-        self._channel_suppressed_until: dict[str, datetime] = {}
 
     @property
     def enabled(self) -> bool:
@@ -86,20 +85,10 @@ class TelegramNewsService:
 
     @staticmethod
     def _is_reader_enabled() -> bool:
-        if TELEGRAM_READ_MODE == "client":
-            return TELEGRAM_API_ID > 0 and bool(TELEGRAM_API_HASH)
-        return bool(TELEGRAM_BOT_TOKEN)
+        return TELEGRAM_API_ID > 0 and bool(TELEGRAM_API_HASH)
 
     async def _fetch_recent_items(self) -> list[dict[str, str]]:
-        if TELEGRAM_READ_MODE == "client":
-            items = await self._fetch_recent_items_client()
-            if items:
-                return items
-            if TELEGRAM_BOT_TOKEN:
-                logger.warning("Telegram client mode returned no items; falling back to bot getUpdates path.")
-
-        updates = await self._fetch_updates_bot()
-        return self._extract_recent_items_from_updates(updates)
+        return await self._fetch_recent_items_client()
 
     async def _fetch_updates_bot(self) -> list[dict[str, Any]]:
         endpoint = f"{TELEGRAM_BOT_BASE_URL}/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
@@ -136,13 +125,10 @@ class TelegramNewsService:
         session = StringSession(TELEGRAM_SESSION_STRING) if TELEGRAM_SESSION_STRING else TELEGRAM_SESSION_NAME
         since = datetime.now(timezone.utc) - timedelta(minutes=max(1, TELEGRAM_LOOKBACK_MINUTES))
         allowed_channels = {self._normalize_channel(value) for value in TELEGRAM_CHANNELS}
-        max_channels = max(1, TELEGRAM_MAX_CHANNELS_PER_POLL)
-        channel_list = [
-            channel
-            for channel in list(allowed_channels)
-            if not self._is_channel_suppressed(channel)
-        ][:max_channels]
+        max_channels = max(1, max(TELEGRAM_MAX_CHANNELS_PER_POLL, len(allowed_channels)))
+        channel_list = list(allowed_channels)[:max_channels]
         per_channel_limit = max(5, min(TELEGRAM_MAX_UPDATES, 50))
+        per_channel_limit = max(10, per_channel_limit)
         collected: list[dict[str, str]] = []
 
         async with TelegramClient(session, TELEGRAM_API_ID, TELEGRAM_API_HASH) as client:
@@ -179,7 +165,6 @@ class TelegramNewsService:
                         "Skipping Telegram channel %s: not found in authorized account dialogs (likely not joined).",
                         channel,
                     )
-                    self._suppress_channel(channel, minutes=180)
                     continue
 
                 try:
@@ -195,12 +180,9 @@ class TelegramNewsService:
                     )
                 except asyncio.TimeoutError:
                     logger.warning("Timeout reading channel %s via Telegram client", channel)
-                    self._suppress_channel(channel, minutes=5)
                     continue
                 except Exception as ex:
                     logger.warning("Failed reading channel %s via Telegram client: %s", channel, ex)
-                    if "Cannot find any entity corresponding to" in str(ex):
-                        self._suppress_channel(channel, minutes=60)
                     continue
 
                 for message in messages:
@@ -226,8 +208,7 @@ class TelegramNewsService:
                         "text": compact[:220],
                     })
 
-        collected.sort(key=lambda item: item["timestamp"])
-        return collected[-25:]
+        return self._last_n_per_channel(collected, n=10)
 
     def _extract_recent_items_from_updates(self, updates: list[dict[str, Any]]) -> list[dict[str, str]]:
         since = datetime.now(timezone.utc) - timedelta(minutes=max(1, TELEGRAM_LOOKBACK_MINUTES))
@@ -269,7 +250,25 @@ class TelegramNewsService:
                 "text": compact[:220],
             })
 
-        return items[-25:]
+        return self._last_n_per_channel(items, n=10)
+
+    @staticmethod
+    def _last_n_per_channel(items: list[dict[str, str]], n: int) -> list[dict[str, str]]:
+        if not items:
+            return []
+
+        grouped: dict[str, list[dict[str, str]]] = {}
+        for item in items:
+            channel = TelegramNewsService._normalize_channel(item.get("channel") or "")
+            grouped.setdefault(channel, []).append(item)
+
+        output: list[dict[str, str]] = []
+        for channel_items in grouped.values():
+            channel_items.sort(key=lambda entry: entry.get("timestamp", ""))
+            output.extend(channel_items[-max(1, n):])
+
+        output.sort(key=lambda entry: entry.get("timestamp", ""))
+        return output
 
     @staticmethod
     def _categorize(text: str) -> str:
@@ -442,19 +441,6 @@ class TelegramNewsService:
         if raw.startswith("-") and raw[1:].isdigit():
             return f"-100{raw[1:]}" if len(raw) >= 10 else raw
         return f"@{raw}"
-
-    def _is_channel_suppressed(self, channel: str) -> bool:
-        until = self._channel_suppressed_until.get(channel)
-        if until is None:
-            return False
-        now = datetime.now(timezone.utc)
-        if now >= until:
-            self._channel_suppressed_until.pop(channel, None)
-            return False
-        return True
-
-    def _suppress_channel(self, channel: str, minutes: int) -> None:
-        self._channel_suppressed_until[channel] = datetime.now(timezone.utc) + timedelta(minutes=max(1, minutes))
 
     @staticmethod
     def _compact_whitespace(text: str) -> str:

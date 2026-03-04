@@ -64,7 +64,7 @@ public sealed class MarketSnapshotPollingService : BackgroundService
 
         try
         {
-            var signal = await aiWorkerClient.AnalyzeAsync(snapshot, cancellationToken);
+            var signal = await aiWorkerClient.AnalyzeAsync(snapshot, cycleId: null, cancellationToken);
 
             _logger.LogInformation(
                 "✅ [Poll] Analysis received: {Signal} @ {Entry} (TP={Tp}, Confidence={Confidence})",

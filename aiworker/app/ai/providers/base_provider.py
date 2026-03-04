@@ -180,3 +180,50 @@ DO NOT add any explanation outside the JSON."""
 
         return f"{master_prompt}\n\n{response_contract}"
 
+    def _append_provider_trace(self, market_context: dict, trace: dict) -> None:
+        sink = market_context.get("_ai_provider_traces")
+        if not isinstance(sink, list):
+            return
+        sink.append(trace)
+
+    def _trace_request(self, market_context: dict, system_prompt: str, user_prompt: str) -> None:
+        self._append_provider_trace(
+            market_context,
+            {
+                "eventType": "AI_PROVIDER_REQUEST",
+                "stage": str(market_context.get("_pipeline_stage", "main")),
+                "analyzer": self.config.name,
+                "provider": self.config.provider,
+                "model": self.config.model,
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+            },
+        )
+
+    def _trace_response(self, market_context: dict, raw_response: str, parsed_signal: Optional[TradeSignal]) -> None:
+        self._append_provider_trace(
+            market_context,
+            {
+                "eventType": "AI_PROVIDER_RESPONSE",
+                "stage": str(market_context.get("_pipeline_stage", "main")),
+                "analyzer": self.config.name,
+                "provider": self.config.provider,
+                "model": self.config.model,
+                "raw_response": raw_response,
+                "parsed_signal": parsed_signal.to_dict() if parsed_signal is not None else None,
+            },
+        )
+
+    def _trace_error(self, market_context: dict, error: str) -> None:
+        self._append_provider_trace(
+            market_context,
+            {
+                "eventType": "AI_PROVIDER_ERROR",
+                "stage": str(market_context.get("_pipeline_stage", "main")),
+                "analyzer": self.config.name,
+                "provider": self.config.provider,
+                "model": self.config.model,
+                "error": error,
+            },
+        )
+

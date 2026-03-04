@@ -26,7 +26,7 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         _baseUrl = ResolveBaseUrl(configuration);
     }
 
-    public async Task<TradeSignalContract> AnalyzeAsync(MarketSnapshotContract snapshot, CancellationToken cancellationToken)
+    public async Task<TradeSignalContract> AnalyzeAsync(MarketSnapshotContract snapshot, string? cycleId, CancellationToken cancellationToken)
     {
         try
         {
@@ -137,6 +137,7 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 rateDeltaUsd = snapshot.RateDeltaUsd,
                 rateAuthority = snapshot.RateAuthority,
                 authoritativeRate = snapshot.AuthoritativeRate,
+                cycleId = cycleId,
                 compressionRangesM15 = snapshot.CompressionRangesM15 ?? [],
                 freeMargin = snapshot.FreeMargin,
                 equity = snapshot.Equity,
@@ -218,7 +219,11 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 CrossMetalsBias: result.CrossMetalsBias ?? "NEUTRAL",
                 CbFlow: result.CbFlow ?? "UNKNOWN",
                 InstPositioning: result.InstPositioning ?? "UNKNOWN",
-                EventRisk: result.EventRisk ?? "LOW");
+                EventRisk: result.EventRisk ?? "LOW",
+                PromptRefs: result.PromptRefs ?? [],
+                ProviderModels: result.ProviderModels ?? [],
+                AiTraceJson: result.AiTraceJson,
+                CycleId: result.CycleId ?? cycleId);
 
             _logger.LogInformation(
                 "← [AIWorker] Analysis complete: {Signal} (confidence={Confidence})",
@@ -341,7 +346,11 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         string? CrossMetalsBias,
         string? CbFlow,
         string? InstPositioning,
-        string? EventRisk);
+        string? EventRisk,
+        IReadOnlyCollection<string>? PromptRefs,
+        IReadOnlyCollection<string>? ProviderModels,
+        string? AiTraceJson,
+        string? CycleId);
 
     private sealed record ModeSignalResponse(
         string Mode,

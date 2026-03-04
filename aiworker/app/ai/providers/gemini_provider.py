@@ -20,6 +20,7 @@ class GeminiProvider(AIProvider):
                 f"{system_prompt}\n\n"
                 f"Analyze this forex market and respond JSON only:\n{dump_market_context(market_context)}"
             )
+            self._trace_request(market_context, system_prompt, prompt)
 
             url = (
                 f"https://generativelanguage.googleapis.com/v1beta/models/"
@@ -56,11 +57,15 @@ class GeminiProvider(AIProvider):
 
             if not text:
                 logger.warning("Gemini returned empty response")
+                self._trace_response(market_context, "", None)
                 return None
 
-            return await self.validate_response(text)
+            signal = await self.validate_response(text)
+            self._trace_response(market_context, text, signal)
+            return signal
         except Exception as ex:
             logger.error("Gemini provider error: %s", str(ex))
+            self._trace_error(market_context, str(ex))
             return None
 
     async def validate_response(self, response: str) -> Optional[TradeSignal]:
