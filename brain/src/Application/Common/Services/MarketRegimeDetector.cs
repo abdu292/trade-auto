@@ -22,7 +22,7 @@ public static class MarketRegimeDetector
     // ATR/ADR ratio below which the market is considered frozen (no intraday range)
     private const decimal AtrDeadRatioThreshold = 0.25m;
 
-    // Minimum tick rate (ticks per 30 s); below this the feed is near-dead
+    // Minimum tick rate (ticks per 30 s); below this the feed may be near-dead
     private const decimal MinTickRate = 0.5m;
 
     // ADR utilisation % above which the day has no room for new scalp moves
@@ -33,6 +33,9 @@ public static class MarketRegimeDetector
 
     // EMA spread ratio: if |Ema50 − Ema200| / Ema200 < this, cross is ambiguous
     private const decimal EmaSpreadMinRatio = 0.002m;
+
+    // Minimum M5 candle range relative to M15 ATR to consider price actively moving
+    private const decimal MinM5RangeAtrRatio = 0.20m;
 
     public static MarketRegimeResult Detect(MarketSnapshotContract snapshot)
     {
@@ -90,13 +93,30 @@ public static class MarketRegimeDetector
 
     private static bool IsDeadMarket(MarketSnapshotContract snapshot, decimal atrH1, decimal adr)
     {
-        // ATR is available and less than 25 % of the average daily range → frozen
+        // Primary candle-derived signal: H1 ATR is less than 25 % of the average daily range.
+        // This is fully candle-based and the strongest single indicator of a frozen market.
         if (atrH1 > 0m && adr > 0m && atrH1 < adr * AtrDeadRatioThreshold)
             return true;
 
-        // Tick rate is reported and below the minimum floor → near-dead feed
+        // Secondary candle-derived confirmation: tick rate is frozen.
+        // A low tick rate alone can be an unreliable indicator on some broker feeds
+        // (e.g. feed pauses that do not reflect actual market inactivity).
+        // Therefore, when tick rate is the only trigger, verify with a candle-based
+        // activity check: if the M5 candle is showing meaningful range movement the
+        // market is not truly dead, regardless of the tick count.
         if (snapshot.TickRatePer30s > 0m && snapshot.TickRatePer30s < MinTickRate)
-            return true;
+        {
+            var atrM15 = snapshot.AtrM15 > 0m ? snapshot.AtrM15 : snapshot.Atr;
+            var m5Candle = snapshot.TimeframeData
+                .FirstOrDefault(x => string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase));
+            var m5Range = m5Candle?.CandleRange ?? 0m;
+
+            // If M5 candle range shows meaningful activity relative to M15 ATR,
+            // do not classify as dead — price is actively moving despite low tick count.
+            var priceIsMoving = atrM15 > 0m && m5Range >= atrM15 * MinM5RangeAtrRatio;
+            if (!priceIsMoving)
+                return true;
+        }
 
         return false;
     }

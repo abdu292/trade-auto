@@ -294,6 +294,23 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             cancellationToken: ct);
 
         // ── Step 1: Rule engine ──
+        // Log market regime as a dedicated event before rule engine evaluation.
+        var marketRegimePrecheck = MarketRegimeDetector.Detect(snapshot);
+        await timeline.WriteAsync(
+            eventType: "MARKET_REGIME_DETECTED",
+            stage: "regime",
+            source: "replay_engine",
+            symbol: snapshot.Symbol,
+            cycleId: cycleId,
+            tradeId: null,
+            payload: new
+            {
+                regime = marketRegimePrecheck.Regime,
+                isTradeable = marketRegimePrecheck.IsTradeable,
+                reason = marketRegimePrecheck.Reason,
+            },
+            cancellationToken: ct);
+
         var setup = RuleEngine.Evaluate(snapshot);
 
         await timeline.WriteAsync(
@@ -310,6 +327,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
                 h1Context = setup.H1Context,
                 m15Setup = setup.M15Setup,
                 m5Entry = setup.M5Entry,
+                impulseConfirmation = setup.ImpulseConfirmation,
                 abortReason = setup.AbortReason,
             },
             cancellationToken: ct);

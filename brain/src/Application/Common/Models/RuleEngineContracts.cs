@@ -31,22 +31,40 @@ public sealed record MarketRegimeResult(
     bool IsTradeable,
     string Reason);
 
+/// <summary>
+/// Result from the impulse confirmation layer (Layer 4 in the rule engine).
+/// Checks whether the entry timeframe (M5) shows real directional momentum
+/// before the setup is approved, filtering out weak consolidation, slow movement,
+/// and fake breakouts that lack actual price energy.
+/// </summary>
+public sealed record ImpulseConfirmationResult(
+    bool IsConfirmed,
+    bool HasMomentumExpansion,
+    bool HasRangeExpansion,
+    bool HasBodyExpansion,
+    decimal ImpulseScore,
+    string Reason);
+
 public sealed record SetupCandidateResult(
     bool IsValid,
     H1ContextResult H1Context,
     M15SetupResult? M15Setup,
     M5EntryResult? M5Entry,
     string AbortReason,
-    MarketRegimeResult? MarketRegime = null)
+    MarketRegimeResult? MarketRegime = null,
+    ImpulseConfirmationResult? ImpulseConfirmation = null)
 {
-    public static SetupCandidateResult Valid(H1ContextResult h1, M15SetupResult m15, M5EntryResult m5, MarketRegimeResult marketRegime)
-        => new(true, h1, m15, m5, string.Empty, marketRegime);
+    public static SetupCandidateResult Valid(H1ContextResult h1, M15SetupResult m15, M5EntryResult m5, MarketRegimeResult marketRegime, ImpulseConfirmationResult impulse)
+        => new(true, h1, m15, m5, string.Empty, marketRegime, impulse);
 
     public static SetupCandidateResult Aborted(H1ContextResult h1, string reason, MarketRegimeResult? marketRegime = null)
         => new(false, h1, null, null, reason, marketRegime);
 
     public static SetupCandidateResult Aborted(H1ContextResult h1, M15SetupResult m15, string reason, MarketRegimeResult? marketRegime = null)
         => new(false, h1, m15, null, reason, marketRegime);
+
+    public static SetupCandidateResult AbortedByImpulse(H1ContextResult h1, M15SetupResult m15, M5EntryResult m5, ImpulseConfirmationResult impulse, MarketRegimeResult marketRegime)
+        => new(false, h1, m15, m5, impulse.Reason, marketRegime, impulse);
 
     public static SetupCandidateResult AbortedByRegime(MarketRegimeResult marketRegime)
         => new(false,

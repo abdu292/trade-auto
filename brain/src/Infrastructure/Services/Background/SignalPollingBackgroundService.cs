@@ -150,6 +150,23 @@ public sealed class SignalPollingBackgroundService(
                 }
 
                 // ── Rule engine: must generate a setup candidate before AI is invoked ──
+                // Log market regime as a dedicated event for timeline clarity before rule engine runs.
+                var marketRegimePrecheck = MarketRegimeDetector.Detect(snapshot);
+                await timeline.WriteAsync(
+                    eventType: "MARKET_REGIME_DETECTED",
+                    stage: "regime",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        regime = marketRegimePrecheck.Regime,
+                        isTradeable = marketRegimePrecheck.IsTradeable,
+                        reason = marketRegimePrecheck.Reason,
+                    },
+                    cancellationToken: stoppingToken);
+
                 var setupCandidate = RuleEngine.Evaluate(snapshot);
 
                 await timeline.WriteAsync(
@@ -166,6 +183,7 @@ public sealed class SignalPollingBackgroundService(
                         h1Context = setupCandidate.H1Context,
                         m15Setup = setupCandidate.M15Setup,
                         m5Entry = setupCandidate.M5Entry,
+                        impulseConfirmation = setupCandidate.ImpulseConfirmation,
                         abortReason = setupCandidate.AbortReason,
                     },
                     cancellationToken: stoppingToken);

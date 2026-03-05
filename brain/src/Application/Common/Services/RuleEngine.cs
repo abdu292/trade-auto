@@ -3,8 +3,8 @@ using Brain.Application.Common.Models;
 namespace Brain.Application.Common.Services;
 
 /// <summary>
-/// Deterministic three-layer rule engine. Evaluates H1 context, M15 setup, and M5 entry
-/// to produce a setup candidate before AI analysis is performed.
+/// Deterministic four-layer rule engine. Evaluates H1 context, M15 setup, M5 entry,
+/// and impulse confirmation to produce a setup candidate before AI analysis is performed.
 /// AI must never generate trades independently — this engine always runs first.
 /// </summary>
 public static class RuleEngine
@@ -14,9 +14,10 @@ public static class RuleEngine
     private const decimal MinimumImpulseStrength = 0.40m;     // minimum impulse score for momentum entry
     private const decimal RsiCompressionLowerBound = 35m;     // RSI floor for valid compression entry
     private const decimal RsiCompressionUpperBound = 72m;     // RSI ceiling for valid compression entry
+    private const decimal ImpulseBodyAtrRatio = 0.40m;        // M5 body must be ≥ this × ATR ref for body expansion signal
 
     /// <summary>
-    /// Evaluates all three layers and returns a setup candidate (or abort result).
+    /// Evaluates all four layers and returns a setup candidate (or abort result).
     /// Market regime detection runs first; if the regime is not tradeable the cycle
     /// is aborted before H1/M15/M5 evaluation is performed.
     /// If any layer fails, the result is invalid and the decision cycle must abort.
@@ -51,7 +52,17 @@ public static class RuleEngine
             return SetupCandidateResult.Aborted(h1, m15, $"M5 entry not confirmed: {m5.Reason}", marketRegime);
         }
 
-        return SetupCandidateResult.Valid(h1, m15, m5, marketRegime);
+        // ── Layer 4: Impulse Confirmation ────────────────────────────────────────
+        // Verifies that the entry timeframe shows real directional momentum before
+        // approving the setup. Filters out weak consolidation, slow movement, and
+        // fake breakouts where price lacks actual energy in the trade direction.
+        var impulse = EvaluateImpulse(snapshot);
+        if (!impulse.IsConfirmed)
+        {
+            return SetupCandidateResult.AbortedByImpulse(h1, m15, m5, impulse, marketRegime);
+        }
+
+        return SetupCandidateResult.Valid(h1, m15, m5, marketRegime, impulse);
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -187,6 +198,51 @@ public static class RuleEngine
             IsBreakout: isBreakout,
             IsMomentumShift: isMomentumShift,
             IsRetest: isRetest,
+            Reason: reason);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Layer 4 — Impulse Confirmation
+    // Verifies that the entry timeframe (M5) shows real directional momentum.
+    // Filters out setups where structure appears valid but the market lacks
+    // immediate price energy (weak consolidation, slow movement, fake breakouts).
+    // At least one impulse signal must be present for the setup to proceed.
+    // ──────────────────────────────────────────────────────────────────────────
+    private static ImpulseConfirmationResult EvaluateImpulse(MarketSnapshotContract snapshot)
+    {
+        // Direct impulse: pre-computed flag with sufficient strength score
+        var hasMomentumExpansion = snapshot.HasImpulseCandles && snapshot.ImpulseStrengthScore >= MinimumImpulseStrength;
+
+        // Range expansion: price is actively expanding beyond recent structure
+        var hasRangeExpansion = snapshot.IsExpansion || snapshot.IsAtrExpanding;
+
+        // Confirmed breakout: candle closed beyond compression/structure boundary
+        var hasBreakout = snapshot.IsBreakoutConfirmed;
+
+        // Retest after spike: prior impulse established, now retesting entry level
+        var hasRetest = snapshot.IsPostSpikePullback;
+
+        // Candle body expansion: M5 candle body is large relative to ATR reference,
+        // indicating directional conviction rather than indecision
+        var m5Candle = snapshot.TimeframeData
+            .FirstOrDefault(x => string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase));
+        var atrRef = snapshot.AtrM15 > 0m ? snapshot.AtrM15 : snapshot.Atr;
+        var hasBodyExpansion = m5Candle is not null
+            && atrRef > 0m
+            && m5Candle.CandleBodySize >= atrRef * ImpulseBodyAtrRatio;
+
+        var isConfirmed = hasMomentumExpansion || hasRangeExpansion || hasBreakout || hasRetest || hasBodyExpansion;
+
+        var reason = isConfirmed
+            ? $"Impulse confirmed. Score={snapshot.ImpulseStrengthScore:0.00}, Momentum={hasMomentumExpansion}, RangeExpansion={hasRangeExpansion}, Breakout={hasBreakout}, Retest={hasRetest}, BodyExpansion={hasBodyExpansion}"
+            : $"Impulse not confirmed — no directional energy detected. Score={snapshot.ImpulseStrengthScore:0.00}, HasImpulse={snapshot.HasImpulseCandles}, IsExpansion={snapshot.IsExpansion}, AtrExpanding={snapshot.IsAtrExpanding}, BodyExpansion={hasBodyExpansion}";
+
+        return new ImpulseConfirmationResult(
+            IsConfirmed: isConfirmed,
+            HasMomentumExpansion: hasMomentumExpansion,
+            HasRangeExpansion: hasRangeExpansion,
+            HasBodyExpansion: hasBodyExpansion,
+            ImpulseScore: snapshot.ImpulseStrengthScore,
             Reason: reason);
     }
 }
