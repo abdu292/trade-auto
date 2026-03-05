@@ -310,3 +310,16 @@ public sealed record PendingTradeContract(
     decimal ShopSell = 0m,
     DateTimeOffset ExpiryKSA = default,
     DateTimeOffset ExpiryServer = default);
+
+/// <summary>
+/// Score breakdown produced by TradeScoreCalculator for a valid trade setup.
+/// Score range: 0–100. Thresholds: &lt;45 NO_TRADE, 45–59 WEAK, 60–79 VALID, ≥80 HIGH_CONVICTION.
+/// </summary>
+public sealed record TradeScoreContract(
+    int StructureScore,
+    int MomentumScore,
+    int ExecutionScore,
+    int AiScore,
+    int SentimentScore,
+    int TotalScore,
+    string DecisionTier);
