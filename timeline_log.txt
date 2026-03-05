@@ -1,123 +1,1137 @@
 # Runtime Timeline
 
-Total events: 20
+Total events: 189
 
-- Time UTC 2026-03-05 07:00:02 | KSA(AST) 10:00:02 | Dubai(GST) 11:00:02 | India(IST) 12:30:02
+- Time UTC 2026-03-05 12:00:02 | KSA(AST) 15:00:02 | Dubai(GST) 16:00:02 | India(IST) 17:30:02
   Event: MT5_MARKET_SNAPSHOT_RECEIVED [mt5_ingest] source=mt5 symbol=XAUUSD
   Summary: MT5 sent a market snapshot to Brain.
   Correlation: cycle_id=-, trade_id=-
-  Data: {"symbol":"XAUUSD","timestamp":"2026-03-05T07:00:00+00:00","mt5ServerTime":"2026-03-05T11:10:00+02:10","ksaTime":"2026-03-05T12:50:00+03:00","uaeTime":"2026-03-05T13:50:00+04:00","indiaTime":"2026-03-05T15:20:00+05:30","bid":5167.66000,"ask":5167.83000,"spread":0.17000,"timeframeData":[{"timeframe":"M5","open":5156.16000,"high":5168.81000,"low":5156.16000,"close":5167.66000,"volume":2548,"candleStartTime":"2026-03-05T08:55:00+00:00","candleCloseTime":"2026-03-05T09:00:00+00:00","candleBodySize":11.50000,"upperWickSize":1.15000,"lowerWickSize":0.00000,"candleRange":12.65000,"ma20Value":5156.56197,"ma20Distance":11.09803,"rsi":51.56654,"atr":11.06286},{"timeframe":"M15","open":5150.89000,"high":5168.81000,"low":5149.12000,"close":5167.66000,"volume":6584,"candleStartTime":"2026-03-05T08:45:00+00:00","candleCloseTime":"2026-03-05T09:00:00+00:00","candleBodySize":16.77000,"upperWickSize":1.15000,"lowerWickSize":1.77000,"candleRange":19.69000,"ma20Value":5164.15203,"ma20Distance":3.50797,"rsi":39.49884,"atr":14.10143},{"timeframe":"H1","open":5148.62000,"high":5168.81000,"low":5120.65000,"close":5167.66000,"volume":32865,"candleStartTime":"2026-03-05T08:00:00+00:00","candleCloseTime":"2026-03-05T09:00:00+00:00","candleBodySize":19.04000,"upperWickSize":1.15000,"lowerWickSize":27.97000,"candleRange":48.16000,"ma20Value":5163.44762,"ma20Distance":4.21238,"rsi":49.91212,"atr":24.66714}],"pendingOrders":[],"openPositions":[],"orderExecutionEvents":[],"telegramState":"QUIET","session":"LONDON","sessionPhase":"MID","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5166.100098}
+  Data: {"symbol":"XAUUSD","timestamp":"2026-03-05T12:00:00+00:00","mt5ServerTime":"2026-03-05T16:10:00+02:10","ksaTime":"2026-03-05T17:50:00+03:00","uaeTime":"2026-03-05T18:50:00+04:00","indiaTime":"2026-03-05T20:20:00+05:30","bid":5163.80000,"ask":5163.84000,"spread":0.04000,"timeframeData":[{"timeframe":"M5","open":5162.82000,"high":5164.16000,"low":5160.43000,"close":5163.79000,"volume":1189,"candleStartTime":"2026-03-05T13:55:00+00:00","candleCloseTime":"2026-03-05T14:00:00+00:00","candleBodySize":0.97000,"upperWickSize":0.37000,"lowerWickSize":2.39000,"candleRange":3.73000,"ma20Value":5161.95942,"ma20Distance":1.83058,"rsi":62.63477,"atr":4.10286},{"timeframe":"M15","open":5160.99000,"high":5165.11000,"low":5160.43000,"close":5163.79000,"volume":3145,"candleStartTime":"2026-03-05T13:45:00+00:00","candleCloseTime":"2026-03-05T14:00:00+00:00","candleBodySize":2.80000,"upperWickSize":1.32000,"lowerWickSize":0.56000,"candleRange":4.68000,"ma20Value":5162.09127,"ma20Distance":1.69873,"rsi":50.75090,"atr":11.03429},{"timeframe":"H1","open":5164.66000,"high":5168.02000,"low":5156.97000,"close":5163.79000,"volume":14453,"candleStartTime":"2026-03-05T13:00:00+00:00","candleCloseTime":"2026-03-05T14:00:00+00:00","candleBodySize":0.87000,"upperWickSize":3.36000,"lowerWickSize":6.82000,"candleRange":11.05000,"ma20Value":5163.53098,"ma20Distance":0.25902,"rsi":60.28599,"atr":22.84286}],"pendingOrders":[],"openPositions":[],"orderExecutionEvents":[],"telegramState":"QUIET","session":"NY","sessionPhase":"MID","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5164.299805}
 
-- Time UTC 2026-03-05 07:00:22 | KSA(AST) 10:00:22 | Dubai(GST) 11:00:22 | India(IST) 12:30:22
+- Time UTC 2026-03-05 12:00:24 | KSA(AST) 15:00:24 | Dubai(GST) 16:00:24 | India(IST) 17:30:24
   Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
   Summary: Brain started a new decision cycle using latest market data.
-  Correlation: cycle_id=cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1, trade_id=-
-  Data: {"symbol":"XAUUSD","session":"LONDON","sessionPhase":"MID","timestamp":"2026-03-05T07:00:00+00:00","mt5ServerTime":"2026-03-05T11:10:00+02:10","ksaTime":"2026-03-05T12:50:00+03:00","uaeTime":"2026-03-05T13:50:00+04:00","indiaTime":"2026-03-05T15:20:00+05:30","bid":5167.66000,"ask":5167.83000,"spread":0.17000,"atr":24.66714,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5166.100098}
+  Correlation: cycle_id=cyc_20260305120024_605009b3a4554741a23c3b84a26a54ea, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:00:00+00:00","mt5ServerTime":"2026-03-05T16:10:00+02:10","ksaTime":"2026-03-05T17:50:00+03:00","uaeTime":"2026-03-05T18:50:00+04:00","indiaTime":"2026-03-05T20:20:00+05:30","bid":5163.80000,"ask":5163.84000,"spread":0.04000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5164.299805}
 
-- Time UTC 2026-03-05 07:00:22 | KSA(AST) 10:00:22 | Dubai(GST) 11:00:22 | India(IST) 12:30:22
+- Time UTC 2026-03-05 12:00:24 | KSA(AST) 15:00:24 | Dubai(GST) 16:00:24 | India(IST) 17:30:24
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120024_605009b3a4554741a23c3b84a26a54ea, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:00:24 | KSA(AST) 15:00:24 | Dubai(GST) 16:00:24 | India(IST) 17:30:24
   Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
-  Summary: Recorded event RULE_ENGINE_ABORT at stage rule_engine.
-  Correlation: cycle_id=cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1, trade_id=-
-  Data: {"isValid":false,"h1Context":{"context":"NEUTRAL","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":true,"reason":"Conflicting signals. MA=5161.39, Close=5167.66, RSI=49.9, Sweep=False"},"m15Setup":null,"m5Entry":null,"abortReason":"H1 context is neutral \u2014 no directional bias. Conflicting signals. MA=5161.39, Close=5167.66, RSI=49.9, Sweep=False"}
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120024_605009b3a4554741a23c3b84a26a54ea, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
 
-- Time UTC 2026-03-05 07:00:22 | KSA(AST) 10:00:22 | Dubai(GST) 11:00:22 | India(IST) 12:30:22
-  Event: NEWS_CHECK [news] source=forexfactory symbol=XAUUSD
-  Summary: Recorded event NEWS_CHECK at stage news.
-  Correlation: cycle_id=cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1, trade_id=-
-  Data: {"blocked":false,"reason":"No nearby high-impact USD events.","nearbyEvents":[],"refreshedAtUtc":"2026-03-05T07:00:22.8987441+00:00","isStale":false}
+- Time UTC 2026-03-05 12:00:24 | KSA(AST) 15:00:24 | Dubai(GST) 16:00:24 | India(IST) 17:30:24
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120024_605009b3a4554741a23c3b84a26a54ea, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
 
-- Time UTC 2026-03-05 07:00:22 | KSA(AST) 10:00:22 | Dubai(GST) 11:00:22 | India(IST) 12:30:22
-  Event: AI_ANALYZE_REQUEST [ai] source=brain symbol=XAUUSD
-  Summary: Brain sent snapshot + prompt policy to AI worker.
-  Correlation: cycle_id=cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1, trade_id=-
-  Data: {"promptPolicy":"prompts/master_prompt*.md \u002B prompts/short_prompt_*.md","requestToAiWorker":{"symbol":"XAUUSD","timeframeData":[{"timeframe":"M5","open":5156.16000,"high":5168.81000,"low":5156.16000,"close":5167.66000,"volume":2548,"candleStartTime":"2026-03-05T08:55:00+00:00","candleCloseTime":"2026-03-05T09:00:00+00:00","candleBodySize":11.50000,"upperWickSize":1.15000,"lowerWickSize":0.00000,"candleRange":12.65000,"ma20Value":5156.56197,"ma20Distance":11.09803,"rsi":51.56654,"atr":11.06286},{"timeframe":"M15","open":5150.89000,"high":5168.81000,"low":5149.12000,"close":5167.66000,"volume":6584,"candleStartTime":"2026-03-05T08:45:00+00:00","candleCloseTime":"2026-03-05T09:00:00+00:00","candleBodySize":16.77000,"upperWickSize":1.15000,"lowerWickSize":1.77000,"candleRange":19.69000,"ma20Value":5164.15203,"ma20Distance":3.50797,"rsi":39.49884,"atr":14.10143},{"timeframe":"H1","open":5148.62000,"high":5168.81000,"low":5120.65000,"close":5167.66000,"volume":32865,"candleStartTime":"2026-03-05T08:00:00+00:00","candleCloseTime":"2026-03-05T09:00:00+00:00","candleBodySize":19.04000,"upperWickSize":1.15000,"lowerWickSize":27.97000,"candleRange":48.16000,"ma20Value":5163.44762,"ma20Distance":4.21238,"rsi":49.91212,"atr":24.66714}],"atr":24.66714,"adr":170.29600,"ma20":5161.38500,"session":"LONDON","timestamp":"2026-03-05T07:00:00+00:00","ma20H4":5161.38500,"ma20H1":5161.38500,"ma20M30":5161.38500,"rsiH1":49.91212,"rsiM15":39.49884,"atrH1":24.66714,"atrM15":14.10143,"previousDayHigh":5206.14000,"previousDayLow":5084.39000,"weeklyHigh":5281.03000,"weeklyLow":5094.14000,"dayOpen":5140.17000,"weekOpen":5363.14000,"sessionHigh":5167.66000,"sessionLow":5167.66000,"sessionHighJapan":5206.14000,"sessionLowJapan":5117.50000,"sessionHighIndia":5154.90000,"sessionLowIndia":5108.83000,"sessionHighLondon":5195.01000,"sessionLowLondon":5146.51000,"sessionHighNy":5191.20000,"sessionLowNy":5120.65000,"previousSessionHigh":5154.90000,"previousSessionLow":5108.83000,"ema50H1":5182.92153,"ema200H1":5167.28554,"adrUsedPct":14.48486,"volatilityExpansion":0.14485,"dayOfWeek":4,"mt5ServerTime":"2026-03-05T11:10:00+02:10","ksaTime":"2026-03-05T12:50:00+03:00","uaeTime":"2026-03-05T13:50:00+04:00","indiaTime":"2026-03-05T15:20:00+05:30","internalClockUtc":"2026-03-05T07:00:00.7445392+00:00","utcReferenceTime":"2026-03-05T07:00:00+00:00","timeSkewMs":7200000,"mt5ToKsaOffsetMinutes":50,"telegramImpactTag":"LOW","tradingViewConfirmation":"NEUTRAL","isCompression":false,"isExpansion":true,"isAtrExpanding":true,"hasOverlapCandles":true,"hasImpulseCandles":true,"hasLiquiditySweep":false,"hasPanicDropSequence":false,"isPostSpikePullback":false,"isLondonNyOverlap":false,"isBreakoutConfirmed":false,"isUsRiskWindow":false,"isFriday":false,"bid":5167.66000,"ask":5167.83000,"spread":0.17000,"spreadMedian60m":0.11971,"spreadMax60m":0.17000,"compressionCountM15":2,"compressionCountM5":0,"expansionCountM15":4,"impulseStrengthScore":1.25136,"telegramState":"QUIET","panicSuspected":false,"tvAlertType":"NONE","sessionPhase":"MID","spreadMin1m":0.04000,"spreadAvg1m":0.09583,"spreadMax1m":0.17000,"spreadMin5m":0.04000,"spreadAvg5m":0.11971,"spreadMax5m":0.17000,"freeMargin":26380.00,"equity":26380.00,"balance":26380.00,"tickRatePer30s":0.10,"freezeGapDetected":true,"slippageEstimatePoints":4.25,"sessionVwap":5152.85666,"systemFetchedGoldRate":5166.100098,"rateDeltaUsd":1.644902,"rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5166.100098,"cycleId":"cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1","compressionRangesM15":[19.69000,16.69000,19.38000,34.72000,21.06000,12.44000,6.77000,7.64000],"pendingOrders":[],"openPositions":[],"orderExecutionEvents":[]},"dispatchState":"sent_to_aiworker"}
+- Time UTC 2026-03-05 12:00:24 | KSA(AST) 15:00:24 | Dubai(GST) 16:00:24 | India(IST) 17:30:24
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120024_605009b3a4554741a23c3b84a26a54ea, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
 
-- Time UTC 2026-03-05 07:00:49 | KSA(AST) 10:00:49 | Dubai(GST) 11:00:49 | India(IST) 12:30:49
-  Event: AI_ANALYZE_RESPONSE [ai] source=aiworker symbol=XAUUSD
-  Summary: Brain received the AI decision payload.
-  Correlation: cycle_id=cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1, trade_id=-
-  Data: {"truncated":true,"preview":"{\u0022rail\u0022:\u0022NO_TRADE\u0022,\u0022entry\u0022:0,\u0022tp\u0022:0,\u0022confidence\u0022:0,\u0022consensusPassed\u0022:true,\u0022agreementCount\u0022:1,\u0022requiredAgreement\u0022:1,\u0022disagreementReason\u0022:\u0022RISK_BLOCKED_PRETABLE\u0022,\u0022providerVotes\u0022:[\u0022pretable_classifier:block\u0022],\u0022promptRefs\u0022:[\u0022prompts/master_prompt.md\u0022,\u0022prompts/short_prompt_news.md\u0022,\u0022prompts/short_prompt_analyze.md\u0022,\u0022prompts/short_prompt_validate.md\u0022,\u0022prompts/short_prompt_study.md\u0022,\u0022prompts/short_prompt_self_crosscheck.md\u0022,\u0022prompts/short_prompt_captial_utilization.md\u0022],\u0022providerModels\u0022:[\u0022openrouter-openai:openai/gpt-5\u0022,\u0022openrouter-gemini:google/gemini-2.5-pro\u0022,\u0022openrouter-grok:x-ai/grok-4.1-fast\u0022,\u0022openrouter-perplexity:perplexity/sonar-pro\u0022],\u0022cycleId\u0022:\u0022cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1\u0022,\u0022aiRequest\u0022:{\u0022cycle_id\u0022:\u0022cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1\u0022,\u0022symbol\u0022:\u0022XAUUSD\u0022,\u0022market_context\u0022:{\u0022symbol\u0022:\u0022XAUUSD\u0022,\u0022current_price\u0022:5166.100098,\u0022open\u0022:5156.16,\u0022high\u0022:5168.81,\u0022low\u0022:5156.16,\u0022close\u0022:5167.66,\u0022timeframes\u0022:[{\u0022timeframe\u0022:\u0022M5\u0022,\u0022open\u0022:5156.16,\u0022high\u0022:5168.81,\u0022low\u0022:5156.16,\u0022close\u0022:5167.66,\u0022volume\u0022:2548,\u0022candleStartTime\u0022:\u00222026-03-05T08:55:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:11.5,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:0.0,\u0022candleRange\u0022:12.65,\u0022ma20Value\u0022:5156.56197,\u0022ma20Distance\u0022:11.09803,\u0022rsi\u0022:51.56654,\u0022atr\u0022:11.06286},{\u0022timeframe\u0022:\u0022M15\u0022,\u0022open\u0022:5150.89,\u0022high\u0022:5168.81,\u0022low\u0022:5149.12,\u0022close\u0022:5167.66,\u0022volume\u0022:6584,\u0022candleStartTime\u0022:\u00222026-03-05T08:45:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:16.77,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:1.77,\u0022candleRange\u0022:19.69,\u0022ma20Value\u0022:5164.15203,\u0022ma20Distance\u0022:3.50797,\u0022rsi\u0022:39.49884,\u0022atr\u0022:14.10143},{\u0022timeframe\u0022:\u0022H1\u0022,\u0022open\u0022:5148.62,\u0022high\u0022:5168.81,\u0022low\u0022:5120.65,\u0022close\u0022:5167.66,\u0022volume\u0022:32865,\u0022candleStartTime\u0022:\u00222026-03-05T08:00:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:19.04,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:27.97,\u0022candleRange\u0022:48.16,\u0022ma20Value\u0022:5163.44762,\u0022ma20Distance\u0022:4.21238,\u0022rsi\u0022:49.91212,\u0022atr\u0022:24.66714}],\u0022ma20\u0022:5161.385,\u0022ma20_h4\u0022:5161.385,\u0022ma20_h1\u0022:5161.385,\u0022ma20_m30\u0022:5161.385,\u0022rsi_h1\u0022:49.91212,\u0022rsi_m15\u0022:39.49884,\u0022atr\u0022:24.66714,\u0022adr\u0022:170.296,\u0022atr_h1\u0022:24.66714,\u0022atr_m15\u0022:14.10143,\u0022previous_day_high\u0022:5206.14,\u0022previous_day_low\u0022:5084.39,\u0022weekly_high\u0022:5281.03,\u0022weekly_low\u0022:5094.14,\u0022day_open\u0022:5140.17,\u0022week_open\u0022:5363.14,\u0022session_high\u0022:5167.66,\u0022session_low\u0022:5167.66,\u0022session_high_japan\u0022:5206.14,\u0022session_low_japan\u0022:5117.5,\u0022session_high_india\u0022:5154.9,\u0022session_low_india\u0022:5108.83,\u0022session_high_london\u0022:5195.01,\u0022session_low_london\u0022:5146.51,\u0022session_high_ny\u0022:5191.2,\u0022session_low_ny\u0022:5120.65,\u0022previous_session_high\u0022:5154.9,\u0022previous_session_low\u0022:5108.83,\u0022ema50_h1\u0022:5182.92153,\u0022ema200_h1\u0022:5167.28554,\u0022adr_used_pct\u0022:14.48486,\u0022session\u0022:\u0022LONDON\u0022,\u0022timestamp\u0022:\u00222026-03-05T07:00:00\\u002B00:00\u0022,\u0022volatility_expansion\u0022:0.14485,\u0022day_of_week\u0022:\u0022Thursday\u0022,\u0022telegram_impact_tag\u0022:\u0022LOW\u0022,\u0022tradingview_confirmation\u0022:\u0022NEUTRAL\u0022,\u0022is_compression\u0022:false,\u0022is_expansion\u0022:true,\u0022is_atr_expanding\u0022:true,\u0022has_overlap_candles\u0022:true,\u0022has_impulse_candles\u0022:true,\u0022has_liquidity_sweep\u0022:false,\u0022has_panic_drop_sequence\u0022:false,\u0022is_post_spike_pullback\u0022:false,\u0022is_london_ny_overlap\u0022:false,\u0022is_breakout_confirmed\u0022:false,\u0022is_us_risk_window\u0022:false,\u0022is_friday\u0022:false,\u0022spread\u0022:0.17,\u0022spread_median_60m\u0022:0.11971,\u0022spread_max_60m\u0022:0.17,\u0022spread_min_1m\u0022:0.0,\u0022spread_avg_1m\u0022:0.0,\u0022spread_max_1m\u0022:0.0,\u0022spread_min_5m\u0022:0.0,\u0022spread_avg_5m\u0022:0.0,\u0022spread_max_5m\u0022:0.0,\u0022tick_rate_per_30s\u0022:0.1,\u0022freeze_gap_detected\u0022:true,\u0022slippage_estimate_points\u0022:4.25,\u0022session_vwap\u0022:5152.85666,\u0022compression_ranges_m15\u0022:[19.69,16.69,19.38,34.72,21.06,12.44,6.77,7.64],\u0022pending_orders\u0022:[],\u0022open_positions\u0022:[],\u0022order_execution_events\u0022:[],\u0022free_margin\u0022:26380.0,\u0022equity\u0022:26380.0,\u0022balance\u0022:26380.0,\u0022compression_count_m15\u0022:2,\u0022expansion_count_m15\u0022:4,\u0022impulse_strength_score\u0022:1.25136,\u0022telegram_state\u0022:\u0022QUIET\u0022,\u0022panic_suspected\u0022:false,\u0022tv_alert_type\u0022:\u0022NONE\u0022,\u0022session_phase\u0022:\u0022MID\u0022,\u0022mt5_server_time\u0022:\u00222026-03-05T11:10:00\\u002B02:10\u0022,\u0022ksa_time\u0022:\u00222026-03-05T12:50:00\\u002B03:00\u0022,\u0022uae_time\u0022:\u00222026-03-05T13:50:00\\u002B04:00\u0022,\u0022india_time\u0022:\u00222026-03-05T15:20:00\\u002B05:30\u0022,\u0022internal_clock_utc\u0022:\u00222026-03-05T07:00:00.744539\\u002B00:00\u0022,\u0022utc_reference_time\u0022:\u00222026-03-05T07:00:00\\u002B00:00\u0022,\u0022time_skew_ms\u0022:7200000.0,\u0022system_fetched_gold_rate\u0022:5166.100098,\u0022rate_delta_usd\u0022:1.644902,\u0022rate_authority\u0022:\u0022SYSTEM_FETCHED\u0022,\u0022authoritative_rate\u0022:5166.100098,\u0022telegram_news\u0022:{\u0022impact_tag\u0022:\u0022HIGH\u0022,\u0022risk_tag\u0022:\u0022BLOCK\u0022,\u0022direction_bias\u0022:\u0022NEUTRAL\u0022,\u0022telegram_state\u0022:\u0022MIXED\u0022,\u0022panic_suspected\u0022:false,\u0022buy_score\u0022:2.25,\u0022sell_score\u0022:4.25,\u0022dominance\u0022:0.6538460532544533,\u0022tags\u0022:[\u0022telegram_posts_19\u0022,\u0022telegram_high_impact_news\u0022,\u0022telegram_state_mixed\u0022],\u0022summary\u0022:\u0022Telegram (XAUUSD) posts=19, state=MIXED, impact=HIGH, risk=BLOCK, buy=2.25, sell=4.25, dominance=0.65, panic=False, block=1, caution=0\u0022,\u0022headlines\u0022:[\u0022-1002650546604: \\uD83D\\uDD34 Gold Rises Nearly 1% as US\\u2013Iran Conflict Escalates \\u2013 Is There Room for a New High? Gold prices rebounded strongly following a sharp correction, stabilising around $5,140\\u2013$5,150 per ounce and gaining nearly 1% as safe-h\u0022,\u0022-1002650546604: \\uD83D\\uDCA5\\uD83D\\uDCA5\\uD83D\\uDCA5 Platinum Gold Circle \\u2013 Market Outlook \\uD83D\\uDDD3 XAUUSD \\u2013 M30 | March 05, 2026 \\uD83D\\uDCCA Technical Overview Gold remains in a short-term recovery phase after the aggressive sell-off that swept liquidity below the $5,050\\u2013$5,080 demand\u0022,\u0022-1002692250926: Multi-Timeframe Alignment Trading H1 while D1 is bearish?That buy won\\u2019t last long. Rule: Higher timeframe = direction. Lower timeframe = entry. Common mistake: Only watching one timeframe. H1 looks bullish\\u2026But H4/D1 at m\u0022,\u0022-1001685029638: GOLD BUY 5175 MORE BUY 5171 TP\\u00B9 5178 TP\\u00B2 5181 TP\\u00B3 5184 TP\\u2074 5187 TP\\u2075 5190 TP\\u2076 5193 TP\\u2077 5196 SL_5164\u0022,\u0022-1001685029638: #GOLD TP\\u00B9 HIT 30\\u002B PIPS PROFIT DONE\u0022,\u0022-1002592721194: Thank you all for the great support. We only need 21 more votes to reach the target. Please keep voting until the end of today, and I will finalize it then.\u0022,\u0022-1001685029638: #GOLD TP\\u00B2 HIT 60\\u002B PIPS PROFIT DONE\u0022,\u0022-1002592721194: \\u27A1\\uFE0FGOLD MASTER/XAUUSD -D1 At the moment, on the daily timeframe, the market still maintains a medium-term upward structure. However, after the recent strong upward movement, price has reached an upper supply area and is s\u0022,\u0022-1001904158438: Moving-average setups remain a practical way to filter trend direction on a selected timeframe. A common approach uses two moving averages, typically a faster line and a slower line, to separate momentum from background \u0022,\u0022-1002692250926: \\uD83D\\uDD0DXAUUSD Analysis \\u2013 March 5 \\uD83D\\uDCCA Market Overview \\u23F1\\uFE0FH1 Chart - Price opened today at 5146 and quickly recovered to the 5170 \\u2013 5180 area, currently trading around 5168. - Price is moving around today\\u2019s POC 5177 and close to th\u0022,\u0022-1002592721194: \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 VIP Gold Master Signals \\uD83D\\uDCCC Instructions: CLOSE 70% \\u27A1\\uFE0F BUY from 5145 \\u279D \\u002B 90PIPS \\u27A1\\uFE0F BUY from 5146 \\u279D \\u002B 80PIPS Reason to a buy around 5143\\u20135146 \\u2022 The 5143\\u20135146 zone aligns with the 0.382 Fibonacci retracement of the rece\u0022,\u0022-1002592721194: The market is currently moving very quickly. Let\\u2019s continue to monitor and observe together before making the next decisions. Please keep following the updates I share in the community.\u0022,\u0022-1002692250926: Hi guys\u0022,\u0022-1002692250926: Are you guys ready to trade with Richard today\\u2753\u0022,\u0022-1002692250926: Give it a good tap \\u2764\\uFE0F, next signal coming up!\u0022,\u0022-1002041365284: Good morning \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25 Have a good day \\uD83C\\uDF10 MOON | Forex Academy\u0022,\u0022-1002650546604: \\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 HIT TP2: 5148 \\uD83C\\uDF89 \\uD83C\\uDF89 \\u2714\\uFE0F SELL from 5156 \\u002B80 pips \\u27A1\\uFE0F Move your SL to Entry Or Take profit \\uD83C\\uDF89 Big congrats to everyone who followed the setup Strategys 1 Trade Setup #1 March 6,2026 \\u2014 patience pays!\u0022,\u0022-1002041365284: \\uD83D\\uDD38 Plan \\uD83D\\uDCB0 BTC \\uD83D\\uDCC6 Mar 05, 2026 \\uD83C\\uDF10 MOON | Forex Academy \\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796 \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25BTC \\u2705Currently, the price is reacting at the weekly FVG (Fair Value Gap). Wait for the H4 structure to shift before looking for SELL opportunities. \\u2705However\u0022,\u0022-1002650546604: Strategys 2 Trade Setup #2 March 5 ,2026 \\u27A1\\uFE0F SELL ZONE XAUUSD : 5166 - 5168 \\u274C SL : 5174 \\u2705 TP : 5160 - 5156 - 5152 - OPEN Always set a Stop Loss \\u2013 the foundation of a professional investor!\u0022],\u0022items\u0022:[{\u0022channel\u0022:\u0022-1002650546604\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:06:07\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\uD83D\\uDD34 Gold Rises Nearly 1% as US\\u2013Iran Conflict Escalates \\u2013 Is There Room for a New High? Gold prices rebounded strongly following a sharp correction, stabilising around $5,140\\u2013$5,150 per ounce and gaining nearly 1% as safe-h\u0022},{\u0022channel\u0022:\u0022-1002650546604\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:12:41\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\uD83D\\uDCA5\\uD83D\\uDCA5\\uD83D\\uDCA5 Platinum Gold Circle \\u2013 Market Outlook \\uD83D\\uDDD3 XAUUSD \\u2013 M30 | March 05, 2026 \\uD83D\\uDCCA Technical Overview Gold remains in a short-term recovery phase after the aggressive sell-off that swept liquidity below the $5,050\\u2013$5,080 demand\u0022},{\u0022channel\u0022:\u0022-1002692250926\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:22:57\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Multi-Timeframe Alignment Trading H1 while D1 is bearish?That buy won\\u2019t last long. Rule: Higher timeframe = direction. Lower timeframe = entry. Common mistake: Only watching one timeframe. H1 looks bullish\\u2026But H4/D1 at m\u0022},{\u0022channel\u0022:\u0022-1001685029638\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:31:45\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022GOLD BUY 5175 MORE BUY 5171 TP\\u00B9 5178 TP\\u00B2 5181 TP\\u00B3 5184 TP\\u2074 5187 TP\\u2075 5190 TP\\u2076 5193 TP\\u2077 5196 SL_5164\u0022},{\u0022channel\u0022:\u0022-1001685029638\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:32:45\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022#GOLD TP\\u00B9 HIT 30\\u002B PIPS PROFIT DONE\u0022},{\u0022channel\u0022:\u0022-1002592721194\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:37:44\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Thank you all for the great support. We only need 21 more votes to reach the target. Please keep voting until the end of today, and I will finalize it then.\u0022},{\u0022channel\u0022:\u0022-1001685029638\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:40:22\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022#GOLD TP\\u00B2 HIT 60\\u002B PIPS PROFIT DONE\u0022},{\u0022channel\u0022:\u0022-1002592721194\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:41:49\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\u27A1\\uFE0FGOLD MASTER/XAUUSD -D1 At the moment, on the daily timeframe, the market still maintains a medium-term upward structure. However, after the recent strong upward movement, price has reached an upper supply area and is s\u0022},{\u0022channel\u0022:\u0022-1001904158438\u0022,\u0022timestamp\u0022:\u00222026-03-05T05:00:42\\u002B00:00\u0022,\u0022category\u0022:\u0022MODERATE\u0022,\u0022text\u0022:\u0022Moving-average setups remain a practical way to filter trend direction on a selected timeframe. A common approach uses two moving averages, typically a faster line and a slower line, to separate momentum from background \u0022},{\u0022channel\u0022:\u0022-1002692250926\u0022,\u0022timestamp\u0022:\u00222026-03-05T05:36:01\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\uD83D\\uDD0DXAUUSD Analysis \\u2013 March 5 \\uD83D\\uDCCA Market Overview \\u23F1\\uFE0FH1 Chart - Price opened today at 5146 and quickly recovered to the 5170 \\u2013 5180 area, currently trading around 5168. - Price is moving around today\\u2019s POC 5177 and close to th\u0022},{\u0022channel\u0022:\u0022-1002592721194\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:29:02\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 VIP Gold Master Signals \\uD83D\\uDCCC Instructions: CLOSE 70% \\u27A1\\uFE0F BUY from 5145 \\u279D \\u002B 90PIPS \\u27A1\\uFE0F BUY from 5146 \\u279D \\u002B 80PIPS Reason to a buy around 5143\\u20135146 \\u2022 The 5143\\u20135146 zone aligns with the 0.382 Fibonacci retracement of the rece\u0022},{\u0022channel\u0022:\u0022-1002592721194\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:30:28\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022The market is currently moving very quickly. Let\\u2019s continue to monitor and observe together before making the next decisions. Please keep following the updates I share in the community.\u0022},{\u0022channel\u0022:\u0022-1002692250926\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:42:31\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Hi guys\u0022},{\u0022channel\u0022:\u0022-1002692250926\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:42:58\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Are you guys ready to trade with Richard today\\u2753\u0022},{\u0022channel\u0022:\u0022-1002692250926\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:43:01\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Give it a good tap \\u2764\\uFE0F, next signal coming up!\u0022},{\u0022channel\u0022:\u0022-1002041365284\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:43:56\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Good morning \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25 Have a good day \\uD83C\\uDF10 MOON | Forex Academy\u0022},{\u0022channel\u0022:\u0022-1002650546604\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:51:15\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 HIT TP2: 5148 \\uD83C\\uDF89 \\uD83C\\uDF89 \\u2714\\uFE0F SELL from 5156 \\u002B80 pips \\u27A1\\uFE0F Move your SL to Entry Or Take profit \\uD83C\\uDF89 Big congrats to everyone who followed the setup Strategys 1 Trade Setup #1 March 6,2026 \\u2014 patience pays!\u0022},{\u0022channel\u0022:\u0022-1002041365284\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:57:15\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022\\uD83D\\uDD38 Plan \\uD83D\\uDCB0 BTC \\uD83D\\uDCC6 Mar 05, 2026 \\uD83C\\uDF10 MOON | Forex Academy \\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796 \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25BTC \\u2705Currently, the price is reacting at the weekly FVG (Fair Value Gap). Wait for the H4 structure to shift before looking for SELL opportunities. \\u2705However\u0022},{\u0022channel\u0022:\u0022-1002650546604\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:58:35\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Strategys 2 Trade Setup #2 March 5 ,2026 \\u27A1\\uFE0F SELL ZONE XAUUSD : 5166 - 5168 \\u274C SL : 5174 \\u2705 TP : 5160 - 5156 - 5152 - OPEN Always set a Stop Loss \\u2013 the foundation of a professional investor!\u0022}]},\u0022external_news\u0022:{\u0022enabled\u0022:false,\u0022feed_count\u0022:0,\u0022impact_tag\u0022:\u0022LOW\u0022,\u0022risk_tag\u0022:\u0022CAUTION\u0022,\u0022direction_bias\u0022:\u0022NEUTRAL\u0022,\u0022news_state\u0022:\u0022QUIET\u0022,\u0022panic_suspected\u0022:false,\u0022buy_score\u0022:0.0,\u0022sell_score\u0022:0.0,\u0022dominance\u0022:0.0,\u0022tags\u0022:[\u0022external_news_disabled_prd\u0022],\u0022summary\u0022:\u0022External RSS news disabled per PRD; AI news relies on prompt-driven context.\u0022,\u0022headlines\u0022:[],\u0022items\u0022:[]},\u0022macro_intel\u0022:{\u0022geo_headline\u0022:\u0022NONE\u0022,\u0022dxy_bias\u0022:\u0022NEUTRAL\u0022,\u0022yields_bias\u0022:\u0022NEUTRAL\u0022,\u0022cross_metals_bias\u0022:\u0022NEUTRAL\u0022,\u0022cb_flow\u0022:\u0022UNKNOWN\u0022,\u0022inst_positioning\u0022:\u0022UNKNOWN\u0022,\u0022event_risk\u0022:\u0022LOW\u0022,\u0022summary\u0022:\u0022Macro intelligence blended from available providers.\u0022}},\u0022prompt_refs\u0022:[\u0022prompts/master_prompt.md\u0022,\u0022prompts/short_prompt_news.md\u0022,\u0022prompts/short_prompt_analyze.md\u0022,\u0022prompts/short_prompt_validate.md\u0022,\u0022prompts/short_prompt_study.md\u0022,\u0022prompts/short_prompt_self_crosscheck.md\u0022,\u0022prompts/short_prompt_captial_utilization.md\u0022],\u0022provider_models\u0022:[\u0022openrouter-openai:openai/gpt-5\u0022,\u0022openrouter-gemini:google/gemini-2.5-pro\u0022,\u0022openrouter-grok:x-ai/grok-4.1-fast\u0022,\u0022openrouter-perplexity:perplexity/sonar-pro\u0022],\u0022ai_used\u0022:[],\u0022prompt_dispatch\u0022:[]},\u0022aiUsed\u0022:[],\u0022providerTraces\u0022:[],\u0022exactAiResponses\u0022:[],\u0022aiTrace\u0022:{\u0022ai_request\u0022:{\u0022cycle_id\u0022:\u0022cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1\u0022,\u0022symbol\u0022:\u0022XAUUSD\u0022,\u0022market_context\u0022:{\u0022symbol\u0022:\u0022XAUUSD\u0022,\u0022current_price\u0022:5166.100098,\u0022open\u0022:5156.16,\u0022high\u0022:5168.81,\u0022low\u0022:5156.16,\u0022close\u0022:5167.66,\u0022timeframes\u0022:[{\u0022timeframe\u0022:\u0022M5\u0022,\u0022open\u0022:5156.16,\u0022high\u0022:5168.81,\u0022low\u0022:5156.16,\u0022close\u0022:5167.66,\u0022volume\u0022:2548,\u0022candleStartTime\u0022:\u00222026-03-05T08:55:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:11.5,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:0.0,\u0022candleRange\u0022:12.65,\u0022ma20Value\u0022:5156.56197,\u0022ma20Distance\u0022:11.09803,\u0022rsi\u0022:51.56654,\u0022atr\u0022:11.06286},{\u0022timeframe\u0022:\u0022M15\u0022,\u0022open\u0022:5150.89,\u0022high\u0022:5168.81,\u0022low\u0022:5149.12,\u0022close\u0022:5167.66,\u0022volume\u0022:6584,\u0022candleStartTime\u0022:\u00222026-03-05T08:45:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:16.77,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:1.77,\u0022candleRange\u0022:19.69,\u0022ma20Value\u0022:5164.15203,\u0022ma20Distance\u0022:3.50797,\u0022rsi\u0022:39.49884,\u0022atr\u0022:14.10143},{\u0022timeframe\u0022:\u0022H1\u0022,\u0022open\u0022:5148.62,\u0022high\u0022:5168.81,\u0022low\u0022:5120.65,\u0022close\u0022:5167.66,\u0022volume\u0022:32865,\u0022candleStartTime\u0022:\u00222026-03-05T08:00:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:19.04,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:27.97,\u0022candleRange\u0022:48.16,\u0022ma20Value\u0022:5163.44762,\u0022ma20Distance\u0022:4.21238,\u0022rsi\u0022:49.91212,\u0022atr\u0022:24.66714}],\u0022ma20\u0022:5161.385,\u0022ma20_h4\u0022:5161.385,\u0022ma20_h1\u0022:5161.385,\u0022ma20_m30\u0022:5161.385,\u0022rsi_h1\u0022:49.91212,\u0022rsi_m15\u0022:39.49884,\u0022atr\u0022:24.66714,\u0022adr\u0022:170.296,\u0022atr_h1\u0022:24.66714,\u0022atr_m15\u0022:14.10143,\u0022previous_day_high\u0022:5206.14,\u0022previous_day_low\u0022:5084.39,\u0022weekly_high\u0022:5281.03,\u0022weekly_low\u0022:5094.14,\u0022day_open\u0022:5140.17,\u0022week_open\u0022:5363.14,\u0022session_high\u0022:5167.66,\u0022session_low\u0022:5167.66,\u0022session_high_japan\u0022:5206.14,\u0022session_low_japan\u0022:5117.5,\u0022session_high_india\u0022:5154.9,\u0022session_low_india\u0022:5108.83,\u0022session_high_london\u0022:5195.01,\u0022session_low_london\u0022:5146.51,\u0022session_high_ny\u0022:5191.2,\u0022session_low_ny\u0022:5120.65,\u0022previous_session_high\u0022:5154.9,\u0022previous_session_low\u0022:5108.83,\u0022ema50_h1\u0022:5182.92153,\u0022ema200_h1\u0022:5167.28554,\u0022adr_used_pct\u0022:14.48486,\u0022session\u0022:\u0022LONDON\u0022,\u0022timestamp\u0022:\u00222026-03-05T07:00:00\\u002B00:00\u0022,\u0022volatility_expansion\u0022:0.14485,\u0022day_of_week\u0022:\u0022Thursday\u0022,\u0022telegram_impact_tag\u0022:\u0022LOW\u0022,\u0022tradingview_confirmation\u0022:\u0022NEUTRAL\u0022,\u0022is_compression\u0022:false,\u0022is_expansion\u0022:true,\u0022is_atr_expanding\u0022:true,\u0022has_overlap_candles\u0022:true,\u0022has_impulse_candles\u0022:true,\u0022has_liquidity_sweep\u0022:false,\u0022has_panic_drop_sequence\u0022:false,\u0022is_post_spike_pullback\u0022:false,\u0022is_london_ny_overlap\u0022:false,\u0022is_breakout_confirmed\u0022:false,\u0022is_us_risk_window\u0022:false,\u0022is_friday\u0022:false,\u0022spread\u0022:0.17,\u0022spread_median_60m\u0022:0.11971,\u0022spread_max_60m\u0022:0.17,\u0022spread_min_1m\u0022:0.0,\u0022spread_avg_1m\u0022:0.0,\u0022spread_max_1m\u0022:0.0,\u0022spread_min_5m\u0022:0.0,\u0022spread_avg_5m\u0022:0.0,\u0022spread_max_5m\u0022:0.0,\u0022tick_rate_per_30s\u0022:0.1,\u0022freeze_gap_detected\u0022:true,\u0022slippage_estimate_points\u0022:4.25,\u0022session_vwap\u0022:5152.85666,\u0022compression_ranges_m15\u0022:[19.69,16.69,19.38,34.72,21.06,12.44,6.77,7.64],\u0022pending_orders\u0022:[],\u0022open_positions\u0022:[],\u0022order_execution_events\u0022:[],\u0022free_margin\u0022:26380.0,\u0022equity\u0022:26380.0,\u0022balance\u0022:26380.0,\u0022compression_count_m15\u0022:2,\u0022expansion_count_m15\u0022:4,\u0022impulse_strength_score\u0022:1.25136,\u0022telegram_state\u0022:\u0022QUIET\u0022,\u0022panic_suspected\u0022:false,\u0022tv_alert_type\u0022:\u0022NONE\u0022,\u0022session_phase\u0022:\u0022MID\u0022,\u0022mt5_server_time\u0022:\u00222026-03-05T11:10:00\\u002B02:10\u0022,\u0022ksa_time\u0022:\u00222026-03-05T12:50:00\\u002B03:00\u0022,\u0022uae_time\u0022:\u00222026-03-05T13:50:00\\u002B04:00\u0022,\u0022india_time\u0022:\u00222026-03-05T15:20:00\\u002B05:30\u0022,\u0022internal_clock_utc\u0022:\u00222026-03-05T07:00:00.744539\\u002B00:00\u0022,\u0022utc_reference_time\u0022:\u00222026-03-05T07:00:00\\u002B00:00\u0022,\u0022time_skew_ms\u0022:7200000.0,\u0022system_fetched_gold_rate\u0022:5166.100098,\u0022rate_delta_usd\u0022:1.644902,\u0022rate_authority\u0022:\u0022SYSTEM_FETCHED\u0022,\u0022authoritative_rate\u0022:5166.100098,\u0022telegram_news\u0022:{\u0022impact_tag\u0022:\u0022HIGH\u0022,\u0022risk_tag\u0022:\u0022BLOCK\u0022,\u0022direction_bias\u0022:\u0022NEUTRAL\u0022,\u0022telegram_state\u0022:\u0022MIXED\u0022,\u0022panic_suspected\u0022:false,\u0022buy_score\u0022:2.25,\u0022sell_score\u0022:4.25,\u0022dominance\u0022:0.6538460532544533,\u0022tags\u0022:[\u0022telegram_posts_19\u0022,\u0022telegram_high_impact_news\u0022,\u0022telegram_state_mixed\u0022],\u0022summary\u0022:\u0022Telegram (XAUUSD) posts=19, state=MIXED, impact=HIGH, risk=BLOCK, buy=2.25, sell=4.25, dominance=0.65, panic=False, block=1, caution=0\u0022,\u0022headlines\u0022:[\u0022-1002650546604: \\uD83D\\uDD34 Gold Rises Nearly 1% as US\\u2013Iran Conflict Escalates \\u2013 Is There Room for a New High? Gold prices rebounded strongly following a sharp correction, stabilising around $5,140\\u2013$5,150 per ounce and gaining nearly 1% as safe-h\u0022,\u0022-1002650546604: \\uD83D\\uDCA5\\uD83D\\uDCA5\\uD83D\\uDCA5 Platinum Gold Circle \\u2013 Market Outlook \\uD83D\\uDDD3 XAUUSD \\u2013 M30 | March 05, 2026 \\uD83D\\uDCCA Technical Overview Gold remains in a short-term recovery phase after the aggressive sell-off that swept liquidity below the $5,050\\u2013$5,080 demand\u0022,\u0022-1002692250926: Multi-Timeframe Alignment Trading H1 while D1 is bearish?That buy won\\u2019t last long. Rule: Higher timeframe = direction. Lower timeframe = entry. Common mistake: Only watching one timeframe. H1 looks bullish\\u2026But H4/D1 at m\u0022,\u0022-1001685029638: GOLD BUY 5175 MORE BUY 5171 TP\\u00B9 5178 TP\\u00B2 5181 TP\\u00B3 5184 TP\\u2074 5187 TP\\u2075 5190 TP\\u2076 5193 TP\\u2077 5196 SL_5164\u0022,\u0022-1001685029638: #GOLD TP\\u00B9 HIT 30\\u002B PIPS PROFIT DONE\u0022,\u0022-1002592721194: Thank you all for the great support. We only need 21 more votes to reach the target. Please keep voting until the end of today, and I will finalize it then.\u0022,\u0022-1001685029638: #GOLD TP\\u00B2 HIT 60\\u002B PIPS PROFIT DONE\u0022,\u0022-1002592721194: \\u27A1\\uFE0FGOLD MASTER/XAUUSD -D1 At the moment, on the daily timeframe, the market still maintains a medium-term upward structure. However, after the recent strong upward movement, price has reached an upper supply area and is s\u0022,\u0022-1001904158438: Moving-average setups remain a practical way to filter trend direction on a selected timeframe. A common approach uses two moving averages, typically a faster line and a slower line, to separate momentum from background \u0022,\u0022-1002692250926: \\uD83D\\uDD0DXAUUSD Analysis \\u2013 March 5 \\uD83D\\uDCCA Market Overview \\u23F1\\uFE0FH1 Chart - Price opened today at 5146 and quickly recovered to the 5170 \\u2013 5180 area, currently trading around 5168. - Price is moving around today\\u2019s POC 5177 and close to th\u0022,\u0022-1002592721194: \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 VIP Gold Master Signals \\uD83D\\uDCCC Instructions: CLOSE 70% \\u27A1\\uFE0F BUY from 5145 \\u279D \\u002B 90PIPS \\u27A1\\uFE0F BUY from 5146 \\u279D \\u002B 80PIPS Reason to a buy around 5143\\u20135146 \\u2022 The 5143\\u20135146 zone aligns with the 0.382 Fibonacci retracement of the rece\u0022,\u0022-1002592721194: The market is currently moving very quickly. Let\\u2019s continue to monitor and observe together before making the next decisions. Please keep following the updates I share in the community.\u0022,\u0022-1002692250926: Hi guys\u0022,\u0022-1002692250926: Are you guys ready to trade with Richard today\\u2753\u0022,\u0022-1002692250926: Give it a good tap \\u2764\\uFE0F, next signal coming up!\u0022,\u0022-1002041365284: Good morning \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25 Have a good day \\uD83C\\uDF10 MOON | Forex Academy\u0022,\u0022-1002650546604: \\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 HIT TP2: 5148 \\uD83C\\uDF89 \\uD83C\\uDF89 \\u2714\\uFE0F SELL from 5156 \\u002B80 pips \\u27A1\\uFE0F Move your SL to Entry Or Take profit \\uD83C\\uDF89 Big congrats to everyone who followed the setup Strategys 1 Trade Setup #1 March 6,2026 \\u2014 patience pays!\u0022,\u0022-1002041365284: \\uD83D\\uDD38 Plan \\uD83D\\uDCB0 BTC \\uD83D\\uDCC6 Mar 05, 2026 \\uD83C\\uDF10 MOON | Forex Academy \\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796 \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25BTC \\u2705Currently, the price is reacting at the weekly FVG (Fair Value Gap). Wait for the H4 structure to shift before looking for SELL opportunities. \\u2705However\u0022,\u0022-1002650546604: Strategys 2 Trade Setup #2 March 5 ,2026 \\u27A1\\uFE0F SELL ZONE XAUUSD : 5166 - 5168 \\u274C SL : 5174 \\u2705 TP : 5160 - 5156 - 5152 - OPEN Always set a Stop Loss \\u2013 the foundation of a professional investor!\u0022],\u0022items\u0022:[{\u0022channel\u0022:\u0022-1002650546604\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:06:07\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\uD83D\\uDD34 Gold Rises Nearly 1% as US\\u2013Iran Conflict Escalates \\u2013 Is There Room for a New High? Gold prices rebounded strongly following a sharp correction, stabilising around $5,140\\u2013$5,150 per ounce and gaining nearly 1% as safe-h\u0022},{\u0022channel\u0022:\u0022-1002650546604\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:12:41\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\uD83D\\uDCA5\\uD83D\\uDCA5\\uD83D\\uDCA5 Platinum"}
-
-- Time UTC 2026-03-05 07:00:49 | KSA(AST) 10:00:49 | Dubai(GST) 11:00:49 | India(IST) 12:30:49
-  Event: TELEGRAM_INTERPRETED [telegram] source=aiworker symbol=XAUUSD
-  Summary: AI worker interpreted Telegram channels into a market stance.
-  Correlation: cycle_id=cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1, trade_id=-
-  Data: {"telegram_state":"MIXED","impact_tag":"HIGH","risk_tag":"BLOCK","direction_bias":"NEUTRAL","panic_suspected":false,"summary":"Telegram (XAUUSD) posts=19, state=MIXED, impact=HIGH, risk=BLOCK, buy=2.25, sell=4.25, dominance=0.65, panic=False, block=1, caution=0"}
-
-- Time UTC 2026-03-05 07:00:49 | KSA(AST) 10:00:49 | Dubai(GST) 11:00:49 | India(IST) 12:30:49
-  Event: MACRO_CONTEXT_BUILT [macro] source=aiworker symbol=XAUUSD
-  Summary: Recorded event MACRO_CONTEXT_BUILT at stage macro.
-  Correlation: cycle_id=cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1, trade_id=-
-  Data: {"geo_headline":"NONE","dxy_bias":"NEUTRAL","yields_bias":"NEUTRAL","cross_metals_bias":"NEUTRAL","cb_flow":"UNKNOWN","inst_positioning":"UNKNOWN","event_risk":"LOW","summary":"Macro intelligence blended from available providers."}
-
-- Time UTC 2026-03-05 07:00:49 | KSA(AST) 10:00:49 | Dubai(GST) 11:00:49 | India(IST) 12:30:49
-  Event: RISK_BLOCKED_PRETABLE [pretable] source=aiworker symbol=XAUUSD
-  Summary: Recorded event RISK_BLOCKED_PRETABLE at stage pretable.
-  Correlation: cycle_id=cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1, trade_id=-
-  Data: {"regime_tag":"DEESCALATION_RISK","risk_state":"BLOCK","summary":"PRETABLE_BLOCK | session=LONDON/MID | regime=DEESCALATION_RISK | risk=BLOCK | geo=NONE | event=LOW"}
-
-- Time UTC 2026-03-05 07:00:49 | KSA(AST) 10:00:49 | Dubai(GST) 11:00:49 | India(IST) 12:30:49
-  Event: DECISION_EVALUATED [decision] source=brain symbol=XAUUSD
-  Summary: Decision engine evaluated risk and trade permissions.
-  Correlation: cycle_id=cyc_20260305070022_969c6701981d4fe6a8899b3b8eec66c1, trade_id=-
-  Data: {"isTradeAllowed":false,"status":"NO_TRADE","engineState":"CAPITAL_PROTECTED","cause":"DEESC_KILL_SWITCH","reason":"WarPremium kill-switch active (de-escalation/high waterfall).","mode":"UNKNOWN","waterfallRisk":"HIGH","rail":"","entry":0,"tp":0,"grams":0,"telegramState":"QUIET","snapshotHash":"072910FD7557D81C316830E74FACC2A5EFB761C37D0904B5019D30725281035A"}
-
-- Time UTC 2026-03-05 07:01:19 | KSA(AST) 10:01:19 | Dubai(GST) 11:01:19 | India(IST) 12:31:19
+- Time UTC 2026-03-05 12:00:54 | KSA(AST) 15:00:54 | Dubai(GST) 16:00:54 | India(IST) 17:30:54
   Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
   Summary: Brain started a new decision cycle using latest market data.
-  Correlation: cycle_id=cyc_20260305070119_801c6135a3234f019e710f823b378307, trade_id=-
-  Data: {"symbol":"XAUUSD","session":"LONDON","sessionPhase":"MID","timestamp":"2026-03-05T07:00:00+00:00","mt5ServerTime":"2026-03-05T11:10:00+02:10","ksaTime":"2026-03-05T12:50:00+03:00","uaeTime":"2026-03-05T13:50:00+04:00","indiaTime":"2026-03-05T15:20:00+05:30","bid":5167.66000,"ask":5167.83000,"spread":0.17000,"atr":24.66714,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5166.100098}
+  Correlation: cycle_id=cyc_20260305120054_aa17529c33fe4c87bd74bdacd4608129, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:00:00+00:00","mt5ServerTime":"2026-03-05T16:10:00+02:10","ksaTime":"2026-03-05T17:50:00+03:00","uaeTime":"2026-03-05T18:50:00+04:00","indiaTime":"2026-03-05T20:20:00+05:30","bid":5163.80000,"ask":5163.84000,"spread":0.04000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5164.299805}
 
-- Time UTC 2026-03-05 07:01:19 | KSA(AST) 10:01:19 | Dubai(GST) 11:01:19 | India(IST) 12:31:19
+- Time UTC 2026-03-05 12:00:54 | KSA(AST) 15:00:54 | Dubai(GST) 16:00:54 | India(IST) 17:30:54
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120054_aa17529c33fe4c87bd74bdacd4608129, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:00:54 | KSA(AST) 15:00:54 | Dubai(GST) 16:00:54 | India(IST) 17:30:54
   Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
-  Summary: Recorded event RULE_ENGINE_ABORT at stage rule_engine.
-  Correlation: cycle_id=cyc_20260305070119_801c6135a3234f019e710f823b378307, trade_id=-
-  Data: {"isValid":false,"h1Context":{"context":"NEUTRAL","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":true,"reason":"Conflicting signals. MA=5161.39, Close=5167.66, RSI=49.9, Sweep=False"},"m15Setup":null,"m5Entry":null,"abortReason":"H1 context is neutral \u2014 no directional bias. Conflicting signals. MA=5161.39, Close=5167.66, RSI=49.9, Sweep=False"}
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120054_aa17529c33fe4c87bd74bdacd4608129, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
 
-- Time UTC 2026-03-05 07:01:19 | KSA(AST) 10:01:19 | Dubai(GST) 11:01:19 | India(IST) 12:31:19
-  Event: NEWS_CHECK [news] source=forexfactory symbol=XAUUSD
-  Summary: Recorded event NEWS_CHECK at stage news.
-  Correlation: cycle_id=cyc_20260305070119_801c6135a3234f019e710f823b378307, trade_id=-
-  Data: {"blocked":false,"reason":"No nearby high-impact USD events.","nearbyEvents":[],"refreshedAtUtc":"2026-03-05T07:00:22.8987441+00:00","isStale":false}
+- Time UTC 2026-03-05 12:00:54 | KSA(AST) 15:00:54 | Dubai(GST) 16:00:54 | India(IST) 17:30:54
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120054_aa17529c33fe4c87bd74bdacd4608129, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
 
-- Time UTC 2026-03-05 07:01:19 | KSA(AST) 10:01:19 | Dubai(GST) 11:01:19 | India(IST) 12:31:19
-  Event: AI_ANALYZE_REQUEST [ai] source=brain symbol=XAUUSD
-  Summary: Brain sent snapshot + prompt policy to AI worker.
-  Correlation: cycle_id=cyc_20260305070119_801c6135a3234f019e710f823b378307, trade_id=-
-  Data: {"promptPolicy":"prompts/master_prompt*.md \u002B prompts/short_prompt_*.md","requestToAiWorker":{"symbol":"XAUUSD","timeframeData":[{"timeframe":"M5","open":5156.16000,"high":5168.81000,"low":5156.16000,"close":5167.66000,"volume":2548,"candleStartTime":"2026-03-05T08:55:00+00:00","candleCloseTime":"2026-03-05T09:00:00+00:00","candleBodySize":11.50000,"upperWickSize":1.15000,"lowerWickSize":0.00000,"candleRange":12.65000,"ma20Value":5156.56197,"ma20Distance":11.09803,"rsi":51.56654,"atr":11.06286},{"timeframe":"M15","open":5150.89000,"high":5168.81000,"low":5149.12000,"close":5167.66000,"volume":6584,"candleStartTime":"2026-03-05T08:45:00+00:00","candleCloseTime":"2026-03-05T09:00:00+00:00","candleBodySize":16.77000,"upperWickSize":1.15000,"lowerWickSize":1.77000,"candleRange":19.69000,"ma20Value":5164.15203,"ma20Distance":3.50797,"rsi":39.49884,"atr":14.10143},{"timeframe":"H1","open":5148.62000,"high":5168.81000,"low":5120.65000,"close":5167.66000,"volume":32865,"candleStartTime":"2026-03-05T08:00:00+00:00","candleCloseTime":"2026-03-05T09:00:00+00:00","candleBodySize":19.04000,"upperWickSize":1.15000,"lowerWickSize":27.97000,"candleRange":48.16000,"ma20Value":5163.44762,"ma20Distance":4.21238,"rsi":49.91212,"atr":24.66714}],"atr":24.66714,"adr":170.29600,"ma20":5161.38500,"session":"LONDON","timestamp":"2026-03-05T07:00:00+00:00","ma20H4":5161.38500,"ma20H1":5161.38500,"ma20M30":5161.38500,"rsiH1":49.91212,"rsiM15":39.49884,"atrH1":24.66714,"atrM15":14.10143,"previousDayHigh":5206.14000,"previousDayLow":5084.39000,"weeklyHigh":5281.03000,"weeklyLow":5094.14000,"dayOpen":5140.17000,"weekOpen":5363.14000,"sessionHigh":5167.66000,"sessionLow":5167.66000,"sessionHighJapan":5206.14000,"sessionLowJapan":5117.50000,"sessionHighIndia":5154.90000,"sessionLowIndia":5108.83000,"sessionHighLondon":5195.01000,"sessionLowLondon":5146.51000,"sessionHighNy":5191.20000,"sessionLowNy":5120.65000,"previousSessionHigh":5154.90000,"previousSessionLow":5108.83000,"ema50H1":5182.92153,"ema200H1":5167.28554,"adrUsedPct":14.48486,"volatilityExpansion":0.14485,"dayOfWeek":4,"mt5ServerTime":"2026-03-05T11:10:00+02:10","ksaTime":"2026-03-05T12:50:00+03:00","uaeTime":"2026-03-05T13:50:00+04:00","indiaTime":"2026-03-05T15:20:00+05:30","internalClockUtc":"2026-03-05T07:00:00.7445392+00:00","utcReferenceTime":"2026-03-05T07:00:00+00:00","timeSkewMs":7200000,"mt5ToKsaOffsetMinutes":50,"telegramImpactTag":"LOW","tradingViewConfirmation":"NEUTRAL","isCompression":false,"isExpansion":true,"isAtrExpanding":true,"hasOverlapCandles":true,"hasImpulseCandles":true,"hasLiquiditySweep":false,"hasPanicDropSequence":false,"isPostSpikePullback":false,"isLondonNyOverlap":false,"isBreakoutConfirmed":false,"isUsRiskWindow":false,"isFriday":false,"bid":5167.66000,"ask":5167.83000,"spread":0.17000,"spreadMedian60m":0.11971,"spreadMax60m":0.17000,"compressionCountM15":2,"compressionCountM5":0,"expansionCountM15":4,"impulseStrengthScore":1.25136,"telegramState":"QUIET","panicSuspected":false,"tvAlertType":"NONE","sessionPhase":"MID","spreadMin1m":0.04000,"spreadAvg1m":0.09583,"spreadMax1m":0.17000,"spreadMin5m":0.04000,"spreadAvg5m":0.11971,"spreadMax5m":0.17000,"freeMargin":26380.00,"equity":26380.00,"balance":26380.00,"tickRatePer30s":0.10,"freezeGapDetected":true,"slippageEstimatePoints":4.25,"sessionVwap":5152.85666,"systemFetchedGoldRate":5166.100098,"rateDeltaUsd":1.644902,"rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5166.100098,"cycleId":"cyc_20260305070119_801c6135a3234f019e710f823b378307","compressionRangesM15":[19.69000,16.69000,19.38000,34.72000,21.06000,12.44000,6.77000,7.64000],"pendingOrders":[],"openPositions":[],"orderExecutionEvents":[]},"dispatchState":"sent_to_aiworker"}
+- Time UTC 2026-03-05 12:00:54 | KSA(AST) 15:00:54 | Dubai(GST) 16:00:54 | India(IST) 17:30:54
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120054_aa17529c33fe4c87bd74bdacd4608129, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
 
-- Time UTC 2026-03-05 07:01:41 | KSA(AST) 10:01:41 | Dubai(GST) 11:01:41 | India(IST) 12:31:41
-  Event: AI_ANALYZE_RESPONSE [ai] source=aiworker symbol=XAUUSD
-  Summary: Brain received the AI decision payload.
-  Correlation: cycle_id=cyc_20260305070119_801c6135a3234f019e710f823b378307, trade_id=-
-  Data: {"truncated":true,"preview":"{\u0022rail\u0022:\u0022NO_TRADE\u0022,\u0022entry\u0022:0,\u0022tp\u0022:0,\u0022confidence\u0022:0,\u0022consensusPassed\u0022:true,\u0022agreementCount\u0022:1,\u0022requiredAgreement\u0022:1,\u0022disagreementReason\u0022:\u0022RISK_BLOCKED_PRETABLE\u0022,\u0022providerVotes\u0022:[\u0022pretable_classifier:block\u0022],\u0022promptRefs\u0022:[\u0022prompts/master_prompt.md\u0022,\u0022prompts/short_prompt_news.md\u0022,\u0022prompts/short_prompt_analyze.md\u0022,\u0022prompts/short_prompt_validate.md\u0022,\u0022prompts/short_prompt_study.md\u0022,\u0022prompts/short_prompt_self_crosscheck.md\u0022,\u0022prompts/short_prompt_captial_utilization.md\u0022],\u0022providerModels\u0022:[\u0022openrouter-openai:openai/gpt-5\u0022,\u0022openrouter-gemini:google/gemini-2.5-pro\u0022,\u0022openrouter-grok:x-ai/grok-4.1-fast\u0022,\u0022openrouter-perplexity:perplexity/sonar-pro\u0022],\u0022cycleId\u0022:\u0022cyc_20260305070119_801c6135a3234f019e710f823b378307\u0022,\u0022aiRequest\u0022:{\u0022cycle_id\u0022:\u0022cyc_20260305070119_801c6135a3234f019e710f823b378307\u0022,\u0022symbol\u0022:\u0022XAUUSD\u0022,\u0022market_context\u0022:{\u0022symbol\u0022:\u0022XAUUSD\u0022,\u0022current_price\u0022:5166.100098,\u0022open\u0022:5156.16,\u0022high\u0022:5168.81,\u0022low\u0022:5156.16,\u0022close\u0022:5167.66,\u0022timeframes\u0022:[{\u0022timeframe\u0022:\u0022M5\u0022,\u0022open\u0022:5156.16,\u0022high\u0022:5168.81,\u0022low\u0022:5156.16,\u0022close\u0022:5167.66,\u0022volume\u0022:2548,\u0022candleStartTime\u0022:\u00222026-03-05T08:55:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:11.5,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:0.0,\u0022candleRange\u0022:12.65,\u0022ma20Value\u0022:5156.56197,\u0022ma20Distance\u0022:11.09803,\u0022rsi\u0022:51.56654,\u0022atr\u0022:11.06286},{\u0022timeframe\u0022:\u0022M15\u0022,\u0022open\u0022:5150.89,\u0022high\u0022:5168.81,\u0022low\u0022:5149.12,\u0022close\u0022:5167.66,\u0022volume\u0022:6584,\u0022candleStartTime\u0022:\u00222026-03-05T08:45:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:16.77,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:1.77,\u0022candleRange\u0022:19.69,\u0022ma20Value\u0022:5164.15203,\u0022ma20Distance\u0022:3.50797,\u0022rsi\u0022:39.49884,\u0022atr\u0022:14.10143},{\u0022timeframe\u0022:\u0022H1\u0022,\u0022open\u0022:5148.62,\u0022high\u0022:5168.81,\u0022low\u0022:5120.65,\u0022close\u0022:5167.66,\u0022volume\u0022:32865,\u0022candleStartTime\u0022:\u00222026-03-05T08:00:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:19.04,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:27.97,\u0022candleRange\u0022:48.16,\u0022ma20Value\u0022:5163.44762,\u0022ma20Distance\u0022:4.21238,\u0022rsi\u0022:49.91212,\u0022atr\u0022:24.66714}],\u0022ma20\u0022:5161.385,\u0022ma20_h4\u0022:5161.385,\u0022ma20_h1\u0022:5161.385,\u0022ma20_m30\u0022:5161.385,\u0022rsi_h1\u0022:49.91212,\u0022rsi_m15\u0022:39.49884,\u0022atr\u0022:24.66714,\u0022adr\u0022:170.296,\u0022atr_h1\u0022:24.66714,\u0022atr_m15\u0022:14.10143,\u0022previous_day_high\u0022:5206.14,\u0022previous_day_low\u0022:5084.39,\u0022weekly_high\u0022:5281.03,\u0022weekly_low\u0022:5094.14,\u0022day_open\u0022:5140.17,\u0022week_open\u0022:5363.14,\u0022session_high\u0022:5167.66,\u0022session_low\u0022:5167.66,\u0022session_high_japan\u0022:5206.14,\u0022session_low_japan\u0022:5117.5,\u0022session_high_india\u0022:5154.9,\u0022session_low_india\u0022:5108.83,\u0022session_high_london\u0022:5195.01,\u0022session_low_london\u0022:5146.51,\u0022session_high_ny\u0022:5191.2,\u0022session_low_ny\u0022:5120.65,\u0022previous_session_high\u0022:5154.9,\u0022previous_session_low\u0022:5108.83,\u0022ema50_h1\u0022:5182.92153,\u0022ema200_h1\u0022:5167.28554,\u0022adr_used_pct\u0022:14.48486,\u0022session\u0022:\u0022LONDON\u0022,\u0022timestamp\u0022:\u00222026-03-05T07:00:00\\u002B00:00\u0022,\u0022volatility_expansion\u0022:0.14485,\u0022day_of_week\u0022:\u0022Thursday\u0022,\u0022telegram_impact_tag\u0022:\u0022LOW\u0022,\u0022tradingview_confirmation\u0022:\u0022NEUTRAL\u0022,\u0022is_compression\u0022:false,\u0022is_expansion\u0022:true,\u0022is_atr_expanding\u0022:true,\u0022has_overlap_candles\u0022:true,\u0022has_impulse_candles\u0022:true,\u0022has_liquidity_sweep\u0022:false,\u0022has_panic_drop_sequence\u0022:false,\u0022is_post_spike_pullback\u0022:false,\u0022is_london_ny_overlap\u0022:false,\u0022is_breakout_confirmed\u0022:false,\u0022is_us_risk_window\u0022:false,\u0022is_friday\u0022:false,\u0022spread\u0022:0.17,\u0022spread_median_60m\u0022:0.11971,\u0022spread_max_60m\u0022:0.17,\u0022spread_min_1m\u0022:0.0,\u0022spread_avg_1m\u0022:0.0,\u0022spread_max_1m\u0022:0.0,\u0022spread_min_5m\u0022:0.0,\u0022spread_avg_5m\u0022:0.0,\u0022spread_max_5m\u0022:0.0,\u0022tick_rate_per_30s\u0022:0.1,\u0022freeze_gap_detected\u0022:true,\u0022slippage_estimate_points\u0022:4.25,\u0022session_vwap\u0022:5152.85666,\u0022compression_ranges_m15\u0022:[19.69,16.69,19.38,34.72,21.06,12.44,6.77,7.64],\u0022pending_orders\u0022:[],\u0022open_positions\u0022:[],\u0022order_execution_events\u0022:[],\u0022free_margin\u0022:26380.0,\u0022equity\u0022:26380.0,\u0022balance\u0022:26380.0,\u0022compression_count_m15\u0022:2,\u0022expansion_count_m15\u0022:4,\u0022impulse_strength_score\u0022:1.25136,\u0022telegram_state\u0022:\u0022QUIET\u0022,\u0022panic_suspected\u0022:false,\u0022tv_alert_type\u0022:\u0022NONE\u0022,\u0022session_phase\u0022:\u0022MID\u0022,\u0022mt5_server_time\u0022:\u00222026-03-05T11:10:00\\u002B02:10\u0022,\u0022ksa_time\u0022:\u00222026-03-05T12:50:00\\u002B03:00\u0022,\u0022uae_time\u0022:\u00222026-03-05T13:50:00\\u002B04:00\u0022,\u0022india_time\u0022:\u00222026-03-05T15:20:00\\u002B05:30\u0022,\u0022internal_clock_utc\u0022:\u00222026-03-05T07:00:00.744539\\u002B00:00\u0022,\u0022utc_reference_time\u0022:\u00222026-03-05T07:00:00\\u002B00:00\u0022,\u0022time_skew_ms\u0022:7200000.0,\u0022system_fetched_gold_rate\u0022:5166.100098,\u0022rate_delta_usd\u0022:1.644902,\u0022rate_authority\u0022:\u0022SYSTEM_FETCHED\u0022,\u0022authoritative_rate\u0022:5166.100098,\u0022telegram_news\u0022:{\u0022impact_tag\u0022:\u0022HIGH\u0022,\u0022risk_tag\u0022:\u0022BLOCK\u0022,\u0022direction_bias\u0022:\u0022NEUTRAL\u0022,\u0022telegram_state\u0022:\u0022MIXED\u0022,\u0022panic_suspected\u0022:false,\u0022buy_score\u0022:2.25,\u0022sell_score\u0022:4.25,\u0022dominance\u0022:0.6538460532544533,\u0022tags\u0022:[\u0022telegram_posts_20\u0022,\u0022telegram_high_impact_news\u0022,\u0022telegram_state_mixed\u0022],\u0022summary\u0022:\u0022Telegram (XAUUSD) posts=20, state=MIXED, impact=HIGH, risk=BLOCK, buy=2.25, sell=4.25, dominance=0.65, panic=False, block=1, caution=0\u0022,\u0022headlines\u0022:[\u0022-1002650546604: \\uD83D\\uDD34 Gold Rises Nearly 1% as US\\u2013Iran Conflict Escalates \\u2013 Is There Room for a New High? Gold prices rebounded strongly following a sharp correction, stabilising around $5,140\\u2013$5,150 per ounce and gaining nearly 1% as safe-h\u0022,\u0022-1002650546604: \\uD83D\\uDCA5\\uD83D\\uDCA5\\uD83D\\uDCA5 Platinum Gold Circle \\u2013 Market Outlook \\uD83D\\uDDD3 XAUUSD \\u2013 M30 | March 05, 2026 \\uD83D\\uDCCA Technical Overview Gold remains in a short-term recovery phase after the aggressive sell-off that swept liquidity below the $5,050\\u2013$5,080 demand\u0022,\u0022-1002692250926: Multi-Timeframe Alignment Trading H1 while D1 is bearish?That buy won\\u2019t last long. Rule: Higher timeframe = direction. Lower timeframe = entry. Common mistake: Only watching one timeframe. H1 looks bullish\\u2026But H4/D1 at m\u0022,\u0022-1001685029638: GOLD BUY 5175 MORE BUY 5171 TP\\u00B9 5178 TP\\u00B2 5181 TP\\u00B3 5184 TP\\u2074 5187 TP\\u2075 5190 TP\\u2076 5193 TP\\u2077 5196 SL_5164\u0022,\u0022-1001685029638: #GOLD TP\\u00B9 HIT 30\\u002B PIPS PROFIT DONE\u0022,\u0022-1002592721194: Thank you all for the great support. We only need 21 more votes to reach the target. Please keep voting until the end of today, and I will finalize it then.\u0022,\u0022-1001685029638: #GOLD TP\\u00B2 HIT 60\\u002B PIPS PROFIT DONE\u0022,\u0022-1002592721194: \\u27A1\\uFE0FGOLD MASTER/XAUUSD -D1 At the moment, on the daily timeframe, the market still maintains a medium-term upward structure. However, after the recent strong upward movement, price has reached an upper supply area and is s\u0022,\u0022-1001904158438: Moving-average setups remain a practical way to filter trend direction on a selected timeframe. A common approach uses two moving averages, typically a faster line and a slower line, to separate momentum from background \u0022,\u0022-1002692250926: \\uD83D\\uDD0DXAUUSD Analysis \\u2013 March 5 \\uD83D\\uDCCA Market Overview \\u23F1\\uFE0FH1 Chart - Price opened today at 5146 and quickly recovered to the 5170 \\u2013 5180 area, currently trading around 5168. - Price is moving around today\\u2019s POC 5177 and close to th\u0022,\u0022-1002592721194: \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 VIP Gold Master Signals \\uD83D\\uDCCC Instructions: CLOSE 70% \\u27A1\\uFE0F BUY from 5145 \\u279D \\u002B 90PIPS \\u27A1\\uFE0F BUY from 5146 \\u279D \\u002B 80PIPS Reason to a buy around 5143\\u20135146 \\u2022 The 5143\\u20135146 zone aligns with the 0.382 Fibonacci retracement of the rece\u0022,\u0022-1002592721194: The market is currently moving very quickly. Let\\u2019s continue to monitor and observe together before making the next decisions. Please keep following the updates I share in the community.\u0022,\u0022-1002692250926: Hi guys\u0022,\u0022-1002692250926: Are you guys ready to trade with Richard today\\u2753\u0022,\u0022-1002692250926: Give it a good tap \\u2764\\uFE0F, next signal coming up!\u0022,\u0022-1002041365284: Good morning \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25 Have a good day \\uD83C\\uDF10 MOON | Forex Academy\u0022,\u0022-1002650546604: \\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 HIT TP2: 5148 \\uD83C\\uDF89 \\uD83C\\uDF89 \\u2714\\uFE0F SELL from 5156 \\u002B80 pips \\u27A1\\uFE0F Move your SL to Entry Or Take profit \\uD83C\\uDF89 Big congrats to everyone who followed the setup Strategys 1 Trade Setup #1 March 6,2026 \\u2014 patience pays!\u0022,\u0022-1002041365284: \\uD83D\\uDD38 Plan \\uD83D\\uDCB0 BTC \\uD83D\\uDCC6 Mar 05, 2026 \\uD83C\\uDF10 MOON | Forex Academy \\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796 \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25BTC \\u2705Currently, the price is reacting at the weekly FVG (Fair Value Gap). Wait for the H4 structure to shift before looking for SELL opportunities. \\u2705However\u0022,\u0022-1002650546604: Strategys 2 Trade Setup #2 March 5 ,2026 \\u27A1\\uFE0F SELL ZONE XAUUSD : 5166 - 5168 \\u274C SL : 5174 \\u2705 TP : 5160 - 5156 - 5152 - OPEN Always set a Stop Loss \\u2013 the foundation of a professional investor!\u0022,\u0022-1001904158438: Previous Day High/Low/Close indicator plots the prior session\\u2019s High, Low, and Close directly on the chart. Each day\\u2019s levels are drawn as horizontal lines limited to that day\\u2019s range, while yesterday\\u2019s lines extend into\u0022],\u0022items\u0022:[{\u0022channel\u0022:\u0022-1002650546604\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:06:07\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\uD83D\\uDD34 Gold Rises Nearly 1% as US\\u2013Iran Conflict Escalates \\u2013 Is There Room for a New High? Gold prices rebounded strongly following a sharp correction, stabilising around $5,140\\u2013$5,150 per ounce and gaining nearly 1% as safe-h\u0022},{\u0022channel\u0022:\u0022-1002650546604\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:12:41\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\uD83D\\uDCA5\\uD83D\\uDCA5\\uD83D\\uDCA5 Platinum Gold Circle \\u2013 Market Outlook \\uD83D\\uDDD3 XAUUSD \\u2013 M30 | March 05, 2026 \\uD83D\\uDCCA Technical Overview Gold remains in a short-term recovery phase after the aggressive sell-off that swept liquidity below the $5,050\\u2013$5,080 demand\u0022},{\u0022channel\u0022:\u0022-1002692250926\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:22:57\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Multi-Timeframe Alignment Trading H1 while D1 is bearish?That buy won\\u2019t last long. Rule: Higher timeframe = direction. Lower timeframe = entry. Common mistake: Only watching one timeframe. H1 looks bullish\\u2026But H4/D1 at m\u0022},{\u0022channel\u0022:\u0022-1001685029638\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:31:45\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022GOLD BUY 5175 MORE BUY 5171 TP\\u00B9 5178 TP\\u00B2 5181 TP\\u00B3 5184 TP\\u2074 5187 TP\\u2075 5190 TP\\u2076 5193 TP\\u2077 5196 SL_5164\u0022},{\u0022channel\u0022:\u0022-1001685029638\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:32:45\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022#GOLD TP\\u00B9 HIT 30\\u002B PIPS PROFIT DONE\u0022},{\u0022channel\u0022:\u0022-1002592721194\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:37:44\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Thank you all for the great support. We only need 21 more votes to reach the target. Please keep voting until the end of today, and I will finalize it then.\u0022},{\u0022channel\u0022:\u0022-1001685029638\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:40:22\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022#GOLD TP\\u00B2 HIT 60\\u002B PIPS PROFIT DONE\u0022},{\u0022channel\u0022:\u0022-1002592721194\u0022,\u0022timestamp\u0022:\u00222026-03-05T04:41:49\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\u27A1\\uFE0FGOLD MASTER/XAUUSD -D1 At the moment, on the daily timeframe, the market still maintains a medium-term upward structure. However, after the recent strong upward movement, price has reached an upper supply area and is s\u0022},{\u0022channel\u0022:\u0022-1001904158438\u0022,\u0022timestamp\u0022:\u00222026-03-05T05:00:42\\u002B00:00\u0022,\u0022category\u0022:\u0022MODERATE\u0022,\u0022text\u0022:\u0022Moving-average setups remain a practical way to filter trend direction on a selected timeframe. A common approach uses two moving averages, typically a faster line and a slower line, to separate momentum from background \u0022},{\u0022channel\u0022:\u0022-1002692250926\u0022,\u0022timestamp\u0022:\u00222026-03-05T05:36:01\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\uD83D\\uDD0DXAUUSD Analysis \\u2013 March 5 \\uD83D\\uDCCA Market Overview \\u23F1\\uFE0FH1 Chart - Price opened today at 5146 and quickly recovered to the 5170 \\u2013 5180 area, currently trading around 5168. - Price is moving around today\\u2019s POC 5177 and close to th\u0022},{\u0022channel\u0022:\u0022-1002592721194\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:29:02\\u002B00:00\u0022,\u0022category\u0022:\u0022HIGH\u0022,\u0022text\u0022:\u0022\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 VIP Gold Master Signals \\uD83D\\uDCCC Instructions: CLOSE 70% \\u27A1\\uFE0F BUY from 5145 \\u279D \\u002B 90PIPS \\u27A1\\uFE0F BUY from 5146 \\u279D \\u002B 80PIPS Reason to a buy around 5143\\u20135146 \\u2022 The 5143\\u20135146 zone aligns with the 0.382 Fibonacci retracement of the rece\u0022},{\u0022channel\u0022:\u0022-1002592721194\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:30:28\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022The market is currently moving very quickly. Let\\u2019s continue to monitor and observe together before making the next decisions. Please keep following the updates I share in the community.\u0022},{\u0022channel\u0022:\u0022-1002692250926\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:42:31\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Hi guys\u0022},{\u0022channel\u0022:\u0022-1002692250926\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:42:58\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Are you guys ready to trade with Richard today\\u2753\u0022},{\u0022channel\u0022:\u0022-1002692250926\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:43:01\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Give it a good tap \\u2764\\uFE0F, next signal coming up!\u0022},{\u0022channel\u0022:\u0022-1002041365284\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:43:56\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Good morning \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25 Have a good day \\uD83C\\uDF10 MOON | Forex Academy\u0022},{\u0022channel\u0022:\u0022-1002650546604\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:51:15\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 HIT TP2: 5148 \\uD83C\\uDF89 \\uD83C\\uDF89 \\u2714\\uFE0F SELL from 5156 \\u002B80 pips \\u27A1\\uFE0F Move your SL to Entry Or Take profit \\uD83C\\uDF89 Big congrats to everyone who followed the setup Strategys 1 Trade Setup #1 March 6,2026 \\u2014 patience pays!\u0022},{\u0022channel\u0022:\u0022-1002041365284\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:57:15\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022\\uD83D\\uDD38 Plan \\uD83D\\uDCB0 BTC \\uD83D\\uDCC6 Mar 05, 2026 \\uD83C\\uDF10 MOON | Forex Academy \\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796 \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25BTC \\u2705Currently, the price is reacting at the weekly FVG (Fair Value Gap). Wait for the H4 structure to shift before looking for SELL opportunities. \\u2705However\u0022},{\u0022channel\u0022:\u0022-1002650546604\u0022,\u0022timestamp\u0022:\u00222026-03-05T06:58:35\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Strategys 2 Trade Setup #2 March 5 ,2026 \\u27A1\\uFE0F SELL ZONE XAUUSD : 5166 - 5168 \\u274C SL : 5174 \\u2705 TP : 5160 - 5156 - 5152 - OPEN Always set a Stop Loss \\u2013 the foundation of a professional investor!\u0022},{\u0022channel\u0022:\u0022-1001904158438\u0022,\u0022timestamp\u0022:\u00222026-03-05T07:00:42\\u002B00:00\u0022,\u0022category\u0022:\u0022LOW\u0022,\u0022text\u0022:\u0022Previous Day High/Low/Close indicator plots the prior session\\u2019s High, Low, and Close directly on the chart. Each day\\u2019s levels are drawn as horizontal lines limited to that day\\u2019s range, while yesterday\\u2019s lines extend into\u0022}]},\u0022external_news\u0022:{\u0022enabled\u0022:false,\u0022feed_count\u0022:0,\u0022impact_tag\u0022:\u0022LOW\u0022,\u0022risk_tag\u0022:\u0022CAUTION\u0022,\u0022direction_bias\u0022:\u0022NEUTRAL\u0022,\u0022news_state\u0022:\u0022QUIET\u0022,\u0022panic_suspected\u0022:false,\u0022buy_score\u0022:0.0,\u0022sell_score\u0022:0.0,\u0022dominance\u0022:0.0,\u0022tags\u0022:[\u0022external_news_disabled_prd\u0022],\u0022summary\u0022:\u0022External RSS news disabled per PRD; AI news relies on prompt-driven context.\u0022,\u0022headlines\u0022:[],\u0022items\u0022:[]},\u0022macro_intel\u0022:{\u0022geo_headline\u0022:\u0022NONE\u0022,\u0022dxy_bias\u0022:\u0022NEUTRAL\u0022,\u0022yields_bias\u0022:\u0022NEUTRAL\u0022,\u0022cross_metals_bias\u0022:\u0022NEUTRAL\u0022,\u0022cb_flow\u0022:\u0022UNKNOWN\u0022,\u0022inst_positioning\u0022:\u0022UNKNOWN\u0022,\u0022event_risk\u0022:\u0022LOW\u0022,\u0022summary\u0022:\u0022Macro intelligence blended from available providers.\u0022}},\u0022prompt_refs\u0022:[\u0022prompts/master_prompt.md\u0022,\u0022prompts/short_prompt_news.md\u0022,\u0022prompts/short_prompt_analyze.md\u0022,\u0022prompts/short_prompt_validate.md\u0022,\u0022prompts/short_prompt_study.md\u0022,\u0022prompts/short_prompt_self_crosscheck.md\u0022,\u0022prompts/short_prompt_captial_utilization.md\u0022],\u0022provider_models\u0022:[\u0022openrouter-openai:openai/gpt-5\u0022,\u0022openrouter-gemini:google/gemini-2.5-pro\u0022,\u0022openrouter-grok:x-ai/grok-4.1-fast\u0022,\u0022openrouter-perplexity:perplexity/sonar-pro\u0022],\u0022ai_used\u0022:[],\u0022prompt_dispatch\u0022:[]},\u0022aiUsed\u0022:[],\u0022providerTraces\u0022:[],\u0022exactAiResponses\u0022:[],\u0022aiTrace\u0022:{\u0022ai_request\u0022:{\u0022cycle_id\u0022:\u0022cyc_20260305070119_801c6135a3234f019e710f823b378307\u0022,\u0022symbol\u0022:\u0022XAUUSD\u0022,\u0022market_context\u0022:{\u0022symbol\u0022:\u0022XAUUSD\u0022,\u0022current_price\u0022:5166.100098,\u0022open\u0022:5156.16,\u0022high\u0022:5168.81,\u0022low\u0022:5156.16,\u0022close\u0022:5167.66,\u0022timeframes\u0022:[{\u0022timeframe\u0022:\u0022M5\u0022,\u0022open\u0022:5156.16,\u0022high\u0022:5168.81,\u0022low\u0022:5156.16,\u0022close\u0022:5167.66,\u0022volume\u0022:2548,\u0022candleStartTime\u0022:\u00222026-03-05T08:55:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:11.5,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:0.0,\u0022candleRange\u0022:12.65,\u0022ma20Value\u0022:5156.56197,\u0022ma20Distance\u0022:11.09803,\u0022rsi\u0022:51.56654,\u0022atr\u0022:11.06286},{\u0022timeframe\u0022:\u0022M15\u0022,\u0022open\u0022:5150.89,\u0022high\u0022:5168.81,\u0022low\u0022:5149.12,\u0022close\u0022:5167.66,\u0022volume\u0022:6584,\u0022candleStartTime\u0022:\u00222026-03-05T08:45:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:16.77,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:1.77,\u0022candleRange\u0022:19.69,\u0022ma20Value\u0022:5164.15203,\u0022ma20Distance\u0022:3.50797,\u0022rsi\u0022:39.49884,\u0022atr\u0022:14.10143},{\u0022timeframe\u0022:\u0022H1\u0022,\u0022open\u0022:5148.62,\u0022high\u0022:5168.81,\u0022low\u0022:5120.65,\u0022close\u0022:5167.66,\u0022volume\u0022:32865,\u0022candleStartTime\u0022:\u00222026-03-05T08:00:00\\u002B00:00\u0022,\u0022candleCloseTime\u0022:\u00222026-03-05T09:00:00\\u002B00:00\u0022,\u0022candleBodySize\u0022:19.04,\u0022upperWickSize\u0022:1.15,\u0022lowerWickSize\u0022:27.97,\u0022candleRange\u0022:48.16,\u0022ma20Value\u0022:5163.44762,\u0022ma20Distance\u0022:4.21238,\u0022rsi\u0022:49.91212,\u0022atr\u0022:24.66714}],\u0022ma20\u0022:5161.385,\u0022ma20_h4\u0022:5161.385,\u0022ma20_h1\u0022:5161.385,\u0022ma20_m30\u0022:5161.385,\u0022rsi_h1\u0022:49.91212,\u0022rsi_m15\u0022:39.49884,\u0022atr\u0022:24.66714,\u0022adr\u0022:170.296,\u0022atr_h1\u0022:24.66714,\u0022atr_m15\u0022:14.10143,\u0022previous_day_high\u0022:5206.14,\u0022previous_day_low\u0022:5084.39,\u0022weekly_high\u0022:5281.03,\u0022weekly_low\u0022:5094.14,\u0022day_open\u0022:5140.17,\u0022week_open\u0022:5363.14,\u0022session_high\u0022:5167.66,\u0022session_low\u0022:5167.66,\u0022session_high_japan\u0022:5206.14,\u0022session_low_japan\u0022:5117.5,\u0022session_high_india\u0022:5154.9,\u0022session_low_india\u0022:5108.83,\u0022session_high_london\u0022:5195.01,\u0022session_low_london\u0022:5146.51,\u0022session_high_ny\u0022:5191.2,\u0022session_low_ny\u0022:5120.65,\u0022previous_session_high\u0022:5154.9,\u0022previous_session_low\u0022:5108.83,\u0022ema50_h1\u0022:5182.92153,\u0022ema200_h1\u0022:5167.28554,\u0022adr_used_pct\u0022:14.48486,\u0022session\u0022:\u0022LONDON\u0022,\u0022timestamp\u0022:\u00222026-03-05T07:00:00\\u002B00:00\u0022,\u0022volatility_expansion\u0022:0.14485,\u0022day_of_week\u0022:\u0022Thursday\u0022,\u0022telegram_impact_tag\u0022:\u0022LOW\u0022,\u0022tradingview_confirmation\u0022:\u0022NEUTRAL\u0022,\u0022is_compression\u0022:false,\u0022is_expansion\u0022:true,\u0022is_atr_expanding\u0022:true,\u0022has_overlap_candles\u0022:true,\u0022has_impulse_candles\u0022:true,\u0022has_liquidity_sweep\u0022:false,\u0022has_panic_drop_sequence\u0022:false,\u0022is_post_spike_pullback\u0022:false,\u0022is_london_ny_overlap\u0022:false,\u0022is_breakout_confirmed\u0022:false,\u0022is_us_risk_window\u0022:false,\u0022is_friday\u0022:false,\u0022spread\u0022:0.17,\u0022spread_median_60m\u0022:0.11971,\u0022spread_max_60m\u0022:0.17,\u0022spread_min_1m\u0022:0.0,\u0022spread_avg_1m\u0022:0.0,\u0022spread_max_1m\u0022:0.0,\u0022spread_min_5m\u0022:0.0,\u0022spread_avg_5m\u0022:0.0,\u0022spread_max_5m\u0022:0.0,\u0022tick_rate_per_30s\u0022:0.1,\u0022freeze_gap_detected\u0022:true,\u0022slippage_estimate_points\u0022:4.25,\u0022session_vwap\u0022:5152.85666,\u0022compression_ranges_m15\u0022:[19.69,16.69,19.38,34.72,21.06,12.44,6.77,7.64],\u0022pending_orders\u0022:[],\u0022open_positions\u0022:[],\u0022order_execution_events\u0022:[],\u0022free_margin\u0022:26380.0,\u0022equity\u0022:26380.0,\u0022balance\u0022:26380.0,\u0022compression_count_m15\u0022:2,\u0022expansion_count_m15\u0022:4,\u0022impulse_strength_score\u0022:1.25136,\u0022telegram_state\u0022:\u0022QUIET\u0022,\u0022panic_suspected\u0022:false,\u0022tv_alert_type\u0022:\u0022NONE\u0022,\u0022session_phase\u0022:\u0022MID\u0022,\u0022mt5_server_time\u0022:\u00222026-03-05T11:10:00\\u002B02:10\u0022,\u0022ksa_time\u0022:\u00222026-03-05T12:50:00\\u002B03:00\u0022,\u0022uae_time\u0022:\u00222026-03-05T13:50:00\\u002B04:00\u0022,\u0022india_time\u0022:\u00222026-03-05T15:20:00\\u002B05:30\u0022,\u0022internal_clock_utc\u0022:\u00222026-03-05T07:00:00.744539\\u002B00:00\u0022,\u0022utc_reference_time\u0022:\u00222026-03-05T07:00:00\\u002B00:00\u0022,\u0022time_skew_ms\u0022:7200000.0,\u0022system_fetched_gold_rate\u0022:5166.100098,\u0022rate_delta_usd\u0022:1.644902,\u0022rate_authority\u0022:\u0022SYSTEM_FETCHED\u0022,\u0022authoritative_rate\u0022:5166.100098,\u0022telegram_news\u0022:{\u0022impact_tag\u0022:\u0022HIGH\u0022,\u0022risk_tag\u0022:\u0022BLOCK\u0022,\u0022direction_bias\u0022:\u0022NEUTRAL\u0022,\u0022telegram_state\u0022:\u0022MIXED\u0022,\u0022panic_suspected\u0022:false,\u0022buy_score\u0022:2.25,\u0022sell_score\u0022:4.25,\u0022dominance\u0022:0.6538460532544533,\u0022tags\u0022:[\u0022telegram_posts_20\u0022,\u0022telegram_high_impact_news\u0022,\u0022telegram_state_mixed\u0022],\u0022summary\u0022:\u0022Telegram (XAUUSD) posts=20, state=MIXED, impact=HIGH, risk=BLOCK, buy=2.25, sell=4.25, dominance=0.65, panic=False, block=1, caution=0\u0022,\u0022headlines\u0022:[\u0022-1002650546604: \\uD83D\\uDD34 Gold Rises Nearly 1% as US\\u2013Iran Conflict Escalates \\u2013 Is There Room for a New High? Gold prices rebounded strongly following a sharp correction, stabilising around $5,140\\u2013$5,150 per ounce and gaining nearly 1% as safe-h\u0022,\u0022-1002650546604: \\uD83D\\uDCA5\\uD83D\\uDCA5\\uD83D\\uDCA5 Platinum Gold Circle \\u2013 Market Outlook \\uD83D\\uDDD3 XAUUSD \\u2013 M30 | March 05, 2026 \\uD83D\\uDCCA Technical Overview Gold remains in a short-term recovery phase after the aggressive sell-off that swept liquidity below the $5,050\\u2013$5,080 demand\u0022,\u0022-1002692250926: Multi-Timeframe Alignment Trading H1 while D1 is bearish?That buy won\\u2019t last long. Rule: Higher timeframe = direction. Lower timeframe = entry. Common mistake: Only watching one timeframe. H1 looks bullish\\u2026But H4/D1 at m\u0022,\u0022-1001685029638: GOLD BUY 5175 MORE BUY 5171 TP\\u00B9 5178 TP\\u00B2 5181 TP\\u00B3 5184 TP\\u2074 5187 TP\\u2075 5190 TP\\u2076 5193 TP\\u2077 5196 SL_5164\u0022,\u0022-1001685029638: #GOLD TP\\u00B9 HIT 30\\u002B PIPS PROFIT DONE\u0022,\u0022-1002592721194: Thank you all for the great support. We only need 21 more votes to reach the target. Please keep voting until the end of today, and I will finalize it then.\u0022,\u0022-1001685029638: #GOLD TP\\u00B2 HIT 60\\u002B PIPS PROFIT DONE\u0022,\u0022-1002592721194: \\u27A1\\uFE0FGOLD MASTER/XAUUSD -D1 At the moment, on the daily timeframe, the market still maintains a medium-term upward structure. However, after the recent strong upward movement, price has reached an upper supply area and is s\u0022,\u0022-1001904158438: Moving-average setups remain a practical way to filter trend direction on a selected timeframe. A common approach uses two moving averages, typically a faster line and a slower line, to separate momentum from background \u0022,\u0022-1002692250926: \\uD83D\\uDD0DXAUUSD Analysis \\u2013 March 5 \\uD83D\\uDCCA Market Overview \\u23F1\\uFE0FH1 Chart - Price opened today at 5146 and quickly recovered to the 5170 \\u2013 5180 area, currently trading around 5168. - Price is moving around today\\u2019s POC 5177 and close to th\u0022,\u0022-1002592721194: \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 VIP Gold Master Signals \\uD83D\\uDCCC Instructions: CLOSE 70% \\u27A1\\uFE0F BUY from 5145 \\u279D \\u002B 90PIPS \\u27A1\\uFE0F BUY from 5146 \\u279D \\u002B 80PIPS Reason to a buy around 5143\\u20135146 \\u2022 The 5143\\u20135146 zone aligns with the 0.382 Fibonacci retracement of the rece\u0022,\u0022-1002592721194: The market is currently moving very quickly. Let\\u2019s continue to monitor and observe together before making the next decisions. Please keep following the updates I share in the community.\u0022,\u0022-1002692250926: Hi guys\u0022,\u0022-1002692250926: Are you guys ready to trade with Richard today\\u2753\u0022,\u0022-1002692250926: Give it a good tap \\u2764\\uFE0F, next signal coming up!\u0022,\u0022-1002041365284: Good morning \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25 Have a good day \\uD83C\\uDF10 MOON | Forex Academy\u0022,\u0022-1002650546604: \\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F\\u2757\\uFE0F \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 \\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04\\uD83D\\uDE04 HIT TP2: 5148 \\uD83C\\uDF89 \\uD83C\\uDF89 \\u2714\\uFE0F SELL from 5156 \\u002B80 pips \\u27A1\\uFE0F Move your SL to Entry Or Take profit \\uD83C\\uDF89 Big congrats to everyone who followed the setup Strategys 1 Trade Setup #1 March 6,2026 \\u2014 patience pays!\u0022,\u0022-1002041365284: \\uD83D\\uDD38 Plan \\uD83D\\uDCB0 BTC \\uD83D\\uDCC6 Mar 05, 2026 \\uD83C\\uDF10 MOON | Forex Academy \\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796\\u2796 \\uD83D\\uDD25\\uD83D\\uDD25\\uD83D\\uDD25BTC \\u2705Currently, the price is reacting at the weekly FVG (Fair Value Gap). Wait for the H4 structure to shift before looking for SELL opportunities. \\u2705However\u0022,\u0022-1002650546604: Strategys 2 Trade Setup #2 March 5 ,2026 \\u27A1\\uFE0F SELL ZONE XAUUSD : 5166 - 5168 \\u274C SL : 5174 \\u2705 TP : 51"}
+- Time UTC 2026-03-05 12:01:24 | KSA(AST) 15:01:24 | Dubai(GST) 16:01:24 | India(IST) 17:31:24
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120124_3d1124c9a6cb4e168751117806a25bd1, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:00:00+00:00","mt5ServerTime":"2026-03-05T16:10:00+02:10","ksaTime":"2026-03-05T17:50:00+03:00","uaeTime":"2026-03-05T18:50:00+04:00","indiaTime":"2026-03-05T20:20:00+05:30","bid":5163.80000,"ask":5163.84000,"spread":0.04000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5164.299805}
 
-- Time UTC 2026-03-05 07:01:41 | KSA(AST) 10:01:41 | Dubai(GST) 11:01:41 | India(IST) 12:31:41
-  Event: TELEGRAM_INTERPRETED [telegram] source=aiworker symbol=XAUUSD
-  Summary: AI worker interpreted Telegram channels into a market stance.
-  Correlation: cycle_id=cyc_20260305070119_801c6135a3234f019e710f823b378307, trade_id=-
-  Data: {"telegram_state":"MIXED","impact_tag":"HIGH","risk_tag":"BLOCK","direction_bias":"NEUTRAL","panic_suspected":false,"summary":"Telegram (XAUUSD) posts=20, state=MIXED, impact=HIGH, risk=BLOCK, buy=2.25, sell=4.25, dominance=0.65, panic=False, block=1, caution=0"}
+- Time UTC 2026-03-05 12:01:24 | KSA(AST) 15:01:24 | Dubai(GST) 16:01:24 | India(IST) 17:31:24
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120124_3d1124c9a6cb4e168751117806a25bd1, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
 
-- Time UTC 2026-03-05 07:01:41 | KSA(AST) 10:01:41 | Dubai(GST) 11:01:41 | India(IST) 12:31:41
-  Event: MACRO_CONTEXT_BUILT [macro] source=aiworker symbol=XAUUSD
-  Summary: Recorded event MACRO_CONTEXT_BUILT at stage macro.
-  Correlation: cycle_id=cyc_20260305070119_801c6135a3234f019e710f823b378307, trade_id=-
-  Data: {"geo_headline":"NONE","dxy_bias":"NEUTRAL","yields_bias":"NEUTRAL","cross_metals_bias":"NEUTRAL","cb_flow":"UNKNOWN","inst_positioning":"UNKNOWN","event_risk":"LOW","summary":"Macro intelligence blended from available providers."}
+- Time UTC 2026-03-05 12:01:24 | KSA(AST) 15:01:24 | Dubai(GST) 16:01:24 | India(IST) 17:31:24
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120124_3d1124c9a6cb4e168751117806a25bd1, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
 
-- Time UTC 2026-03-05 07:01:41 | KSA(AST) 10:01:41 | Dubai(GST) 11:01:41 | India(IST) 12:31:41
-  Event: RISK_BLOCKED_PRETABLE [pretable] source=aiworker symbol=XAUUSD
-  Summary: Recorded event RISK_BLOCKED_PRETABLE at stage pretable.
-  Correlation: cycle_id=cyc_20260305070119_801c6135a3234f019e710f823b378307, trade_id=-
-  Data: {"regime_tag":"DEESCALATION_RISK","risk_state":"BLOCK","summary":"PRETABLE_BLOCK | session=LONDON/MID | regime=DEESCALATION_RISK | risk=BLOCK | geo=NONE | event=LOW"}
+- Time UTC 2026-03-05 12:01:24 | KSA(AST) 15:01:24 | Dubai(GST) 16:01:24 | India(IST) 17:31:24
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120124_3d1124c9a6cb4e168751117806a25bd1, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
 
-- Time UTC 2026-03-05 07:01:41 | KSA(AST) 10:01:41 | Dubai(GST) 11:01:41 | India(IST) 12:31:41
-  Event: DECISION_EVALUATED [decision] source=brain symbol=XAUUSD
-  Summary: Decision engine evaluated risk and trade permissions.
-  Correlation: cycle_id=cyc_20260305070119_801c6135a3234f019e710f823b378307, trade_id=-
-  Data: {"isTradeAllowed":false,"status":"NO_TRADE","engineState":"CAPITAL_PROTECTED","cause":"DEESC_KILL_SWITCH","reason":"TABLE ABORTED \u2014 DEESCALATION_RISK (flush/base/sentiment not yet confirmed).","mode":"EXHAUSTION","waterfallRisk":"HIGH","rail":"","entry":0,"tp":0,"grams":0,"telegramState":"QUIET","snapshotHash":"072910FD7557D81C316830E74FACC2A5EFB761C37D0904B5019D30725281035A"}
+- Time UTC 2026-03-05 12:01:24 | KSA(AST) 15:01:24 | Dubai(GST) 16:01:24 | India(IST) 17:31:24
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120124_3d1124c9a6cb4e168751117806a25bd1, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
 
-- Time UTC 2026-03-05 07:05:02 | KSA(AST) 10:05:02 | Dubai(GST) 11:05:02 | India(IST) 12:35:02
+- Time UTC 2026-03-05 12:01:54 | KSA(AST) 15:01:54 | Dubai(GST) 16:01:54 | India(IST) 17:31:54
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120154_3d15af6236a849599bb8cd2ea3a11344, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:00:00+00:00","mt5ServerTime":"2026-03-05T16:10:00+02:10","ksaTime":"2026-03-05T17:50:00+03:00","uaeTime":"2026-03-05T18:50:00+04:00","indiaTime":"2026-03-05T20:20:00+05:30","bid":5163.80000,"ask":5163.84000,"spread":0.04000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5164.299805}
+
+- Time UTC 2026-03-05 12:01:54 | KSA(AST) 15:01:54 | Dubai(GST) 16:01:54 | India(IST) 17:31:54
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120154_3d15af6236a849599bb8cd2ea3a11344, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:01:54 | KSA(AST) 15:01:54 | Dubai(GST) 16:01:54 | India(IST) 17:31:54
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120154_3d15af6236a849599bb8cd2ea3a11344, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:01:54 | KSA(AST) 15:01:54 | Dubai(GST) 16:01:54 | India(IST) 17:31:54
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120154_3d15af6236a849599bb8cd2ea3a11344, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:01:54 | KSA(AST) 15:01:54 | Dubai(GST) 16:01:54 | India(IST) 17:31:54
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120154_3d15af6236a849599bb8cd2ea3a11344, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:02:24 | KSA(AST) 15:02:24 | Dubai(GST) 16:02:24 | India(IST) 17:32:24
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120224_ff6b0284c7bc4e2699c127f93a19e40b, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:00:00+00:00","mt5ServerTime":"2026-03-05T16:10:00+02:10","ksaTime":"2026-03-05T17:50:00+03:00","uaeTime":"2026-03-05T18:50:00+04:00","indiaTime":"2026-03-05T20:20:00+05:30","bid":5163.80000,"ask":5163.84000,"spread":0.04000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5164.299805}
+
+- Time UTC 2026-03-05 12:02:24 | KSA(AST) 15:02:24 | Dubai(GST) 16:02:24 | India(IST) 17:32:24
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120224_ff6b0284c7bc4e2699c127f93a19e40b, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:02:24 | KSA(AST) 15:02:24 | Dubai(GST) 16:02:24 | India(IST) 17:32:24
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120224_ff6b0284c7bc4e2699c127f93a19e40b, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:02:24 | KSA(AST) 15:02:24 | Dubai(GST) 16:02:24 | India(IST) 17:32:24
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120224_ff6b0284c7bc4e2699c127f93a19e40b, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:02:24 | KSA(AST) 15:02:24 | Dubai(GST) 16:02:24 | India(IST) 17:32:24
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120224_ff6b0284c7bc4e2699c127f93a19e40b, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:02:54 | KSA(AST) 15:02:54 | Dubai(GST) 16:02:54 | India(IST) 17:32:54
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120254_0bc6354e8e9d4228a88f4f46d280123e, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:00:00+00:00","mt5ServerTime":"2026-03-05T16:10:00+02:10","ksaTime":"2026-03-05T17:50:00+03:00","uaeTime":"2026-03-05T18:50:00+04:00","indiaTime":"2026-03-05T20:20:00+05:30","bid":5163.80000,"ask":5163.84000,"spread":0.04000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5164.299805}
+
+- Time UTC 2026-03-05 12:02:54 | KSA(AST) 15:02:54 | Dubai(GST) 16:02:54 | India(IST) 17:32:54
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120254_0bc6354e8e9d4228a88f4f46d280123e, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:02:54 | KSA(AST) 15:02:54 | Dubai(GST) 16:02:54 | India(IST) 17:32:54
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120254_0bc6354e8e9d4228a88f4f46d280123e, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:02:54 | KSA(AST) 15:02:54 | Dubai(GST) 16:02:54 | India(IST) 17:32:54
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120254_0bc6354e8e9d4228a88f4f46d280123e, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:02:54 | KSA(AST) 15:02:54 | Dubai(GST) 16:02:54 | India(IST) 17:32:54
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120254_0bc6354e8e9d4228a88f4f46d280123e, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:03:24 | KSA(AST) 15:03:24 | Dubai(GST) 16:03:24 | India(IST) 17:33:24
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120324_74470293c39548a180762fd1e2fd314a, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:00:00+00:00","mt5ServerTime":"2026-03-05T16:10:00+02:10","ksaTime":"2026-03-05T17:50:00+03:00","uaeTime":"2026-03-05T18:50:00+04:00","indiaTime":"2026-03-05T20:20:00+05:30","bid":5163.80000,"ask":5163.84000,"spread":0.04000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5164.299805}
+
+- Time UTC 2026-03-05 12:03:24 | KSA(AST) 15:03:24 | Dubai(GST) 16:03:24 | India(IST) 17:33:24
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120324_74470293c39548a180762fd1e2fd314a, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:03:24 | KSA(AST) 15:03:24 | Dubai(GST) 16:03:24 | India(IST) 17:33:24
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120324_74470293c39548a180762fd1e2fd314a, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:03:24 | KSA(AST) 15:03:24 | Dubai(GST) 16:03:24 | India(IST) 17:33:24
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120324_74470293c39548a180762fd1e2fd314a, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:03:24 | KSA(AST) 15:03:24 | Dubai(GST) 16:03:24 | India(IST) 17:33:24
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120324_74470293c39548a180762fd1e2fd314a, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:03:54 | KSA(AST) 15:03:54 | Dubai(GST) 16:03:54 | India(IST) 17:33:54
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120354_b287112f91734196b56a1c7f4d4495f9, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:00:00+00:00","mt5ServerTime":"2026-03-05T16:10:00+02:10","ksaTime":"2026-03-05T17:50:00+03:00","uaeTime":"2026-03-05T18:50:00+04:00","indiaTime":"2026-03-05T20:20:00+05:30","bid":5163.80000,"ask":5163.84000,"spread":0.04000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5164.299805}
+
+- Time UTC 2026-03-05 12:03:54 | KSA(AST) 15:03:54 | Dubai(GST) 16:03:54 | India(IST) 17:33:54
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120354_b287112f91734196b56a1c7f4d4495f9, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:03:54 | KSA(AST) 15:03:54 | Dubai(GST) 16:03:54 | India(IST) 17:33:54
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120354_b287112f91734196b56a1c7f4d4495f9, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:03:54 | KSA(AST) 15:03:54 | Dubai(GST) 16:03:54 | India(IST) 17:33:54
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120354_b287112f91734196b56a1c7f4d4495f9, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:03:54 | KSA(AST) 15:03:54 | Dubai(GST) 16:03:54 | India(IST) 17:33:54
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120354_b287112f91734196b56a1c7f4d4495f9, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:04:24 | KSA(AST) 15:04:24 | Dubai(GST) 16:04:24 | India(IST) 17:34:24
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120424_6c0cfc6cded74635bad6f077e0f46180, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:00:00+00:00","mt5ServerTime":"2026-03-05T16:10:00+02:10","ksaTime":"2026-03-05T17:50:00+03:00","uaeTime":"2026-03-05T18:50:00+04:00","indiaTime":"2026-03-05T20:20:00+05:30","bid":5163.80000,"ask":5163.84000,"spread":0.04000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5164.299805}
+
+- Time UTC 2026-03-05 12:04:24 | KSA(AST) 15:04:24 | Dubai(GST) 16:04:24 | India(IST) 17:34:24
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120424_6c0cfc6cded74635bad6f077e0f46180, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:04:24 | KSA(AST) 15:04:24 | Dubai(GST) 16:04:24 | India(IST) 17:34:24
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120424_6c0cfc6cded74635bad6f077e0f46180, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:04:24 | KSA(AST) 15:04:24 | Dubai(GST) 16:04:24 | India(IST) 17:34:24
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120424_6c0cfc6cded74635bad6f077e0f46180, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:04:24 | KSA(AST) 15:04:24 | Dubai(GST) 16:04:24 | India(IST) 17:34:24
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120424_6c0cfc6cded74635bad6f077e0f46180, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:04:54 | KSA(AST) 15:04:54 | Dubai(GST) 16:04:54 | India(IST) 17:34:54
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120454_9a51e3dc647f43568344e91e9fa2ef33, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:00:00+00:00","mt5ServerTime":"2026-03-05T16:10:00+02:10","ksaTime":"2026-03-05T17:50:00+03:00","uaeTime":"2026-03-05T18:50:00+04:00","indiaTime":"2026-03-05T20:20:00+05:30","bid":5163.80000,"ask":5163.84000,"spread":0.04000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5164.299805}
+
+- Time UTC 2026-03-05 12:04:54 | KSA(AST) 15:04:54 | Dubai(GST) 16:04:54 | India(IST) 17:34:54
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120454_9a51e3dc647f43568344e91e9fa2ef33, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:04:54 | KSA(AST) 15:04:54 | Dubai(GST) 16:04:54 | India(IST) 17:34:54
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120454_9a51e3dc647f43568344e91e9fa2ef33, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:04:54 | KSA(AST) 15:04:54 | Dubai(GST) 16:04:54 | India(IST) 17:34:54
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120454_9a51e3dc647f43568344e91e9fa2ef33, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:04:54 | KSA(AST) 15:04:54 | Dubai(GST) 16:04:54 | India(IST) 17:34:54
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120454_9a51e3dc647f43568344e91e9fa2ef33, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.0/30s."}
+
+- Time UTC 2026-03-05 12:05:02 | KSA(AST) 15:05:02 | Dubai(GST) 16:05:02 | India(IST) 17:35:02
   Event: MT5_MARKET_SNAPSHOT_RECEIVED [mt5_ingest] source=mt5 symbol=XAUUSD
   Summary: MT5 sent a market snapshot to Brain.
   Correlation: cycle_id=-, trade_id=-
-  Data: {"symbol":"XAUUSD","timestamp":"2026-03-05T07:05:00+00:00","mt5ServerTime":"2026-03-05T11:15:00+02:10","ksaTime":"2026-03-05T12:55:00+03:00","uaeTime":"2026-03-05T13:55:00+04:00","indiaTime":"2026-03-05T15:25:00+05:30","bid":5170.62000,"ask":5170.74000,"spread":0.12000,"timeframeData":[{"timeframe":"M5","open":5167.66000,"high":5172.78000,"low":5165.19000,"close":5170.62000,"volume":2204,"candleStartTime":"2026-03-05T09:00:00+00:00","candleCloseTime":"2026-03-05T09:05:00+00:00","candleBodySize":2.96000,"upperWickSize":2.16000,"lowerWickSize":2.47000,"candleRange":7.59000,"ma20Value":5157.81595,"ma20Distance":12.80405,"rsi":52.30565,"atr":10.88929},{"timeframe":"M15","open":5150.89000,"high":5168.81000,"low":5149.12000,"close":5167.66000,"volume":6584,"candleStartTime":"2026-03-05T08:45:00+00:00","candleCloseTime":"2026-03-05T09:00:00+00:00","candleBodySize":16.77000,"upperWickSize":1.15000,"lowerWickSize":1.77000,"candleRange":19.69000,"ma20Value":5164.15203,"ma20Distance":3.50797,"rsi":39.49884,"atr":14.10143},{"timeframe":"H1","open":5148.62000,"high":5168.81000,"low":5120.65000,"close":5167.66000,"volume":32865,"candleStartTime":"2026-03-05T08:00:00+00:00","candleCloseTime":"2026-03-05T09:00:00+00:00","candleBodySize":19.04000,"upperWickSize":1.15000,"lowerWickSize":27.97000,"candleRange":48.16000,"ma20Value":5163.44762,"ma20Distance":4.21238,"rsi":49.91212,"atr":24.66714}],"pendingOrders":[],"openPositions":[],"orderExecutionEvents":[],"telegramState":"QUIET","session":"LONDON","sessionPhase":"MID","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5171.5}
+  Data: {"symbol":"XAUUSD","timestamp":"2026-03-05T12:05:00+00:00","mt5ServerTime":"2026-03-05T16:15:00+02:10","ksaTime":"2026-03-05T17:55:00+03:00","uaeTime":"2026-03-05T18:55:00+04:00","indiaTime":"2026-03-05T20:25:00+05:30","bid":5166.70000,"ask":5166.82000,"spread":0.12000,"timeframeData":[{"timeframe":"M5","open":5163.80000,"high":5166.72000,"low":5163.17000,"close":5166.70000,"volume":1332,"candleStartTime":"2026-03-05T14:00:00+00:00","candleCloseTime":"2026-03-05T14:05:00+00:00","candleBodySize":2.90000,"upperWickSize":0.02000,"lowerWickSize":0.63000,"candleRange":3.55000,"ma20Value":5162.53741,"ma20Distance":4.16259,"rsi":65.08186,"atr":3.91571},{"timeframe":"M15","open":5160.99000,"high":5165.11000,"low":5160.43000,"close":5163.79000,"volume":3145,"candleStartTime":"2026-03-05T13:45:00+00:00","candleCloseTime":"2026-03-05T14:00:00+00:00","candleBodySize":2.80000,"upperWickSize":1.32000,"lowerWickSize":0.56000,"candleRange":4.68000,"ma20Value":5162.09127,"ma20Distance":1.69873,"rsi":50.75090,"atr":11.03429},{"timeframe":"H1","open":5164.66000,"high":5168.02000,"low":5156.97000,"close":5163.79000,"volume":14453,"candleStartTime":"2026-03-05T13:00:00+00:00","candleCloseTime":"2026-03-05T14:00:00+00:00","candleBodySize":0.87000,"upperWickSize":3.36000,"lowerWickSize":6.82000,"candleRange":11.05000,"ma20Value":5163.53098,"ma20Distance":0.25902,"rsi":60.28599,"atr":22.84286}],"pendingOrders":[],"openPositions":[],"orderExecutionEvents":[],"telegramState":"QUIET","session":"NY","sessionPhase":"MID","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5167.0}
+
+- Time UTC 2026-03-05 12:05:24 | KSA(AST) 15:05:24 | Dubai(GST) 16:05:24 | India(IST) 17:35:24
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120524_87e39c9a6f6c4b0191e578276a1b3547, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:05:00+00:00","mt5ServerTime":"2026-03-05T16:15:00+02:10","ksaTime":"2026-03-05T17:55:00+03:00","uaeTime":"2026-03-05T18:55:00+04:00","indiaTime":"2026-03-05T20:25:00+05:30","bid":5166.70000,"ask":5166.82000,"spread":0.12000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5167.0}
+
+- Time UTC 2026-03-05 12:05:25 | KSA(AST) 15:05:25 | Dubai(GST) 16:05:25 | India(IST) 17:35:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120524_87e39c9a6f6c4b0191e578276a1b3547, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:05:25 | KSA(AST) 15:05:25 | Dubai(GST) 16:05:25 | India(IST) 17:35:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120524_87e39c9a6f6c4b0191e578276a1b3547, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:05:25 | KSA(AST) 15:05:25 | Dubai(GST) 16:05:25 | India(IST) 17:35:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120524_87e39c9a6f6c4b0191e578276a1b3547, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:05:25 | KSA(AST) 15:05:25 | Dubai(GST) 16:05:25 | India(IST) 17:35:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120524_87e39c9a6f6c4b0191e578276a1b3547, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:05:55 | KSA(AST) 15:05:55 | Dubai(GST) 16:05:55 | India(IST) 17:35:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120555_b5c9a7a1643647a5abbc79c4a9132ca2, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:05:00+00:00","mt5ServerTime":"2026-03-05T16:15:00+02:10","ksaTime":"2026-03-05T17:55:00+03:00","uaeTime":"2026-03-05T18:55:00+04:00","indiaTime":"2026-03-05T20:25:00+05:30","bid":5166.70000,"ask":5166.82000,"spread":0.12000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5167.0}
+
+- Time UTC 2026-03-05 12:05:55 | KSA(AST) 15:05:55 | Dubai(GST) 16:05:55 | India(IST) 17:35:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120555_b5c9a7a1643647a5abbc79c4a9132ca2, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:05:55 | KSA(AST) 15:05:55 | Dubai(GST) 16:05:55 | India(IST) 17:35:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120555_b5c9a7a1643647a5abbc79c4a9132ca2, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:05:55 | KSA(AST) 15:05:55 | Dubai(GST) 16:05:55 | India(IST) 17:35:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120555_b5c9a7a1643647a5abbc79c4a9132ca2, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:05:55 | KSA(AST) 15:05:55 | Dubai(GST) 16:05:55 | India(IST) 17:35:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120555_b5c9a7a1643647a5abbc79c4a9132ca2, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:06:25 | KSA(AST) 15:06:25 | Dubai(GST) 16:06:25 | India(IST) 17:36:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120625_82259226d161401ca19caa6c2bd91daa, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:05:00+00:00","mt5ServerTime":"2026-03-05T16:15:00+02:10","ksaTime":"2026-03-05T17:55:00+03:00","uaeTime":"2026-03-05T18:55:00+04:00","indiaTime":"2026-03-05T20:25:00+05:30","bid":5166.70000,"ask":5166.82000,"spread":0.12000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5167.0}
+
+- Time UTC 2026-03-05 12:06:25 | KSA(AST) 15:06:25 | Dubai(GST) 16:06:25 | India(IST) 17:36:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120625_82259226d161401ca19caa6c2bd91daa, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:06:25 | KSA(AST) 15:06:25 | Dubai(GST) 16:06:25 | India(IST) 17:36:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120625_82259226d161401ca19caa6c2bd91daa, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:06:25 | KSA(AST) 15:06:25 | Dubai(GST) 16:06:25 | India(IST) 17:36:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120625_82259226d161401ca19caa6c2bd91daa, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:06:25 | KSA(AST) 15:06:25 | Dubai(GST) 16:06:25 | India(IST) 17:36:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120625_82259226d161401ca19caa6c2bd91daa, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:06:55 | KSA(AST) 15:06:55 | Dubai(GST) 16:06:55 | India(IST) 17:36:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120655_02f5ca79898c4d83b604245edcc1ab83, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:05:00+00:00","mt5ServerTime":"2026-03-05T16:15:00+02:10","ksaTime":"2026-03-05T17:55:00+03:00","uaeTime":"2026-03-05T18:55:00+04:00","indiaTime":"2026-03-05T20:25:00+05:30","bid":5166.70000,"ask":5166.82000,"spread":0.12000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5167.0}
+
+- Time UTC 2026-03-05 12:06:55 | KSA(AST) 15:06:55 | Dubai(GST) 16:06:55 | India(IST) 17:36:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120655_02f5ca79898c4d83b604245edcc1ab83, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:06:55 | KSA(AST) 15:06:55 | Dubai(GST) 16:06:55 | India(IST) 17:36:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120655_02f5ca79898c4d83b604245edcc1ab83, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:06:55 | KSA(AST) 15:06:55 | Dubai(GST) 16:06:55 | India(IST) 17:36:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120655_02f5ca79898c4d83b604245edcc1ab83, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:06:55 | KSA(AST) 15:06:55 | Dubai(GST) 16:06:55 | India(IST) 17:36:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120655_02f5ca79898c4d83b604245edcc1ab83, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:07:25 | KSA(AST) 15:07:25 | Dubai(GST) 16:07:25 | India(IST) 17:37:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120725_669bcdf0dc3e490885376e1d18f9496c, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:05:00+00:00","mt5ServerTime":"2026-03-05T16:15:00+02:10","ksaTime":"2026-03-05T17:55:00+03:00","uaeTime":"2026-03-05T18:55:00+04:00","indiaTime":"2026-03-05T20:25:00+05:30","bid":5166.70000,"ask":5166.82000,"spread":0.12000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5167.0}
+
+- Time UTC 2026-03-05 12:07:25 | KSA(AST) 15:07:25 | Dubai(GST) 16:07:25 | India(IST) 17:37:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120725_669bcdf0dc3e490885376e1d18f9496c, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:07:25 | KSA(AST) 15:07:25 | Dubai(GST) 16:07:25 | India(IST) 17:37:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120725_669bcdf0dc3e490885376e1d18f9496c, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:07:25 | KSA(AST) 15:07:25 | Dubai(GST) 16:07:25 | India(IST) 17:37:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120725_669bcdf0dc3e490885376e1d18f9496c, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:07:25 | KSA(AST) 15:07:25 | Dubai(GST) 16:07:25 | India(IST) 17:37:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120725_669bcdf0dc3e490885376e1d18f9496c, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:07:55 | KSA(AST) 15:07:55 | Dubai(GST) 16:07:55 | India(IST) 17:37:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120755_e2ca577bcfd3407c819f369e4384241b, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:05:00+00:00","mt5ServerTime":"2026-03-05T16:15:00+02:10","ksaTime":"2026-03-05T17:55:00+03:00","uaeTime":"2026-03-05T18:55:00+04:00","indiaTime":"2026-03-05T20:25:00+05:30","bid":5166.70000,"ask":5166.82000,"spread":0.12000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5167.0}
+
+- Time UTC 2026-03-05 12:07:55 | KSA(AST) 15:07:55 | Dubai(GST) 16:07:55 | India(IST) 17:37:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120755_e2ca577bcfd3407c819f369e4384241b, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:07:55 | KSA(AST) 15:07:55 | Dubai(GST) 16:07:55 | India(IST) 17:37:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120755_e2ca577bcfd3407c819f369e4384241b, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:07:55 | KSA(AST) 15:07:55 | Dubai(GST) 16:07:55 | India(IST) 17:37:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120755_e2ca577bcfd3407c819f369e4384241b, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:07:55 | KSA(AST) 15:07:55 | Dubai(GST) 16:07:55 | India(IST) 17:37:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120755_e2ca577bcfd3407c819f369e4384241b, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:08:25 | KSA(AST) 15:08:25 | Dubai(GST) 16:08:25 | India(IST) 17:38:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120825_7608ee56c75845a0b3434d3d431cdf4e, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:05:00+00:00","mt5ServerTime":"2026-03-05T16:15:00+02:10","ksaTime":"2026-03-05T17:55:00+03:00","uaeTime":"2026-03-05T18:55:00+04:00","indiaTime":"2026-03-05T20:25:00+05:30","bid":5166.70000,"ask":5166.82000,"spread":0.12000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5167.0}
+
+- Time UTC 2026-03-05 12:08:25 | KSA(AST) 15:08:25 | Dubai(GST) 16:08:25 | India(IST) 17:38:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120825_7608ee56c75845a0b3434d3d431cdf4e, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:08:25 | KSA(AST) 15:08:25 | Dubai(GST) 16:08:25 | India(IST) 17:38:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120825_7608ee56c75845a0b3434d3d431cdf4e, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:08:25 | KSA(AST) 15:08:25 | Dubai(GST) 16:08:25 | India(IST) 17:38:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120825_7608ee56c75845a0b3434d3d431cdf4e, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:08:25 | KSA(AST) 15:08:25 | Dubai(GST) 16:08:25 | India(IST) 17:38:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120825_7608ee56c75845a0b3434d3d431cdf4e, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:08:55 | KSA(AST) 15:08:55 | Dubai(GST) 16:08:55 | India(IST) 17:38:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120855_ef9829e96b74417ebb510db1db38d9db, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:05:00+00:00","mt5ServerTime":"2026-03-05T16:15:00+02:10","ksaTime":"2026-03-05T17:55:00+03:00","uaeTime":"2026-03-05T18:55:00+04:00","indiaTime":"2026-03-05T20:25:00+05:30","bid":5166.70000,"ask":5166.82000,"spread":0.12000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5167.0}
+
+- Time UTC 2026-03-05 12:08:55 | KSA(AST) 15:08:55 | Dubai(GST) 16:08:55 | India(IST) 17:38:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120855_ef9829e96b74417ebb510db1db38d9db, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:08:55 | KSA(AST) 15:08:55 | Dubai(GST) 16:08:55 | India(IST) 17:38:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120855_ef9829e96b74417ebb510db1db38d9db, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:08:55 | KSA(AST) 15:08:55 | Dubai(GST) 16:08:55 | India(IST) 17:38:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120855_ef9829e96b74417ebb510db1db38d9db, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:08:55 | KSA(AST) 15:08:55 | Dubai(GST) 16:08:55 | India(IST) 17:38:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120855_ef9829e96b74417ebb510db1db38d9db, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:09:25 | KSA(AST) 15:09:25 | Dubai(GST) 16:09:25 | India(IST) 17:39:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120925_0fd348c69a6743469418c94da364d13a, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:05:00+00:00","mt5ServerTime":"2026-03-05T16:15:00+02:10","ksaTime":"2026-03-05T17:55:00+03:00","uaeTime":"2026-03-05T18:55:00+04:00","indiaTime":"2026-03-05T20:25:00+05:30","bid":5166.70000,"ask":5166.82000,"spread":0.12000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5167.0}
+
+- Time UTC 2026-03-05 12:09:25 | KSA(AST) 15:09:25 | Dubai(GST) 16:09:25 | India(IST) 17:39:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120925_0fd348c69a6743469418c94da364d13a, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:09:25 | KSA(AST) 15:09:25 | Dubai(GST) 16:09:25 | India(IST) 17:39:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120925_0fd348c69a6743469418c94da364d13a, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:09:25 | KSA(AST) 15:09:25 | Dubai(GST) 16:09:25 | India(IST) 17:39:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120925_0fd348c69a6743469418c94da364d13a, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:09:25 | KSA(AST) 15:09:25 | Dubai(GST) 16:09:25 | India(IST) 17:39:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120925_0fd348c69a6743469418c94da364d13a, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:09:55 | KSA(AST) 15:09:55 | Dubai(GST) 16:09:55 | India(IST) 17:39:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305120955_693358aa1508448ba737979c3e0cff1c, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:05:00+00:00","mt5ServerTime":"2026-03-05T16:15:00+02:10","ksaTime":"2026-03-05T17:55:00+03:00","uaeTime":"2026-03-05T18:55:00+04:00","indiaTime":"2026-03-05T20:25:00+05:30","bid":5166.70000,"ask":5166.82000,"spread":0.12000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5167.0}
+
+- Time UTC 2026-03-05 12:09:55 | KSA(AST) 15:09:55 | Dubai(GST) 16:09:55 | India(IST) 17:39:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305120955_693358aa1508448ba737979c3e0cff1c, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:09:55 | KSA(AST) 15:09:55 | Dubai(GST) 16:09:55 | India(IST) 17:39:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305120955_693358aa1508448ba737979c3e0cff1c, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:09:55 | KSA(AST) 15:09:55 | Dubai(GST) 16:09:55 | India(IST) 17:39:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305120955_693358aa1508448ba737979c3e0cff1c, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:09:55 | KSA(AST) 15:09:55 | Dubai(GST) 16:09:55 | India(IST) 17:39:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305120955_693358aa1508448ba737979c3e0cff1c, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:10:02 | KSA(AST) 15:10:02 | Dubai(GST) 16:10:02 | India(IST) 17:40:02
+  Event: MT5_MARKET_SNAPSHOT_RECEIVED [mt5_ingest] source=mt5 symbol=XAUUSD
+  Summary: MT5 sent a market snapshot to Brain.
+  Correlation: cycle_id=-, trade_id=-
+  Data: {"symbol":"XAUUSD","timestamp":"2026-03-05T12:10:00+00:00","mt5ServerTime":"2026-03-05T16:20:00+02:10","ksaTime":"2026-03-05T18:00:00+03:00","uaeTime":"2026-03-05T19:00:00+04:00","indiaTime":"2026-03-05T20:30:00+05:30","bid":5168.81000,"ask":5168.96000,"spread":0.15000,"timeframeData":[{"timeframe":"M5","open":5166.70000,"high":5171.05000,"low":5165.84000,"close":5168.81000,"volume":1486,"candleStartTime":"2026-03-05T14:05:00+00:00","candleCloseTime":"2026-03-05T14:10:00+00:00","candleBodySize":2.11000,"upperWickSize":2.24000,"lowerWickSize":0.86000,"candleRange":5.21000,"ma20Value":5163.11636,"ma20Distance":5.69364,"rsi":63.85267,"atr":4.07143},{"timeframe":"M15","open":5160.99000,"high":5165.11000,"low":5160.43000,"close":5163.79000,"volume":3145,"candleStartTime":"2026-03-05T13:45:00+00:00","candleCloseTime":"2026-03-05T14:00:00+00:00","candleBodySize":2.80000,"upperWickSize":1.32000,"lowerWickSize":0.56000,"candleRange":4.68000,"ma20Value":5162.09127,"ma20Distance":1.69873,"rsi":50.75090,"atr":11.03429},{"timeframe":"H1","open":5164.66000,"high":5168.02000,"low":5156.97000,"close":5163.79000,"volume":14453,"candleStartTime":"2026-03-05T13:00:00+00:00","candleCloseTime":"2026-03-05T14:00:00+00:00","candleBodySize":0.87000,"upperWickSize":3.36000,"lowerWickSize":6.82000,"candleRange":11.05000,"ma20Value":5163.53098,"ma20Distance":0.25902,"rsi":60.28599,"atr":22.84286}],"pendingOrders":[],"openPositions":[],"orderExecutionEvents":[],"telegramState":"QUIET","session":"NY","sessionPhase":"MID","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5170.299805}
+
+- Time UTC 2026-03-05 12:10:25 | KSA(AST) 15:10:25 | Dubai(GST) 16:10:25 | India(IST) 17:40:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121025_acca18d1fc39498b955c1d741e752e81, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:10:00+00:00","mt5ServerTime":"2026-03-05T16:20:00+02:10","ksaTime":"2026-03-05T18:00:00+03:00","uaeTime":"2026-03-05T19:00:00+04:00","indiaTime":"2026-03-05T20:30:00+05:30","bid":5168.81000,"ask":5168.96000,"spread":0.15000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5170.299805}
+
+- Time UTC 2026-03-05 12:10:25 | KSA(AST) 15:10:25 | Dubai(GST) 16:10:25 | India(IST) 17:40:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121025_acca18d1fc39498b955c1d741e752e81, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:10:25 | KSA(AST) 15:10:25 | Dubai(GST) 16:10:25 | India(IST) 17:40:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121025_acca18d1fc39498b955c1d741e752e81, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:10:25 | KSA(AST) 15:10:25 | Dubai(GST) 16:10:25 | India(IST) 17:40:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121025_acca18d1fc39498b955c1d741e752e81, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:10:25 | KSA(AST) 15:10:25 | Dubai(GST) 16:10:25 | India(IST) 17:40:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121025_acca18d1fc39498b955c1d741e752e81, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:10:55 | KSA(AST) 15:10:55 | Dubai(GST) 16:10:55 | India(IST) 17:40:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121055_7cf15907f98145fcb9b4cd07258fa3c0, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:10:00+00:00","mt5ServerTime":"2026-03-05T16:20:00+02:10","ksaTime":"2026-03-05T18:00:00+03:00","uaeTime":"2026-03-05T19:00:00+04:00","indiaTime":"2026-03-05T20:30:00+05:30","bid":5168.81000,"ask":5168.96000,"spread":0.15000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5170.299805}
+
+- Time UTC 2026-03-05 12:10:55 | KSA(AST) 15:10:55 | Dubai(GST) 16:10:55 | India(IST) 17:40:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121055_7cf15907f98145fcb9b4cd07258fa3c0, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:10:55 | KSA(AST) 15:10:55 | Dubai(GST) 16:10:55 | India(IST) 17:40:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121055_7cf15907f98145fcb9b4cd07258fa3c0, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:10:55 | KSA(AST) 15:10:55 | Dubai(GST) 16:10:55 | India(IST) 17:40:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121055_7cf15907f98145fcb9b4cd07258fa3c0, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:10:55 | KSA(AST) 15:10:55 | Dubai(GST) 16:10:55 | India(IST) 17:40:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121055_7cf15907f98145fcb9b4cd07258fa3c0, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:11:25 | KSA(AST) 15:11:25 | Dubai(GST) 16:11:25 | India(IST) 17:41:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121125_76134887604d4d6584dc36f484b6e2db, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:10:00+00:00","mt5ServerTime":"2026-03-05T16:20:00+02:10","ksaTime":"2026-03-05T18:00:00+03:00","uaeTime":"2026-03-05T19:00:00+04:00","indiaTime":"2026-03-05T20:30:00+05:30","bid":5168.81000,"ask":5168.96000,"spread":0.15000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5170.299805}
+
+- Time UTC 2026-03-05 12:11:25 | KSA(AST) 15:11:25 | Dubai(GST) 16:11:25 | India(IST) 17:41:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121125_76134887604d4d6584dc36f484b6e2db, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:11:25 | KSA(AST) 15:11:25 | Dubai(GST) 16:11:25 | India(IST) 17:41:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121125_76134887604d4d6584dc36f484b6e2db, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:11:25 | KSA(AST) 15:11:25 | Dubai(GST) 16:11:25 | India(IST) 17:41:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121125_76134887604d4d6584dc36f484b6e2db, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:11:25 | KSA(AST) 15:11:25 | Dubai(GST) 16:11:25 | India(IST) 17:41:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121125_76134887604d4d6584dc36f484b6e2db, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:11:55 | KSA(AST) 15:11:55 | Dubai(GST) 16:11:55 | India(IST) 17:41:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121155_4bcb1423d5fe4755834d49815e476df8, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:10:00+00:00","mt5ServerTime":"2026-03-05T16:20:00+02:10","ksaTime":"2026-03-05T18:00:00+03:00","uaeTime":"2026-03-05T19:00:00+04:00","indiaTime":"2026-03-05T20:30:00+05:30","bid":5168.81000,"ask":5168.96000,"spread":0.15000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5170.299805}
+
+- Time UTC 2026-03-05 12:11:55 | KSA(AST) 15:11:55 | Dubai(GST) 16:11:55 | India(IST) 17:41:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121155_4bcb1423d5fe4755834d49815e476df8, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:11:55 | KSA(AST) 15:11:55 | Dubai(GST) 16:11:55 | India(IST) 17:41:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121155_4bcb1423d5fe4755834d49815e476df8, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:11:55 | KSA(AST) 15:11:55 | Dubai(GST) 16:11:55 | India(IST) 17:41:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121155_4bcb1423d5fe4755834d49815e476df8, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:11:55 | KSA(AST) 15:11:55 | Dubai(GST) 16:11:55 | India(IST) 17:41:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121155_4bcb1423d5fe4755834d49815e476df8, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:12:25 | KSA(AST) 15:12:25 | Dubai(GST) 16:12:25 | India(IST) 17:42:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121225_d8f60214a58c4109aac58bafa46dc069, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:10:00+00:00","mt5ServerTime":"2026-03-05T16:20:00+02:10","ksaTime":"2026-03-05T18:00:00+03:00","uaeTime":"2026-03-05T19:00:00+04:00","indiaTime":"2026-03-05T20:30:00+05:30","bid":5168.81000,"ask":5168.96000,"spread":0.15000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5170.299805}
+
+- Time UTC 2026-03-05 12:12:25 | KSA(AST) 15:12:25 | Dubai(GST) 16:12:25 | India(IST) 17:42:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121225_d8f60214a58c4109aac58bafa46dc069, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:12:25 | KSA(AST) 15:12:25 | Dubai(GST) 16:12:25 | India(IST) 17:42:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121225_d8f60214a58c4109aac58bafa46dc069, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:12:25 | KSA(AST) 15:12:25 | Dubai(GST) 16:12:25 | India(IST) 17:42:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121225_d8f60214a58c4109aac58bafa46dc069, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:12:25 | KSA(AST) 15:12:25 | Dubai(GST) 16:12:25 | India(IST) 17:42:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121225_d8f60214a58c4109aac58bafa46dc069, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:12:55 | KSA(AST) 15:12:55 | Dubai(GST) 16:12:55 | India(IST) 17:42:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121255_2051cbb294c84be989da8a49f81e42c0, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:10:00+00:00","mt5ServerTime":"2026-03-05T16:20:00+02:10","ksaTime":"2026-03-05T18:00:00+03:00","uaeTime":"2026-03-05T19:00:00+04:00","indiaTime":"2026-03-05T20:30:00+05:30","bid":5168.81000,"ask":5168.96000,"spread":0.15000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5170.299805}
+
+- Time UTC 2026-03-05 12:12:55 | KSA(AST) 15:12:55 | Dubai(GST) 16:12:55 | India(IST) 17:42:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121255_2051cbb294c84be989da8a49f81e42c0, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:12:55 | KSA(AST) 15:12:55 | Dubai(GST) 16:12:55 | India(IST) 17:42:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121255_2051cbb294c84be989da8a49f81e42c0, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:12:55 | KSA(AST) 15:12:55 | Dubai(GST) 16:12:55 | India(IST) 17:42:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121255_2051cbb294c84be989da8a49f81e42c0, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:12:55 | KSA(AST) 15:12:55 | Dubai(GST) 16:12:55 | India(IST) 17:42:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121255_2051cbb294c84be989da8a49f81e42c0, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:13:25 | KSA(AST) 15:13:25 | Dubai(GST) 16:13:25 | India(IST) 17:43:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121325_9d775f6c92034eec8ba63696568bdd4e, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:10:00+00:00","mt5ServerTime":"2026-03-05T16:20:00+02:10","ksaTime":"2026-03-05T18:00:00+03:00","uaeTime":"2026-03-05T19:00:00+04:00","indiaTime":"2026-03-05T20:30:00+05:30","bid":5168.81000,"ask":5168.96000,"spread":0.15000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5170.299805}
+
+- Time UTC 2026-03-05 12:13:25 | KSA(AST) 15:13:25 | Dubai(GST) 16:13:25 | India(IST) 17:43:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121325_9d775f6c92034eec8ba63696568bdd4e, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:13:25 | KSA(AST) 15:13:25 | Dubai(GST) 16:13:25 | India(IST) 17:43:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121325_9d775f6c92034eec8ba63696568bdd4e, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:13:25 | KSA(AST) 15:13:25 | Dubai(GST) 16:13:25 | India(IST) 17:43:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121325_9d775f6c92034eec8ba63696568bdd4e, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:13:25 | KSA(AST) 15:13:25 | Dubai(GST) 16:13:25 | India(IST) 17:43:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121325_9d775f6c92034eec8ba63696568bdd4e, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:13:55 | KSA(AST) 15:13:55 | Dubai(GST) 16:13:55 | India(IST) 17:43:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121355_a725baa700ac47ff933b64da8e298531, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:10:00+00:00","mt5ServerTime":"2026-03-05T16:20:00+02:10","ksaTime":"2026-03-05T18:00:00+03:00","uaeTime":"2026-03-05T19:00:00+04:00","indiaTime":"2026-03-05T20:30:00+05:30","bid":5168.81000,"ask":5168.96000,"spread":0.15000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5170.299805}
+
+- Time UTC 2026-03-05 12:13:55 | KSA(AST) 15:13:55 | Dubai(GST) 16:13:55 | India(IST) 17:43:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121355_a725baa700ac47ff933b64da8e298531, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:13:55 | KSA(AST) 15:13:55 | Dubai(GST) 16:13:55 | India(IST) 17:43:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121355_a725baa700ac47ff933b64da8e298531, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:13:55 | KSA(AST) 15:13:55 | Dubai(GST) 16:13:55 | India(IST) 17:43:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121355_a725baa700ac47ff933b64da8e298531, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:13:55 | KSA(AST) 15:13:55 | Dubai(GST) 16:13:55 | India(IST) 17:43:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121355_a725baa700ac47ff933b64da8e298531, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:14:25 | KSA(AST) 15:14:25 | Dubai(GST) 16:14:25 | India(IST) 17:44:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121425_47eff1a5c1b04d1b9560bf6aed8095c3, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:10:00+00:00","mt5ServerTime":"2026-03-05T16:20:00+02:10","ksaTime":"2026-03-05T18:00:00+03:00","uaeTime":"2026-03-05T19:00:00+04:00","indiaTime":"2026-03-05T20:30:00+05:30","bid":5168.81000,"ask":5168.96000,"spread":0.15000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5170.299805}
+
+- Time UTC 2026-03-05 12:14:25 | KSA(AST) 15:14:25 | Dubai(GST) 16:14:25 | India(IST) 17:44:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121425_47eff1a5c1b04d1b9560bf6aed8095c3, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:14:25 | KSA(AST) 15:14:25 | Dubai(GST) 16:14:25 | India(IST) 17:44:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121425_47eff1a5c1b04d1b9560bf6aed8095c3, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:14:25 | KSA(AST) 15:14:25 | Dubai(GST) 16:14:25 | India(IST) 17:44:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121425_47eff1a5c1b04d1b9560bf6aed8095c3, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:14:25 | KSA(AST) 15:14:25 | Dubai(GST) 16:14:25 | India(IST) 17:44:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121425_47eff1a5c1b04d1b9560bf6aed8095c3, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:14:55 | KSA(AST) 15:14:55 | Dubai(GST) 16:14:55 | India(IST) 17:44:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121455_044f7409c28f48abbd9d98f53deb5386, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:10:00+00:00","mt5ServerTime":"2026-03-05T16:20:00+02:10","ksaTime":"2026-03-05T18:00:00+03:00","uaeTime":"2026-03-05T19:00:00+04:00","indiaTime":"2026-03-05T20:30:00+05:30","bid":5168.81000,"ask":5168.96000,"spread":0.15000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5170.299805}
+
+- Time UTC 2026-03-05 12:14:55 | KSA(AST) 15:14:55 | Dubai(GST) 16:14:55 | India(IST) 17:44:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121455_044f7409c28f48abbd9d98f53deb5386, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:14:55 | KSA(AST) 15:14:55 | Dubai(GST) 16:14:55 | India(IST) 17:44:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121455_044f7409c28f48abbd9d98f53deb5386, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:14:55 | KSA(AST) 15:14:55 | Dubai(GST) 16:14:55 | India(IST) 17:44:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121455_044f7409c28f48abbd9d98f53deb5386, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:14:55 | KSA(AST) 15:14:55 | Dubai(GST) 16:14:55 | India(IST) 17:44:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121455_044f7409c28f48abbd9d98f53deb5386, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:15:02 | KSA(AST) 15:15:02 | Dubai(GST) 16:15:02 | India(IST) 17:45:02
+  Event: MT5_MARKET_SNAPSHOT_RECEIVED [mt5_ingest] source=mt5 symbol=XAUUSD
+  Summary: MT5 sent a market snapshot to Brain.
+  Correlation: cycle_id=-, trade_id=-
+  Data: {"symbol":"XAUUSD","timestamp":"2026-03-05T12:15:00+00:00","mt5ServerTime":"2026-03-05T16:25:00+02:10","ksaTime":"2026-03-05T18:05:00+03:00","uaeTime":"2026-03-05T19:05:00+04:00","indiaTime":"2026-03-05T20:35:00+05:30","bid":5168.60000,"ask":5168.76000,"spread":0.16000,"timeframeData":[{"timeframe":"M5","open":5168.81000,"high":5171.53000,"low":5167.54000,"close":5168.59000,"volume":1394,"candleStartTime":"2026-03-05T14:10:00+00:00","candleCloseTime":"2026-03-05T14:15:00+00:00","candleBodySize":0.22000,"upperWickSize":2.72000,"lowerWickSize":1.05000,"candleRange":3.99000,"ma20Value":5163.61028,"ma20Distance":4.97972,"rsi":54.65116,"atr":4.07357},{"timeframe":"M15","open":5163.80000,"high":5171.53000,"low":5163.17000,"close":5168.59000,"volume":4212,"candleStartTime":"2026-03-05T14:00:00+00:00","candleCloseTime":"2026-03-05T14:15:00+00:00","candleBodySize":4.79000,"upperWickSize":2.94000,"lowerWickSize":0.63000,"candleRange":8.36000,"ma20Value":5162.77340,"ma20Distance":5.81660,"rsi":65.82444,"atr":10.21500},{"timeframe":"H1","open":5164.66000,"high":5168.02000,"low":5156.97000,"close":5163.79000,"volume":14453,"candleStartTime":"2026-03-05T13:00:00+00:00","candleCloseTime":"2026-03-05T14:00:00+00:00","candleBodySize":0.87000,"upperWickSize":3.36000,"lowerWickSize":6.82000,"candleRange":11.05000,"ma20Value":5163.53098,"ma20Distance":0.25902,"rsi":60.28599,"atr":22.84286}],"pendingOrders":[],"openPositions":[],"orderExecutionEvents":[],"telegramState":"QUIET","session":"NY","sessionPhase":"MID","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5171.799805}
+
+- Time UTC 2026-03-05 12:15:25 | KSA(AST) 15:15:25 | Dubai(GST) 16:15:25 | India(IST) 17:45:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121525_09af83500fa94a2799dd22b3df213c2a, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:15:00+00:00","mt5ServerTime":"2026-03-05T16:25:00+02:10","ksaTime":"2026-03-05T18:05:00+03:00","uaeTime":"2026-03-05T19:05:00+04:00","indiaTime":"2026-03-05T20:35:00+05:30","bid":5168.60000,"ask":5168.76000,"spread":0.16000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5171.799805}
+
+- Time UTC 2026-03-05 12:15:25 | KSA(AST) 15:15:25 | Dubai(GST) 16:15:25 | India(IST) 17:45:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121525_09af83500fa94a2799dd22b3df213c2a, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:15:25 | KSA(AST) 15:15:25 | Dubai(GST) 16:15:25 | India(IST) 17:45:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121525_09af83500fa94a2799dd22b3df213c2a, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:15:25 | KSA(AST) 15:15:25 | Dubai(GST) 16:15:25 | India(IST) 17:45:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121525_09af83500fa94a2799dd22b3df213c2a, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:15:25 | KSA(AST) 15:15:25 | Dubai(GST) 16:15:25 | India(IST) 17:45:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121525_09af83500fa94a2799dd22b3df213c2a, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:15:55 | KSA(AST) 15:15:55 | Dubai(GST) 16:15:55 | India(IST) 17:45:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121555_c04cb224e9e147f6a4812352a70f8f3f, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:15:00+00:00","mt5ServerTime":"2026-03-05T16:25:00+02:10","ksaTime":"2026-03-05T18:05:00+03:00","uaeTime":"2026-03-05T19:05:00+04:00","indiaTime":"2026-03-05T20:35:00+05:30","bid":5168.60000,"ask":5168.76000,"spread":0.16000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5171.799805}
+
+- Time UTC 2026-03-05 12:15:55 | KSA(AST) 15:15:55 | Dubai(GST) 16:15:55 | India(IST) 17:45:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121555_c04cb224e9e147f6a4812352a70f8f3f, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:15:55 | KSA(AST) 15:15:55 | Dubai(GST) 16:15:55 | India(IST) 17:45:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121555_c04cb224e9e147f6a4812352a70f8f3f, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:15:55 | KSA(AST) 15:15:55 | Dubai(GST) 16:15:55 | India(IST) 17:45:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121555_c04cb224e9e147f6a4812352a70f8f3f, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:15:55 | KSA(AST) 15:15:55 | Dubai(GST) 16:15:55 | India(IST) 17:45:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121555_c04cb224e9e147f6a4812352a70f8f3f, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:16:25 | KSA(AST) 15:16:25 | Dubai(GST) 16:16:25 | India(IST) 17:46:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121625_5239e8349b3c49f0a5b0bb178c358609, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:15:00+00:00","mt5ServerTime":"2026-03-05T16:25:00+02:10","ksaTime":"2026-03-05T18:05:00+03:00","uaeTime":"2026-03-05T19:05:00+04:00","indiaTime":"2026-03-05T20:35:00+05:30","bid":5168.60000,"ask":5168.76000,"spread":0.16000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5171.799805}
+
+- Time UTC 2026-03-05 12:16:25 | KSA(AST) 15:16:25 | Dubai(GST) 16:16:25 | India(IST) 17:46:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121625_5239e8349b3c49f0a5b0bb178c358609, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:16:25 | KSA(AST) 15:16:25 | Dubai(GST) 16:16:25 | India(IST) 17:46:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121625_5239e8349b3c49f0a5b0bb178c358609, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:16:25 | KSA(AST) 15:16:25 | Dubai(GST) 16:16:25 | India(IST) 17:46:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121625_5239e8349b3c49f0a5b0bb178c358609, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:16:25 | KSA(AST) 15:16:25 | Dubai(GST) 16:16:25 | India(IST) 17:46:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121625_5239e8349b3c49f0a5b0bb178c358609, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:16:55 | KSA(AST) 15:16:55 | Dubai(GST) 16:16:55 | India(IST) 17:46:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121655_87d7fe2486344bc7b41e04b6e007651e, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:15:00+00:00","mt5ServerTime":"2026-03-05T16:25:00+02:10","ksaTime":"2026-03-05T18:05:00+03:00","uaeTime":"2026-03-05T19:05:00+04:00","indiaTime":"2026-03-05T20:35:00+05:30","bid":5168.60000,"ask":5168.76000,"spread":0.16000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5171.799805}
+
+- Time UTC 2026-03-05 12:16:55 | KSA(AST) 15:16:55 | Dubai(GST) 16:16:55 | India(IST) 17:46:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121655_87d7fe2486344bc7b41e04b6e007651e, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:16:55 | KSA(AST) 15:16:55 | Dubai(GST) 16:16:55 | India(IST) 17:46:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121655_87d7fe2486344bc7b41e04b6e007651e, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:16:55 | KSA(AST) 15:16:55 | Dubai(GST) 16:16:55 | India(IST) 17:46:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121655_87d7fe2486344bc7b41e04b6e007651e, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:16:55 | KSA(AST) 15:16:55 | Dubai(GST) 16:16:55 | India(IST) 17:46:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121655_87d7fe2486344bc7b41e04b6e007651e, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:17:25 | KSA(AST) 15:17:25 | Dubai(GST) 16:17:25 | India(IST) 17:47:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121725_ef53309833514a37a0d887646925ee68, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:15:00+00:00","mt5ServerTime":"2026-03-05T16:25:00+02:10","ksaTime":"2026-03-05T18:05:00+03:00","uaeTime":"2026-03-05T19:05:00+04:00","indiaTime":"2026-03-05T20:35:00+05:30","bid":5168.60000,"ask":5168.76000,"spread":0.16000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5171.799805}
+
+- Time UTC 2026-03-05 12:17:25 | KSA(AST) 15:17:25 | Dubai(GST) 16:17:25 | India(IST) 17:47:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121725_ef53309833514a37a0d887646925ee68, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:17:25 | KSA(AST) 15:17:25 | Dubai(GST) 16:17:25 | India(IST) 17:47:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121725_ef53309833514a37a0d887646925ee68, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:17:25 | KSA(AST) 15:17:25 | Dubai(GST) 16:17:25 | India(IST) 17:47:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121725_ef53309833514a37a0d887646925ee68, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:17:25 | KSA(AST) 15:17:25 | Dubai(GST) 16:17:25 | India(IST) 17:47:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121725_ef53309833514a37a0d887646925ee68, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:17:55 | KSA(AST) 15:17:55 | Dubai(GST) 16:17:55 | India(IST) 17:47:55
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121755_8149e6e59c2c4d27996ba0c9c242c33f, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:15:00+00:00","mt5ServerTime":"2026-03-05T16:25:00+02:10","ksaTime":"2026-03-05T18:05:00+03:00","uaeTime":"2026-03-05T19:05:00+04:00","indiaTime":"2026-03-05T20:35:00+05:30","bid":5168.60000,"ask":5168.76000,"spread":0.16000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5171.799805}
+
+- Time UTC 2026-03-05 12:17:55 | KSA(AST) 15:17:55 | Dubai(GST) 16:17:55 | India(IST) 17:47:55
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121755_8149e6e59c2c4d27996ba0c9c242c33f, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:17:55 | KSA(AST) 15:17:55 | Dubai(GST) 16:17:55 | India(IST) 17:47:55
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121755_8149e6e59c2c4d27996ba0c9c242c33f, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:17:55 | KSA(AST) 15:17:55 | Dubai(GST) 16:17:55 | India(IST) 17:47:55
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121755_8149e6e59c2c4d27996ba0c9c242c33f, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:17:55 | KSA(AST) 15:17:55 | Dubai(GST) 16:17:55 | India(IST) 17:47:55
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121755_8149e6e59c2c4d27996ba0c9c242c33f, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:18:25 | KSA(AST) 15:18:25 | Dubai(GST) 16:18:25 | India(IST) 17:48:25
+  Event: CYCLE_STARTED [polling] source=brain symbol=XAUUSD
+  Summary: Brain started a new decision cycle using latest market data.
+  Correlation: cycle_id=cyc_20260305121825_6f022e436c1940f88981b7c5e0281b81, trade_id=-
+  Data: {"symbol":"XAUUSD","session":"NY","sessionPhase":"MID","timestamp":"2026-03-05T12:15:00+00:00","mt5ServerTime":"2026-03-05T16:25:00+02:10","ksaTime":"2026-03-05T18:05:00+03:00","uaeTime":"2026-03-05T19:05:00+04:00","indiaTime":"2026-03-05T20:35:00+05:30","bid":5168.60000,"ask":5168.76000,"spread":0.16000,"atr":22.84286,"adr":170.29600,"telegramState":"QUIET","rateAuthority":"SYSTEM_FETCHED","authoritativeRate":5171.799805}
+
+- Time UTC 2026-03-05 12:18:25 | KSA(AST) 15:18:25 | Dubai(GST) 16:18:25 | India(IST) 17:48:25
+  Event: MARKET_REGIME_DETECTED [regime] source=brain symbol=XAUUSD
+  Summary: Recorded event MARKET_REGIME_DETECTED at stage regime.
+  Correlation: cycle_id=cyc_20260305121825_6f022e436c1940f88981b7c5e0281b81, trade_id=-
+  Data: {"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:18:25 | KSA(AST) 15:18:25 | Dubai(GST) 16:18:25 | India(IST) 17:48:25
+  Event: RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: Rule engine rejected the setup â€” no structural basis for a trade.
+  Correlation: cycle_id=cyc_20260305121825_6f022e436c1940f88981b7c5e0281b81, trade_id=-
+  Data: {"isValid":false,"marketRegime":{"regime":"DEAD","isTradeable":false,"reason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."},"h1Context":{"context":"SKIPPED","hasLiquiditySweep":false,"hasReclaim":false,"isTrendAligned":false,"reason":"Aborted by market regime detector: DEAD"},"m15Setup":null,"m5Entry":null,"impulseConfirmation":null,"abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:18:25 | KSA(AST) 15:18:25 | Dubai(GST) 16:18:25 | India(IST) 17:48:25
+  Event: AI_SKIPPED_RULE_ENGINE_ABORT [rule_engine] source=brain symbol=XAUUSD
+  Summary: AI analysis was skipped because the rule engine already rejected this setup.
+  Correlation: cycle_id=cyc_20260305121825_6f022e436c1940f88981b7c5e0281b81, trade_id=-
+  Data: {"reason":"rule engine invalid setup","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
+
+- Time UTC 2026-03-05 12:18:25 | KSA(AST) 15:18:25 | Dubai(GST) 16:18:25 | India(IST) 17:48:25
+  Event: FINAL_DECISION [decision] source=brain symbol=XAUUSD
+  Summary: Final cycle verdict: trade approved or rejected with primary reason.
+  Correlation: cycle_id=cyc_20260305121825_6f022e436c1940f88981b7c5e0281b81, trade_id=-
+  Data: {"finalDecision":"NO_TRADE","primaryReason":"RULE_ENGINE_ABORT","abortReason":"Dead market \u2014 AtrH1=22.84, Adr=170.30, TickRate=0.1/30s."}
