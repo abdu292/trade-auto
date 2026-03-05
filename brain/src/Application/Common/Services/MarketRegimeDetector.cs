@@ -93,9 +93,15 @@ public static class MarketRegimeDetector
 
     private static bool IsDeadMarket(MarketSnapshotContract snapshot, decimal atrH1, decimal adr)
     {
+        var atrM15 = snapshot.AtrM15 > 0m ? snapshot.AtrM15 : snapshot.Atr;
+        var m5Candle = snapshot.TimeframeData
+            .FirstOrDefault(x => string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase));
+        var m5Range = m5Candle?.CandleRange ?? 0m;
+        var priceIsMoving = atrM15 > 0m && m5Range >= atrM15 * MinM5RangeAtrRatio;
+
         // Primary candle-derived signal: H1 ATR is less than 25 % of the average daily range.
-        // This is fully candle-based and the strongest single indicator of a frozen market.
-        if (atrH1 > 0m && adr > 0m && atrH1 < adr * AtrDeadRatioThreshold)
+        // Guard with M5 activity to avoid false DEAD tags during active impulses.
+        if (atrH1 > 0m && adr > 0m && atrH1 < adr * AtrDeadRatioThreshold && !priceIsMoving)
             return true;
 
         // Secondary candle-derived confirmation: tick rate is frozen.
@@ -106,14 +112,8 @@ public static class MarketRegimeDetector
         // market is not truly dead, regardless of the tick count.
         if (snapshot.TickRatePer30s > 0m && snapshot.TickRatePer30s < MinTickRate)
         {
-            var atrM15 = snapshot.AtrM15 > 0m ? snapshot.AtrM15 : snapshot.Atr;
-            var m5Candle = snapshot.TimeframeData
-                .FirstOrDefault(x => string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase));
-            var m5Range = m5Candle?.CandleRange ?? 0m;
-
             // If M5 candle range shows meaningful activity relative to M15 ATR,
             // do not classify as dead — price is actively moving despite low tick count.
-            var priceIsMoving = atrM15 > 0m && m5Range >= atrM15 * MinM5RangeAtrRatio;
             if (!priceIsMoving)
                 return true;
         }
