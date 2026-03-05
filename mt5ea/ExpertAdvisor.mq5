@@ -106,6 +106,8 @@ void OnTick()
         return;
     }
 
+    g_api.RegisterTick(_Symbol);
+
     static datetime lastSnapshotPush = 0;
     static datetime lastTradePoll = 0;
     static datetime lastM5Bar = 0;

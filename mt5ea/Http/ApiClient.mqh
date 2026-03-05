@@ -17,6 +17,8 @@ private:
     int    m_spreadBufferCount;
     int    m_spreadBufferIdx;
     long   m_lastTickTimeMsc;
+    long   m_lastTickDeltaMsc;
+    double m_tickRatePer30sEma;
 
     void RecordSpread(double spread)
     {
@@ -563,8 +565,33 @@ public:
         m_spreadBufferCount = 0;
         m_spreadBufferIdx = 0;
         m_lastTickTimeMsc = 0;
+        m_lastTickDeltaMsc = 0;
+        m_tickRatePer30sEma = 0.0;
         ArrayInitialize(m_spreadBuffer, 0.0);
         Print("ApiClient configured. BaseUrl=", m_baseUrl, ", ApiKeyLength=", StringLen(m_apiKey));
+    }
+
+    void RegisterTick(string symbol)
+    {
+        MqlTick tick;
+        if (!SymbolInfoTick(symbol, tick))
+            return;
+
+        long tickTimeMsc = (long)tick.time_msc;
+        if (tickTimeMsc <= 0)
+            return;
+
+        if (m_lastTickTimeMsc > 0 && tickTimeMsc > m_lastTickTimeMsc)
+        {
+            m_lastTickDeltaMsc = tickTimeMsc - m_lastTickTimeMsc;
+            double instantRate = MathMin(200.0, 30000.0 / (double)m_lastTickDeltaMsc);
+            if (m_tickRatePer30sEma <= 0.0)
+                m_tickRatePer30sEma = instantRate;
+            else
+                m_tickRatePer30sEma = (m_tickRatePer30sEma * 0.8) + (instantRate * 0.2);
+        }
+
+        m_lastTickTimeMsc = tickTimeMsc;
     }
 
     string BuildHeaders()
@@ -802,16 +829,9 @@ public:
         bool isPostSpikePullback = !isExpansion && compressionCountM15 >= 2 && expansionCountM15 >= 1;
         bool isLondonNyOverlap = (mt5Struct.hour >= 12 && mt5Struct.hour <= 16);
 
-        // Tick quality metrics (PRD): tick-rate proxy + freeze/gap detector + slippage estimate
-        MqlTick tick;
-        SymbolInfoTick(symbol, tick);
-        long tickTimeMsc = (long)tick.time_msc;
-        long tickDeltaMsc = 0;
-        if (m_lastTickTimeMsc > 0 && tickTimeMsc > m_lastTickTimeMsc)
-            tickDeltaMsc = tickTimeMsc - m_lastTickTimeMsc;
-        m_lastTickTimeMsc = tickTimeMsc;
-        double tickRatePer30s = tickDeltaMsc > 0 ? MathMin(200.0, 30000.0 / (double)tickDeltaMsc) : 0.0;
-        bool freezeGapDetected = tickDeltaMsc > 4000;
+        // Tick quality metrics (PRD): real tick cadence captured per OnTick (not snapshot interval)
+        double tickRatePer30s = MathMax(0.0, m_tickRatePer30sEma);
+        bool freezeGapDetected = m_lastTickDeltaMsc > 4000;
         double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
         double slippageEstimatePoints = point > 0.0 ? ((spread / point) * 0.25) : 0.0;
 
