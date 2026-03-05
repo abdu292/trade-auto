@@ -156,13 +156,15 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         // Capture delay to avoid closure issues
         var speedMultiplier = Math.Max(1, request.SpeedMultiplier);
         var useAI = request.UseMockAI ? false : request.UseAI;
+        var ignoreNewsGate = request.IgnoreNewsGate;
+        var replayTelegramState = NormalizeReplayTelegramState(request.TelegramReplayState);
         _initialCashAed = request.InitialCashAed;
 
         _ = Task.Run(async () =>
         {
             try
             {
-                await RunReplayLoopAsync(filtered, symUpper, useAI, speedMultiplier, token);
+                await RunReplayLoopAsync(filtered, symUpper, useAI, ignoreNewsGate, replayTelegramState, speedMultiplier, token);
             }
             finally
             {
@@ -240,6 +242,8 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         List<ReplayCandle> driverCandles,
         string symbol,
         bool useAI,
+        bool ignoreNewsGate,
+        string replayTelegramState,
         int speedMultiplier,
         CancellationToken ct)
     {
@@ -260,11 +264,14 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
                 _pauseGate.Release();
             }
 
-            var snapshot = BuildSnapshot(symbol, candle);
+            var snapshot = BuildSnapshot(symbol, candle) with
+            {
+                TelegramState = replayTelegramState,
+            };
             _processedCandles++;
             _cyclesTriggered++;
 
-            await ProcessReplayCycleAsync(snapshot, useAI, ct);
+            await ProcessReplayCycleAsync(snapshot, useAI, ignoreNewsGate, ct);
 
             if (candleIntervalMs > 0)
                 await Task.Delay(candleIntervalMs, ct);
@@ -274,6 +281,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     private async Task ProcessReplayCycleAsync(
         MarketSnapshotContract snapshot,
         bool useAI,
+        bool ignoreNewsGate,
         CancellationToken ct)
     {
         using var scope = _serviceProvider.CreateScope();
@@ -342,36 +350,60 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
 
         Interlocked.Increment(ref _setupCandidatesFound);
 
-        var newsRisk = await economicNews.AssessAsync(snapshot.Timestamp, ct);
-        await timeline.WriteAsync(
-            eventType: "REPLAY_NEWS_CHECK",
-            stage: "news",
-            source: "forexfactory",
-            symbol: snapshot.Symbol,
-            cycleId: cycleId,
-            tradeId: null,
-            payload: new
-            {
-                blocked = newsRisk.IsBlocked,
-                newsRisk.Reason,
-                newsRisk.NearbyEvents,
-                newsRisk.RefreshedAtUtc,
-                newsRisk.IsStale,
-            },
-            cancellationToken: ct);
-
-        if (newsRisk.IsBlocked)
+        if (ignoreNewsGate)
         {
             await timeline.WriteAsync(
-                eventType: "CYCLE_ABORTED",
+                eventType: "REPLAY_NEWS_CHECK",
                 stage: "news",
                 source: "replay_engine",
                 symbol: snapshot.Symbol,
                 cycleId: cycleId,
                 tradeId: null,
-                payload: new { reason = newsRisk.Reason, newsRisk.NearbyEvents },
+                payload: new
+                {
+                    blocked = false,
+                    reason = "News gate bypassed by replay configuration (ignoreNewsGate=true).",
+                    nearbyEvents = Array.Empty<object>(),
+                    replayMode = true,
+                    ignored = true,
+                },
                 cancellationToken: ct);
-            return;
+        }
+        else
+        {
+            var newsRisk = await economicNews.AssessAsync(snapshot.Timestamp, ct);
+            await timeline.WriteAsync(
+                eventType: "REPLAY_NEWS_CHECK",
+                stage: "news",
+                source: "forexfactory",
+                symbol: snapshot.Symbol,
+                cycleId: cycleId,
+                tradeId: null,
+                payload: new
+                {
+                    blocked = newsRisk.IsBlocked,
+                    newsRisk.Reason,
+                    newsRisk.NearbyEvents,
+                    newsRisk.RefreshedAtUtc,
+                    newsRisk.IsStale,
+                    replayMode = true,
+                    ignored = false,
+                },
+                cancellationToken: ct);
+
+            if (newsRisk.IsBlocked)
+            {
+                await timeline.WriteAsync(
+                    eventType: "CYCLE_ABORTED",
+                    stage: "news",
+                    source: "replay_engine",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new { reason = newsRisk.Reason, newsRisk.NearbyEvents },
+                    cancellationToken: ct);
+                return;
+            }
         }
 
         // ── Step 2: AI analysis (or mock) ──
@@ -687,6 +719,24 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             ConsensusPassed: true,
             AgreementCount: 1,
             RequiredAgreement: 1);
+    }
+
+    private static string NormalizeReplayTelegramState(string? state)
+    {
+        var normalized = (state ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "STRONG_BUY" => "STRONG_BUY",
+            "BUY" => "BUY",
+            "BULLISH" => "BULLISH",
+            "QUIET" => "QUIET",
+            "MIXED" => "MIXED",
+            "BEARISH" => "BEARISH",
+            "SELL" => "SELL",
+            "STRONG_SELL" => "STRONG_SELL",
+            "PANIC" => "PANIC",
+            _ => "QUIET",
+        };
     }
 
     private string? ChooseDriverTimeframe(string symbol)

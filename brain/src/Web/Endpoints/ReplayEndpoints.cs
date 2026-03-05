@@ -94,6 +94,7 @@ public static class ReplayEndpoints
                 "using imported CSV data. Real trade execution is always disabled. " +
                 "Real AI is used by default; set useMockAI=true for explicit mock mode. " +
                 "You can also override the starting ledger cash via InitialCashAed. " +
+                "For deterministic backtests, ignoreNewsGate defaults to true and telegramReplayState defaults to QUIET. " +
                 "Decision timeline events are recorded in the database and viewable at GET /api/monitoring/timeline.");
 
         // ── Pause replay ───────────────────────────────────────────────────

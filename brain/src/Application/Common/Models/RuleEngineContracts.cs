@@ -92,7 +92,9 @@ public sealed record ReplayStartRequest(
     int SpeedMultiplier = 100,
     bool UseAI = true,
     bool UseMockAI = false,
-    decimal InitialCashAed = 50000m);  // starting deployable cash for the ledger
+    decimal InitialCashAed = 50000m,
+    bool IgnoreNewsGate = true,
+    string TelegramReplayState = "QUIET");  // starting deployable cash for the ledger
 
 public sealed record ReplayStatusContract(
     bool IsRunning,
