@@ -9,7 +9,7 @@ namespace Brain.Application.Common.Services;
 ///
 /// Regime taxonomy:
 ///   TRENDING_BULL — EMA golden cross, price above EMA50, RSI ≥ 50. Optimal for scalp entries.
-///   TRENDING_BEAR — EMA death cross, price below EMA50, RSI &lt; 50. Buy-only system: block.
+///   TRENDING_BEAR — EMA death cross, price below EMA50, RSI below 50. Buy-only system: block.
 ///   RANGING       — No clear cross or compressed EMA spread. Good for BUY_LIMIT/compression.
 ///   CHOPPY        — ADR exhausted or rapid expansion with no compression structure. Avoid.
 ///   DEAD          — ATR near zero or tick rate frozen. Execution risk: avoid.
