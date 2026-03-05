@@ -17,30 +17,41 @@ public static class RuleEngine
 
     /// <summary>
     /// Evaluates all three layers and returns a setup candidate (or abort result).
+    /// Market regime detection runs first; if the regime is not tradeable the cycle
+    /// is aborted before H1/M15/M5 evaluation is performed.
     /// If any layer fails, the result is invalid and the decision cycle must abort.
     /// </summary>
     public static SetupCandidateResult Evaluate(MarketSnapshotContract snapshot)
     {
+        // ── Layer 0: Market Regime Detection ────────────────────────────────────
+        // Filters out structurally poor market conditions (dead, choppy, bear trend)
+        // before performing the more expensive H1/M15/M5 structural analysis.
+        var marketRegime = MarketRegimeDetector.Detect(snapshot);
+        if (!marketRegime.IsTradeable)
+        {
+            return SetupCandidateResult.AbortedByRegime(marketRegime);
+        }
+
         var h1 = EvaluateH1Context(snapshot);
 
         if (h1.Context == "NEUTRAL")
         {
-            return SetupCandidateResult.Aborted(h1, $"H1 context is neutral — no directional bias. {h1.Reason}");
+            return SetupCandidateResult.Aborted(h1, $"H1 context is neutral — no directional bias. {h1.Reason}", marketRegime);
         }
 
         var m15 = EvaluateM15Setup(snapshot);
         if (!m15.IsValid)
         {
-            return SetupCandidateResult.Aborted(h1, $"M15 setup not found: {m15.Reason}");
+            return SetupCandidateResult.Aborted(h1, $"M15 setup not found: {m15.Reason}", marketRegime);
         }
 
         var m5 = EvaluateM5Entry(snapshot);
         if (!m5.IsValid)
         {
-            return SetupCandidateResult.Aborted(h1, m15, $"M5 entry not confirmed: {m5.Reason}");
+            return SetupCandidateResult.Aborted(h1, m15, $"M5 entry not confirmed: {m5.Reason}", marketRegime);
         }
 
-        return SetupCandidateResult.Valid(h1, m15, m5);
+        return SetupCandidateResult.Valid(h1, m15, m5, marketRegime);
     }
 
     // ──────────────────────────────────────────────────────────────────────────

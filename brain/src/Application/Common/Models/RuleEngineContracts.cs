@@ -20,21 +20,41 @@ public sealed record M5EntryResult(
     bool IsRetest,
     string Reason);
 
+/// <summary>
+/// Result from MarketRegimeDetector. Indicates the structural market regime
+/// and whether conditions are suitable for intraday scalping entries.
+/// Regimes: TRENDING_BULL, TRENDING_BEAR, RANGING, CHOPPY, DEAD.
+/// IsTradeable is false for TRENDING_BEAR (buy-only system), CHOPPY, and DEAD.
+/// </summary>
+public sealed record MarketRegimeResult(
+    string Regime,
+    bool IsTradeable,
+    string Reason);
+
 public sealed record SetupCandidateResult(
     bool IsValid,
     H1ContextResult H1Context,
     M15SetupResult? M15Setup,
     M5EntryResult? M5Entry,
-    string AbortReason)
+    string AbortReason,
+    MarketRegimeResult? MarketRegime = null)
 {
-    public static SetupCandidateResult Valid(H1ContextResult h1, M15SetupResult m15, M5EntryResult m5)
-        => new(true, h1, m15, m5, string.Empty);
+    public static SetupCandidateResult Valid(H1ContextResult h1, M15SetupResult m15, M5EntryResult m5, MarketRegimeResult marketRegime)
+        => new(true, h1, m15, m5, string.Empty, marketRegime);
 
-    public static SetupCandidateResult Aborted(H1ContextResult h1, string reason)
-        => new(false, h1, null, null, reason);
+    public static SetupCandidateResult Aborted(H1ContextResult h1, string reason, MarketRegimeResult? marketRegime = null)
+        => new(false, h1, null, null, reason, marketRegime);
 
-    public static SetupCandidateResult Aborted(H1ContextResult h1, M15SetupResult m15, string reason)
-        => new(false, h1, m15, null, reason);
+    public static SetupCandidateResult Aborted(H1ContextResult h1, M15SetupResult m15, string reason, MarketRegimeResult? marketRegime = null)
+        => new(false, h1, m15, null, reason, marketRegime);
+
+    public static SetupCandidateResult AbortedByRegime(MarketRegimeResult marketRegime)
+        => new(false,
+            new H1ContextResult("SKIPPED", false, false, false, $"Aborted by market regime detector: {marketRegime.Regime}"),
+            null,
+            null,
+            marketRegime.Reason,
+            marketRegime);
 }
 
 public sealed record ReplayCandle(
