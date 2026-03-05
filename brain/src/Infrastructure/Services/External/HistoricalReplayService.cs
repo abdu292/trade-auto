@@ -409,6 +409,50 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
 
         // ── Step 3: Decision engine ──
         var regime = RegimeRiskClassifier.Classify(snapshot);
+
+        // Trade scoring: ranks setup quality after all gates passed
+        var tradeScore = TradeScoreCalculator.Calculate(snapshot, setup, aiSignal);
+
+        await timeline.WriteAsync(
+            eventType: "TRADE_SCORE_CALCULATION",
+            stage: "scoring",
+            source: "replay_engine",
+            symbol: snapshot.Symbol,
+            cycleId: cycleId,
+            tradeId: null,
+            payload: new
+            {
+                structureScore = tradeScore.StructureScore,
+                momentumScore = tradeScore.MomentumScore,
+                executionScore = tradeScore.ExecutionScore,
+                aiScore = tradeScore.AiScore,
+                sentimentScore = tradeScore.SentimentScore,
+                totalScore = tradeScore.TotalScore,
+                decisionTier = tradeScore.DecisionTier,
+                threshold = TradeScoreCalculator.NoTradeThreshold,
+                replayMode = true,
+            },
+            cancellationToken: ct);
+
+        if (tradeScore.TotalScore < TradeScoreCalculator.NoTradeThreshold)
+        {
+            await timeline.WriteAsync(
+                eventType: "CYCLE_ABORTED",
+                stage: "scoring",
+                source: "replay_engine",
+                symbol: snapshot.Symbol,
+                cycleId: cycleId,
+                tradeId: null,
+                payload: new
+                {
+                    reason = $"Trade score {tradeScore.TotalScore} below threshold {TradeScoreCalculator.NoTradeThreshold}",
+                    tradeScore.DecisionTier,
+                    replayMode = true,
+                },
+                cancellationToken: ct);
+            return;
+        }
+
         // ledger start balance may be overridden by the start request
         var startingCash = _initialCashAed;
         var ledger = new LedgerStateContract(

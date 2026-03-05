@@ -169,11 +169,41 @@ public sealed class SignalPollingBackgroundService(
                     },
                     cancellationToken: stoppingToken);
 
-                if (!setupCandidate.IsValid && !forceWhereToTrade)
+                if (!setupCandidate.IsValid)
                 {
                     logger.LogInformation(
                         "RULE_ENGINE_ABORT — no setup candidate. Reason={Reason}",
                         setupCandidate.AbortReason);
+
+                    await timeline.WriteAsync(
+                        eventType: "AI_SKIPPED_RULE_ENGINE_ABORT",
+                        stage: "rule_engine",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            reason = "rule engine invalid setup",
+                            abortReason = setupCandidate.AbortReason,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    await timeline.WriteAsync(
+                        eventType: "FINAL_DECISION",
+                        stage: "decision",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            finalDecision = "NO_TRADE",
+                            primaryReason = "RULE_ENGINE_ABORT",
+                            abortReason = setupCandidate.AbortReason,
+                        },
+                        cancellationToken: stoppingToken);
+
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -228,6 +258,21 @@ public sealed class SignalPollingBackgroundService(
                         {
                             reason = newsRisk.Reason,
                             newsRisk.NearbyEvents,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    await timeline.WriteAsync(
+                        eventType: "FINAL_DECISION",
+                        stage: "decision",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            finalDecision = "NO_TRADE",
+                            primaryReason = "NEWS_BLOCK",
+                            reason = newsRisk.Reason,
                         },
                         cancellationToken: stoppingToken);
 
@@ -379,6 +424,21 @@ public sealed class SignalPollingBackgroundService(
                         },
                         cancellationToken: stoppingToken);
 
+                    await timeline.WriteAsync(
+                        eventType: "FINAL_DECISION",
+                        stage: "decision",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            finalDecision = "NO_TRADE",
+                            primaryReason = "AI_QUORUM_FAILED",
+                            reason = loggedReason,
+                        },
+                        cancellationToken: stoppingToken);
+
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -386,6 +446,77 @@ public sealed class SignalPollingBackgroundService(
                 if (tradingViewStore.TryGetLatest(out var tv) && tv is not null)
                 {
                     aiSignal = MergeTradingView(aiSignal, tv, snapshot, logger);
+                }
+
+                // ── Trade Scoring: ranks setup quality after all gates have passed ──
+                // Runs only when rule engine is valid, news is clear, and AI consensus passed.
+                var tradeScore = TradeScoreCalculator.Calculate(snapshot, setupCandidate, aiSignal);
+
+                await timeline.WriteAsync(
+                    eventType: "TRADE_SCORE_CALCULATION",
+                    stage: "scoring",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        structureScore = tradeScore.StructureScore,
+                        momentumScore = tradeScore.MomentumScore,
+                        executionScore = tradeScore.ExecutionScore,
+                        aiScore = tradeScore.AiScore,
+                        sentimentScore = tradeScore.SentimentScore,
+                        totalScore = tradeScore.TotalScore,
+                        decisionTier = tradeScore.DecisionTier,
+                        threshold = TradeScoreCalculator.NoTradeThreshold,
+                    },
+                    cancellationToken: stoppingToken);
+
+                if (tradeScore.TotalScore < TradeScoreCalculator.NoTradeThreshold)
+                {
+                    db.DecisionLogs.Add(DecisionLog.Create(
+                        symbol: snapshot.Symbol,
+                        status: "NO_TRADE",
+                        engineState: "CAPITAL_PROTECTED",
+                        mode: "EXHAUSTION",
+                        cause: "SCORE_BELOW_THRESHOLD",
+                        waterfallRisk: "LOW",
+                        telegramState: snapshot.TelegramState,
+                        railPermissionA: "BLOCKED",
+                        railPermissionB: "BLOCKED",
+                        reason: $"Trade score {tradeScore.TotalScore} below threshold {TradeScoreCalculator.NoTradeThreshold}. Tier: {tradeScore.DecisionTier}",
+                        entry: 0m,
+                        tp: 0m,
+                        grams: 0m,
+                        rotationCapThisSession: 0,
+                        forceWhereToTrade: forceWhereToTrade,
+                        snapshotHash: ComputeSnapshotHash(snapshot)));
+                    await db.SaveChangesAsync(stoppingToken);
+
+                    logger.LogInformation(
+                        "NO_TRADE due to low trade score. Score={Score} Threshold={Threshold} Tier={Tier}",
+                        tradeScore.TotalScore,
+                        TradeScoreCalculator.NoTradeThreshold,
+                        tradeScore.DecisionTier);
+
+                    await timeline.WriteAsync(
+                        eventType: "FINAL_DECISION",
+                        stage: "decision",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            finalDecision = "NO_TRADE",
+                            primaryReason = "SCORE_BELOW_THRESHOLD",
+                            score = tradeScore.TotalScore,
+                            threshold = TradeScoreCalculator.NoTradeThreshold,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
                 }
 
                 var activeStrategy = await db.StrategyProfiles
@@ -550,6 +681,24 @@ public sealed class SignalPollingBackgroundService(
                         decision.Cause,
                         decision.WaterfallRisk,
                         decision.Reason);
+
+                    await timeline.WriteAsync(
+                        eventType: "FINAL_DECISION",
+                        stage: "decision",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            finalDecision = "NO_TRADE",
+                            primaryReason = decision.Cause,
+                            reason = decision.Reason,
+                            engineState = decision.EngineState,
+                            waterfallRisk = decision.WaterfallRisk,
+                        },
+                        cancellationToken: stoppingToken);
+
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -722,6 +871,24 @@ public sealed class SignalPollingBackgroundService(
                         pending.Cause,
                         route = directToMt5 ? "MT5_PENDING" : "APPROVAL_QUEUE",
                         executionMode = executionMode.ToString().ToUpperInvariant(),
+                    },
+                    cancellationToken: stoppingToken);
+
+                await timeline.WriteAsync(
+                    eventType: "FINAL_DECISION",
+                    stage: "decision",
+                    source: "brain",
+                    symbol: pending.Symbol,
+                    cycleId: cycleId,
+                    tradeId: pending.Id.ToString(),
+                    payload: new
+                    {
+                        finalDecision = "TRADE_APPROVED",
+                        entry = pending.Price,
+                        takeProfit = pending.Tp,
+                        rail = pending.Type,
+                        grams = pending.Grams,
+                        route = directToMt5 ? "MT5_PENDING" : "APPROVAL_QUEUE",
                     },
                     cancellationToken: stoppingToken);
 
