@@ -162,6 +162,7 @@ public sealed class SignalPollingBackgroundService(
                     payload: new
                     {
                         setupCandidate.IsValid,
+                        marketRegime = setupCandidate.MarketRegime,
                         h1Context = setupCandidate.H1Context,
                         m15Setup = setupCandidate.M15Setup,
                         m5Entry = setupCandidate.M5Entry,

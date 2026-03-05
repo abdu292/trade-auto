@@ -306,6 +306,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             payload: new
             {
                 setup.IsValid,
+                marketRegime = setup.MarketRegime,
                 h1Context = setup.H1Context,
                 m15Setup = setup.M15Setup,
                 m5Entry = setup.M5Entry,
