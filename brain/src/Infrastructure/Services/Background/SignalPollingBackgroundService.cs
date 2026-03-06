@@ -36,6 +36,11 @@ public sealed class SignalPollingBackgroundService(
     private const int StudyLockWaterfallThreshold = 2;
     private static readonly TimeSpan StudyLockDuration = TimeSpan.FromMinutes(30);
 
+    // Candle-aligned execution: strategy runs only on new M5 or M15 candle close.
+    private static DateTimeOffset? _lastM5CandleTime = null;
+    private static DateTimeOffset? _lastM15CandleTime = null;
+    private static readonly TimeSpan CandleCheckInterval = TimeSpan.FromSeconds(10);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -86,6 +91,31 @@ public sealed class SignalPollingBackgroundService(
                 var symbol = runtimeSettings.GetSymbol();
                 var rawSnapshot = await marketData.GetSnapshotAsync(symbol, stoppingToken);
                 var snapshot = rawSnapshot with { CycleId = cycleId };
+
+                // Candle-aligned gate: only run the strategy when a new M5 or M15 candle has closed.
+                var currentM5Time = snapshot.TimeframeData
+                    .FirstOrDefault(x => string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.CandleStartTime;
+                var currentM15Time = snapshot.TimeframeData
+                    .FirstOrDefault(x => string.Equals(x.Timeframe, "M15", StringComparison.OrdinalIgnoreCase))?.CandleStartTime;
+
+                if (currentM5Time.HasValue || currentM15Time.HasValue)
+                {
+                    var isM5New = currentM5Time.HasValue && currentM5Time != _lastM5CandleTime;
+                    var isM15New = currentM15Time.HasValue && currentM15Time != _lastM15CandleTime;
+
+                    if (!isM5New && !isM15New)
+                    {
+                        // No new M5 or M15 candle since last cycle — skip strategy to reduce noise.
+                        await Task.Delay(CandleCheckInterval, stoppingToken);
+                        continue;
+                    }
+
+                    var trigger = isM5New && isM15New ? "M5+M15" : isM5New ? "M5" : "M15";
+                    logger.LogInformation("Candle-aligned cycle triggered by {Trigger} close.", trigger);
+
+                    if (currentM5Time.HasValue) _lastM5CandleTime = currentM5Time;
+                    if (currentM15Time.HasValue) _lastM15CandleTime = currentM15Time;
+                }
 
                 await timeline.WriteAsync(
                     eventType: "CYCLE_STARTED",
