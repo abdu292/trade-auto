@@ -15,7 +15,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
   bool _pausing = false;
   bool _resuming = false;
   bool _stopping = false;
-  bool _useMockAi = false;
+  bool _useMockAi = true;
   int _speedMultiplier = 100;
   final TextEditingController _symbolController = TextEditingController(text: 'XAUUSD');
 
@@ -40,7 +40,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
       await ref.read(brainApiProvider).startReplay(
             symbol: _symbolController.text.trim().toUpperCase(),
             speedMultiplier: _speedMultiplier,
-            useAI: true,
+            useAI: !_useMockAi,
             useMockAI: _useMockAi,
           );
       await _refresh();
@@ -140,7 +140,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
                     value: _useMockAi,
                     onChanged: (value) => setState(() => _useMockAi = value),
                     title: const Text('Use mock AI (explicit)'),
-                    subtitle: const Text('When off, replay uses real AI by default.'),
+                    subtitle: const Text('Recommended for fast replay. Turn off only when validating real AI behavior.'),
                   ),
                   const SizedBox(height: 8),
                   Wrap(

@@ -143,8 +143,8 @@ class BrainApi {
   Future<ReplayStatusResponse> startReplay({
     required String symbol,
     int speedMultiplier = 100,
-    bool useAI = true,
-    bool useMockAI = false,
+    bool useAI = false,
+    bool useMockAI = true,
     DateTime? from,
     DateTime? to,
   }) async {

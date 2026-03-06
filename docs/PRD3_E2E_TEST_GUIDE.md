@@ -18,6 +18,32 @@ You can set it in either place:
 }
 ```
 
+Request body can also include the new replay control flags for deterministic behaviour:
+
+```json
+{
+  "symbol": "XAUUSD",
+  "speedMultiplier": 200,
+  "useAI": true,
+  "useMockAI": false,
+  "initialCashAed": 50000,
+  "ignoreNewsGate": true,
+  "telegramReplayState": "QUIET"
+}
+```
+
+or:
+
+```json
+{
+  "symbol": "XAUUSD",
+  "speedMultiplier": 200,
+  "useMockAI": true,
+  "ignoreNewsGate": true,
+  "telegramReplayState": "MIXED"
+}
+```
+
 2) **UI Replay screen toggle**: “Use mock AI (explicit)”
    - Implementation references:
      - `ui/lib/features/replay/presentation/replay_screen.dart`
@@ -102,9 +128,9 @@ Health checks:
 ## 3) Live mode test (real MT5)
 
 1. Attach `mt5ea/ExpertAdvisor.ex5` to `XAUUSD` chart.
-2. Set EA inputs:
-   - `BrainBaseUrl = http://127.0.0.1:5000`
-   - `BrainApiKey = dev-local-change-me`
+2. Set EA inputs (use production host when deploying for a client):
+   - `BrainBaseUrl = http://127.0.0.1:5000` (or `https://trade-auto.azurewebsites.net` in Azure)
+   - `BrainApiKey = dev-local-change-me` (replace with the real key provided to your client)
 3. Confirm runtime ingestion:
    - `GET /api/monitoring/runtime`
 4. Verify timeline order (`GET /api/monitoring/timeline?take=300`):

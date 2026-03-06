@@ -34,6 +34,8 @@ dotnet run --project src/Web/Web.csproj
 - `/api/tradingview/latest`
 - `/api/monitoring/*`
 - `/mt5/*` (protected by API key + optional IP allowlist)
+
+> **EA configuration note:** when running the MT5 Expert Advisor against a deployed instance, set the `BrainBaseUrl` input to your application's public address (e.g. `https://trade-auto.azurewebsites.net`) and provide the corresponding API key.
 - `/health`
 
 ## Strategy Profiles

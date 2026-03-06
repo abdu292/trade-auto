@@ -154,11 +154,14 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         var token = _replayCts.Token;
 
         // Capture delay to avoid closure issues
-        var speedMultiplier = Math.Max(1, request.SpeedMultiplier);
+        var speedMultiplier = Math.Max(0, request.SpeedMultiplier);
         var useAI = request.UseMockAI ? false : request.UseAI;
         var ignoreNewsGate = request.IgnoreNewsGate;
         var replayTelegramState = NormalizeReplayTelegramState(request.TelegramReplayState);
         _initialCashAed = request.InitialCashAed;
+
+        // Ensure each replay run starts from a clean risk state.
+        DecisionEngine.ResetRuntimeGuards();
 
         _ = Task.Run(async () =>
         {
@@ -444,6 +447,8 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             },
             cancellationToken: ct);
 
+            aiSignal = NormalizeAiSignalForReplay(aiSignal, snapshot, ignoreNewsGate);
+
         if (!aiSignal.ConsensusPassed)
         {
             await timeline.WriteAsync(
@@ -548,6 +553,44 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         }
     }
 
+    private static TradeSignalContract NormalizeAiSignalForReplay(TradeSignalContract signal, MarketSnapshotContract snapshot, bool ignoreNewsGate)
+    {
+        if (!ignoreNewsGate)
+            return signal;
+
+        var pretableBlocked = string.Equals(signal.DisagreementReason, "RISK_BLOCKED_PRETABLE", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(signal.Rail, "NO_TRADE", StringComparison.OrdinalIgnoreCase)
+            || (signal.Summary?.Contains("PRETABLE_BLOCK", StringComparison.OrdinalIgnoreCase) ?? false);
+
+        if (pretableBlocked)
+        {
+            var fallback = BuildMockAiSignal(snapshot);
+            return fallback with
+            {
+                Summary = "Replay override: bypassed AI pretable news/sentiment block because ignoreNewsGate=true.",
+            };
+        }
+
+        var normalizedSafetyTag = string.Equals(signal.SafetyTag, "BLOCK", StringComparison.OrdinalIgnoreCase)
+            ? "CAUTION"
+            : signal.SafetyTag;
+
+        return signal with
+        {
+            SafetyTag = normalizedSafetyTag,
+            NewsImpactTag = "LOW",
+            NewsTags = Array.Empty<string>(),
+            ModeHint = "UNKNOWN",
+            ModeConfidence = Math.Min(signal.ModeConfidence, 0.45m),
+            ModeTtlSeconds = 900,
+            ModeKeywords = Array.Empty<string>(),
+            RegimeTag = "STANDARD",
+            RiskState = "SAFE",
+            GeoHeadline = "NONE",
+            EventRisk = "LOW",
+        };
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────────────────
@@ -556,15 +599,19 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     {
         // Build multi-timeframe data from all imported candles for this symbol
         var timeframeData = new List<TimeframeDataContract>();
+        var indicatorByTimeframe = new Dictionary<string, IndicatorPack>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var tf in new[] { "H1", "M15", "M5" })
         {
             var key = BuildKey(symbol, tf);
             if (!_candles.TryGetValue(key, out var list)) continue;
 
-            // Find the latest candle at or before the primary candle's timestamp
-            var candle = list.LastOrDefault(c => c.Timestamp <= primary.Timestamp);
-            if (candle is null) continue;
+               var uptoIdx = BinarySearchLastIndexLtEq(list, primary.Timestamp);
+               if (uptoIdx < 0) continue;
+           
+               var candle = list[uptoIdx];
+               var indicators = BuildIndicatorPackOptimized(list, uptoIdx);
+            indicatorByTimeframe[tf] = indicators;
 
             var range = candle.High - candle.Low;
             var body = Math.Abs(candle.Close - candle.Open);
@@ -583,7 +630,11 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
                 CandleBodySize: body,
                 UpperWickSize: upper,
                 LowerWickSize: lower,
-                CandleRange: range));
+                CandleRange: range,
+                Ma20Value: indicators.Ma20,
+                Ma20Distance: indicators.Ma20 > 0m ? candle.Close - indicators.Ma20 : 0m,
+                Rsi: indicators.Rsi14,
+                Atr: indicators.Atr14));
         }
 
         // Fallback: use the primary candle timeframe if no matching TFs found
@@ -606,19 +657,43 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         var (session, phase) = TradingSessionClock.Resolve(primary.Timestamp);
         var close = primary.Close;
         var atr = EstimateAtr(symbol, primary.Timestamp);
+        var h1Indicators = indicatorByTimeframe.GetValueOrDefault("H1");
+        var m15Indicators = indicatorByTimeframe.GetValueOrDefault("M15");
+        var m5Indicators = indicatorByTimeframe.GetValueOrDefault("M5");
+        var compressionCountM15 = CountCompressionCandles(symbol, primary.Timestamp);
+        var expansionCountM15 = CountExpansionCandles(symbol, primary.Timestamp);
+        var m5Range = timeframeData.FirstOrDefault(t => string.Equals(t.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.CandleRange ?? 0m;
+        var m5Body = timeframeData.FirstOrDefault(t => string.Equals(t.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.CandleBodySize ?? 0m;
+        var atrM15 = m15Indicators.Atr14 > 0m ? m15Indicators.Atr14 : atr;
+        var impulseScore = atrM15 > 0m ? Clamp01(m5Body / atrM15) : 0m;
+        var hasImpulse = impulseScore >= 0.40m;
+        var isExpansion = atrM15 > 0m && m5Range >= atrM15 * 1.15m;
 
         return new MarketSnapshotContract(
             Symbol: symbol,
             TimeframeData: timeframeData,
             Atr: atr,
             Adr: atr * 2.5m,
-            Ma20: close,
+            Ma20: h1Indicators.Ma20 > 0m ? h1Indicators.Ma20 : (m5Indicators.Ma20 > 0m ? m5Indicators.Ma20 : close),
             Session: session,
             Timestamp: primary.Timestamp,
+            Ma20H1: h1Indicators.Ma20,
+            RsiH1: h1Indicators.Rsi14,
+            RsiM15: m15Indicators.Rsi14,
+            AtrH1: h1Indicators.Atr14,
+            AtrM15: m15Indicators.Atr14,
+            Ema50H1: h1Indicators.Ema50,
+            Ema200H1: h1Indicators.Ema200,
             Bid: close - 0.10m,
             Ask: close + 0.10m,
             Spread: 0.20m,
             IsCompression: DetectCompression(symbol, primary.Timestamp),
+            CompressionCountM15: compressionCountM15,
+            ExpansionCountM15: expansionCountM15,
+            HasImpulseCandles: hasImpulse,
+            IsExpansion: isExpansion,
+            IsAtrExpanding: expansionCountM15 > 0,
+            ImpulseStrengthScore: impulseScore,
             HasOverlapCandles: DetectBase(symbol, primary.Timestamp),
             DayOfWeek: primary.Timestamp.DayOfWeek,
             Mt5ServerTime: primary.Timestamp,
@@ -626,6 +701,211 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             SessionPhase: phase,
             IsFriday: primary.Timestamp.DayOfWeek == DayOfWeek.Friday,
             CycleId: $"replay_{primary.Timestamp:yyyyMMddHHmmss}");
+    }
+
+    private readonly record struct IndicatorPack(decimal Ma20, decimal Rsi14, decimal Atr14, decimal Ema50, decimal Ema200);
+
+    private static IndicatorPack BuildIndicatorPack(IReadOnlyList<ReplayCandle> candles)
+    {
+        if (candles.Count == 0)
+            return default;
+
+        var closes = candles.Select(c => c.Close).ToList();
+        var ma20 = CalculateSma(closes, 20);
+        var rsi14 = CalculateRsi(closes, 14);
+        var atr14 = CalculateAtr(candles, 14);
+        var ema50 = CalculateEma(closes, 50);
+        var ema200 = CalculateEma(closes, 200);
+        return new IndicatorPack(ma20, rsi14, atr14, ema50, ema200);
+    }
+
+    private static IndicatorPack BuildIndicatorPackOptimized(List<ReplayCandle> allCandles, int upToIndex)
+    {
+        if (upToIndex < 0)
+            return default;
+
+        var closes = new List<decimal>(upToIndex + 1);
+        for (int i = 0; i <= upToIndex; i++)
+        {
+            closes.Add(allCandles[i].Close);
+        }
+
+        var ma20 = CalculateSma(closes, 20);
+        var rsi14 = CalculateRsi(closes, 14);
+        var atr14 = CalculateAtrOptimized(allCandles, upToIndex, 14);
+        var ema50 = CalculateEma(closes, 50);
+        var ema200 = CalculateEma(closes, 200);
+        return new IndicatorPack(ma20, rsi14, atr14, ema50, ema200);
+    }
+
+    private static int BinarySearchLastIndexLtEq(List<ReplayCandle> candles, DateTimeOffset target)
+    {
+        int left = 0, right = candles.Count - 1;
+        int result = -1;
+        while (left <= right)
+        {
+            int mid = left + (right - left) / 2;
+            if (candles[mid].Timestamp <= target)
+            {
+                result = mid;
+                left = mid + 1;
+            }
+            else
+            {
+                right = mid - 1;
+            }
+        }
+        return result;
+    }
+
+    private static decimal CalculateAtrOptimized(List<ReplayCandle> allCandles, int upToIndex, int period)
+    {
+        if (upToIndex < 1 || period <= 0)
+            return 0m;
+
+        var startIdx = Math.Max(1, upToIndex - 50);
+        var trueRanges = new List<decimal>();
+        for (int i = startIdx; i <= upToIndex; i++)
+        {
+            var current = allCandles[i];
+            var prev = allCandles[i - 1];
+            var tr = Math.Max(
+                current.High - current.Low,
+                Math.Max(Math.Abs(current.High - prev.Close), Math.Abs(current.Low - prev.Close)));
+            trueRanges.Add(tr);
+        }
+        if (trueRanges.Count == 0)
+            return 0m;
+        var atr = trueRanges.Take(period).Average();
+        for (var i = period; i < trueRanges.Count; i++)
+        {
+            atr = ((atr * (period - 1)) + trueRanges[i]) / period;
+        }
+        return atr;
+    }
+
+    private static decimal CalculateSma(IReadOnlyList<decimal> values, int period)
+    {
+        if (values.Count < period || period <= 0)
+            return 0m;
+
+        return values.TakeLast(period).Average();
+    }
+
+    private static decimal CalculateEma(IReadOnlyList<decimal> values, int period)
+    {
+        if (values.Count < period || period <= 0)
+            return 0m;
+
+        var seed = values.Take(period).Average();
+        var k = 2m / (period + 1m);
+        var ema = seed;
+        for (var i = period; i < values.Count; i++)
+        {
+            ema = ((values[i] - ema) * k) + ema;
+        }
+
+        return ema;
+    }
+
+    private static decimal CalculateRsi(IReadOnlyList<decimal> closes, int period)
+    {
+        if (closes.Count <= period || period <= 0)
+            return 0m;
+
+        decimal gains = 0m;
+        decimal losses = 0m;
+
+        for (var i = 1; i <= period; i++)
+        {
+            var delta = closes[i] - closes[i - 1];
+            if (delta > 0m)
+                gains += delta;
+            else
+                losses += -delta;
+        }
+
+        var avgGain = gains / period;
+        var avgLoss = losses / period;
+
+        for (var i = period + 1; i < closes.Count; i++)
+        {
+            var delta = closes[i] - closes[i - 1];
+            var gain = delta > 0m ? delta : 0m;
+            var loss = delta < 0m ? -delta : 0m;
+            avgGain = ((avgGain * (period - 1)) + gain) / period;
+            avgLoss = ((avgLoss * (period - 1)) + loss) / period;
+        }
+
+        if (avgLoss == 0m)
+            return avgGain == 0m ? 50m : 100m;
+
+        var rs = avgGain / avgLoss;
+        return 100m - (100m / (1m + rs));
+    }
+
+    private static decimal CalculateAtr(IReadOnlyList<ReplayCandle> candles, int period)
+    {
+        if (candles.Count < 2 || period <= 0)
+            return 0m;
+
+        var trueRanges = new List<decimal>(candles.Count - 1);
+        for (var i = 1; i < candles.Count; i++)
+        {
+            var current = candles[i];
+            var previousClose = candles[i - 1].Close;
+            var highLow = current.High - current.Low;
+            var highClose = Math.Abs(current.High - previousClose);
+            var lowClose = Math.Abs(current.Low - previousClose);
+            trueRanges.Add(Math.Max(highLow, Math.Max(highClose, lowClose)));
+        }
+
+        if (trueRanges.Count == 0)
+            return 0m;
+
+        var take = Math.Min(period, trueRanges.Count);
+        return trueRanges.TakeLast(take).Average();
+    }
+
+    private int CountCompressionCandles(string symbol, DateTimeOffset at)
+    {
+        var key = BuildKey(symbol, "M15");
+        if (!_candles.TryGetValue(key, out var list)) return 0;
+
+        var window = list
+            .Where(c => c.Timestamp <= at)
+            .TakeLast(8)
+            .ToList();
+
+        if (window.Count < 3) return 0;
+
+        var averageRange = window.Average(c => c.High - c.Low);
+        var threshold = averageRange * 0.80m;
+        return window.Count(c => (c.High - c.Low) <= threshold);
+    }
+
+    private int CountExpansionCandles(string symbol, DateTimeOffset at)
+    {
+        var key = BuildKey(symbol, "M15");
+        if (!_candles.TryGetValue(key, out var list)) return 0;
+
+        var window = list
+            .Where(c => c.Timestamp <= at)
+            .TakeLast(8)
+            .ToList();
+
+        if (window.Count < 3) return 0;
+
+        var averageRange = window.Average(c => c.High - c.Low);
+        var threshold = averageRange * 1.20m;
+        return window.Count(c => (c.High - c.Low) >= threshold);
+    }
+
+    private static decimal Clamp01(decimal value)
+    {
+        if (value < 0m) return 0m;
+        if (value > 1m) return 1m;
+        return value;
     }
 
     private bool DetectCompression(string symbol, DateTimeOffset at)

@@ -15,6 +15,19 @@ public static class DecisionEngine
     private static bool _firstLegBanActive;
     private static bool _deescalationRiskActive;
 
+    /// <summary>
+    /// Resets runtime guard state to make replay runs deterministic and isolated.
+    /// </summary>
+    public static void ResetRuntimeGuards()
+    {
+        lock (WarModeGate)
+        {
+            _warModeState = new WarModeState("UNKNOWN", 0.5m, DateTimeOffset.MinValue, []);
+            _firstLegBanActive = false;
+            _deescalationRiskActive = false;
+        }
+    }
+
     public static DecisionResultContract Evaluate(
         MarketSnapshotContract snapshot,
         RegimeClassificationContract regime,
@@ -193,10 +206,11 @@ public static class DecisionEngine
         }
 
         // Section 9.4: BottomPermission hard gate — must be TRUE before any TABLE
-        if (!IsBottomPermissionGranted(snapshot))
+        var (bottomPermissionGranted, bottomPermissionReason) = EvaluateBottomPermission(snapshot);
+        if (!bottomPermissionGranted)
         {
             return NoTrade(
-                "TABLE ABORTED — BOTTOMPERMISSION_FALSE (no clean base/compression/sweep structure).",
+            $"TABLE ABORTED — BOTTOMPERMISSION_FALSE ({bottomPermissionReason}).",
                 score,
                 snapshot,
                 cause: "BOTTOMPERMISSION_FALSE",
@@ -359,9 +373,7 @@ public static class DecisionEngine
         }
 
         // DEESCALATION_RISK activation: de-escalation trap detected — block until flush + BottomPermission confirmed
-        var deEscActivate = mode == "DEESCALATION_RISK"
-            || waterfallRisk == "HIGH"
-            || IsDeescalationRiskConditionsMet(snapshot, mode, aiSignal);
+        var deEscActivate = IsDeescalationRiskConditionsMet(snapshot, mode, aiSignal);
         if (deEscActivate)
         {
             lock (WarModeGate)
@@ -1035,7 +1047,7 @@ public static class DecisionEngine
     /// <summary>
     /// Section 9.4: BottomPermission hard gate — ALL of H1 sweep+reclaim, M15 base, M5 compression, and momentum must be TRUE.
     /// </summary>
-    private static bool IsBottomPermissionGranted(MarketSnapshotContract snapshot)
+    private static (bool IsGranted, string Reason) EvaluateBottomPermission(MarketSnapshotContract snapshot)
     {
         // H1 sweep + reclaim: price swept intraday swing low then reclaimed
         var hasH1SweepReclaim = snapshot.HasLiquiditySweep;
@@ -1051,7 +1063,9 @@ public static class DecisionEngine
         // Momentum confirmation: RSI(M15) > 35 (not oversold) or RSI not available
         var momentumOk = snapshot.RsiM15 == 0m || snapshot.RsiM15 > 35m;
 
-        return hasH1SweepReclaim && hasM15Base && hasM5Compression && momentumOk;
+        var isGranted = hasH1SweepReclaim && hasM15Base && hasM5Compression && momentumOk;
+        var reason = $"H1SweepReclaim={hasH1SweepReclaim}, M15Base={hasM15Base}, M5Compression={hasM5Compression}, MomentumOk={momentumOk}";
+        return (isGranted, reason);
     }
 
     /// <summary>

@@ -1211,6 +1211,12 @@ def _resolve_mode_keywords(telegram_news: TelegramNewsContext, external_news: Ex
     return keywords
 
 
+def _is_quiet_replay_cycle(snapshot: MarketSnapshot) -> bool:
+    cycle_id = (snapshot.cycleId or "").strip().lower()
+    telegram_state = (snapshot.telegramState or "").strip().upper()
+    return cycle_id.startswith("replay_") and telegram_state == "QUIET"
+
+
 def _build_fallback_signal(
     snapshot: MarketSnapshot,
     volatility_expansion: float,
