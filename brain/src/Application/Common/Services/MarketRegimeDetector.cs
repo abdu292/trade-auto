@@ -43,12 +43,13 @@ public static class MarketRegimeDetector
         var adr = snapshot.Adr;
 
         // ── DEAD: near-zero volatility or frozen tick feed ──────────────────────
-        if (IsDeadMarket(snapshot, atrH1, adr))
+        var deadMarket = EvaluateDeadMarket(snapshot, atrH1, adr);
+        if (deadMarket.IsDead)
         {
             return new MarketRegimeResult(
                 Regime: "DEAD",
                 IsTradeable: false,
-                Reason: $"Dead market — AtrH1={atrH1:0.00}, Adr={adr:0.00}, TickRate={snapshot.TickRatePer30s:0.0}/30s.");
+            Reason: deadMarket.Reason);
         }
 
         // ── CHOPPY: ADR range consumed or erratic expansion without structure ────
@@ -91,7 +92,7 @@ public static class MarketRegimeDetector
     // Private helpers
     // ────────────────────────────────────────────────────────────────────────────
 
-    private static bool IsDeadMarket(MarketSnapshotContract snapshot, decimal atrH1, decimal adr)
+    private static (bool IsDead, string Reason) EvaluateDeadMarket(MarketSnapshotContract snapshot, decimal atrH1, decimal adr)
     {
         var atrM15 = snapshot.AtrM15 > 0m ? snapshot.AtrM15 : snapshot.Atr;
         var m5Candle = snapshot.TimeframeData
@@ -102,7 +103,10 @@ public static class MarketRegimeDetector
         // Primary candle-derived signal: H1 ATR is less than 25 % of the average daily range.
         // Guard with M5 activity to avoid false DEAD tags during active impulses.
         if (atrH1 > 0m && adr > 0m && atrH1 < adr * AtrDeadRatioThreshold && !priceIsMoving)
-            return true;
+        {
+            return (true,
+                $"Dead market — low volatility: AtrH1={atrH1:0.00}, Adr={adr:0.00}, AtrH1/Adr={((atrH1 / adr) * 100m):0.0}%, M5Range={m5Range:0.00}, AtrM15={atrM15:0.00}.");
+        }
 
         // Secondary candle-derived confirmation: tick rate is frozen.
         // A low tick rate alone can be an unreliable indicator on some broker feeds
@@ -115,10 +119,13 @@ public static class MarketRegimeDetector
             // If M5 candle range shows meaningful activity relative to M15 ATR,
             // do not classify as dead — price is actively moving despite low tick count.
             if (!priceIsMoving)
-                return true;
+            {
+                return (true,
+                    $"Dead market — frozen tick flow + weak candle activity: TickRate={snapshot.TickRatePer30s:0.0}/30s (<{MinTickRate:0.0}), M5Range={m5Range:0.00}, AtrM15={atrM15:0.00}.");
+            }
         }
 
-        return false;
+        return (false, string.Empty);
     }
 
     private static bool IsChoppyMarket(MarketSnapshotContract snapshot)
