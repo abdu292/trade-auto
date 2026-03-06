@@ -4,10 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/network/api_client.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/ledger/presentation/ledger_screen.dart';
+import '../features/live_feed/presentation/live_feed_screen.dart';
 import '../features/risk/presentation/risk_control_screen.dart';
-import '../features/replay/presentation/replay_screen.dart';
 import '../features/sessions/presentation/session_overview_screen.dart';
-import '../features/strategies/presentation/strategy_control_screen.dart';
 import '../features/trades/presentation/trades_screen.dart';
 import 'app_providers.dart';
 
@@ -23,12 +22,11 @@ class _AppShellState extends ConsumerState<AppShell> {
   bool _isEmergencyPaused = false;
 
   static const _navigationLabels = [
+    'Live Feed',
     'Dashboard',
-    'Strategies',
-    'Risk',
     'Trades',
-    'Replay',
     'Sessions',
+    'Risk',
     'Ledger',
   ];
 
@@ -107,12 +105,10 @@ class _AppShellState extends ConsumerState<AppShell> {
         ..invalidate(ledgerProvider)
         ..invalidate(notificationsProvider)
         ..invalidate(approvalsProvider)
-        ..invalidate(strategiesProvider)
         ..invalidate(riskProfilesProvider)
         ..invalidate(hazardWindowsProvider)
         ..invalidate(activeTradesProvider)
         ..invalidate(signalsProvider)
-        ..invalidate(replayStatusProvider)
         ..invalidate(timelineProvider)
         ..invalidate(sessionsProvider)
         ..invalidate(runtimeStatusProvider)
@@ -126,40 +122,35 @@ class _AppShellState extends ConsumerState<AppShell> {
     final effectiveApiBaseUrl = ref.watch(effectiveApiBaseUrlProvider);
 
     final screens = <Widget>[
+      const LiveFeedScreen(),
       DashboardScreen(isEmergencyPaused: _isEmergencyPaused),
-      const StrategyControlScreen(),
-      const RiskControlScreen(),
       const TradesScreen(),
-      const ReplayScreen(),
       const SessionOverviewScreen(),
+      const RiskControlScreen(),
       const LedgerScreen(),
     ];
 
     final destinations = const <NavigationDestination>[
       NavigationDestination(
+          icon: Icon(Icons.stream_outlined),
+          selectedIcon: Icon(Icons.stream),
+          label: 'Live Feed'),
+      NavigationDestination(
           icon: Icon(Icons.dashboard_outlined),
           selectedIcon: Icon(Icons.dashboard),
           label: 'Dashboard'),
       NavigationDestination(
-          icon: Icon(Icons.tune_outlined),
-          selectedIcon: Icon(Icons.tune),
-          label: 'Strategies'),
-      NavigationDestination(
-          icon: Icon(Icons.shield_outlined),
-          selectedIcon: Icon(Icons.shield),
-          label: 'Risk'),
-      NavigationDestination(
           icon: Icon(Icons.swap_horiz_outlined),
           selectedIcon: Icon(Icons.swap_horiz),
           label: 'Trades'),
-        NavigationDestination(
-          icon: Icon(Icons.replay_outlined),
-          selectedIcon: Icon(Icons.replay),
-          label: 'Replay'),
       NavigationDestination(
           icon: Icon(Icons.schedule_outlined),
           selectedIcon: Icon(Icons.schedule),
           label: 'Sessions'),
+      NavigationDestination(
+          icon: Icon(Icons.shield_outlined),
+          selectedIcon: Icon(Icons.shield),
+          label: 'Risk'),
       NavigationDestination(
           icon: Icon(Icons.account_balance_outlined),
           selectedIcon: Icon(Icons.account_balance),
@@ -172,12 +163,10 @@ class _AppShellState extends ConsumerState<AppShell> {
         ..invalidate(ledgerProvider)
         ..invalidate(notificationsProvider)
         ..invalidate(approvalsProvider)
-        ..invalidate(strategiesProvider)
         ..invalidate(riskProfilesProvider)
         ..invalidate(hazardWindowsProvider)
         ..invalidate(activeTradesProvider)
         ..invalidate(signalsProvider)
-        ..invalidate(replayStatusProvider)
         ..invalidate(timelineProvider)
         ..invalidate(sessionsProvider)
         ..invalidate(runtimeStatusProvider)
@@ -271,22 +260,19 @@ class _AppShellState extends ConsumerState<AppShell> {
                         labelType: NavigationRailLabelType.all,
                         destinations: const [
                           NavigationRailDestination(
+                              icon: Icon(Icons.stream),
+                              label: Text('Live Feed')),
+                          NavigationRailDestination(
                               icon: Icon(Icons.dashboard),
                               label: Text('Dashboard')),
                           NavigationRailDestination(
-                              icon: Icon(Icons.tune),
-                              label: Text('Strategies')),
-                          NavigationRailDestination(
-                              icon: Icon(Icons.shield), label: Text('Risk')),
-                          NavigationRailDestination(
                               icon: Icon(Icons.swap_horiz),
                               label: Text('Trades')),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.replay),
-                              label: Text('Replay')),
                           NavigationRailDestination(
                               icon: Icon(Icons.schedule),
                               label: Text('Sessions')),
+                          NavigationRailDestination(
+                              icon: Icon(Icons.shield), label: Text('Risk')),
                           NavigationRailDestination(
                               icon: Icon(Icons.account_balance),
                               label: Text('Ledger')),
