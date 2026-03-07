@@ -746,10 +746,7 @@ class _DateButton extends StatelessWidget {
                 const Icon(Icons.calendar_today, size: 14),
                 const SizedBox(width: 4),
                 Text(
-                  '${value.year}-${value.month.toString().padLeft(2, '0')}-'
-                  '${value.day.toString().padLeft(2, '0')} '
-                  '${value.hour.toString().padLeft(2, '0')}:'
-                  '${value.minute.toString().padLeft(2, '0')}',
+                  _fmtDt(value),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

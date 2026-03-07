@@ -1039,7 +1039,7 @@ public:
         symbol   = JsonGetString(response, "symbol");
         fromUnix = (long)JsonGetDouble(response, "from");
         toUnix   = (long)JsonGetDouble(response, "to");
-        return (symbol != "" && fromUnix > 0 && toUnix > fromUnix);
+        return (symbol != "" && fromUnix > 0 && toUnix >= fromUnix);
     }
 
     /// <summary>

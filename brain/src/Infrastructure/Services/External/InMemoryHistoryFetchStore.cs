@@ -9,13 +9,32 @@ namespace Brain.Infrastructure.Services.External;
 /// </summary>
 public sealed class InMemoryHistoryFetchStore : IHistoryFetchStore
 {
-    private volatile Mt5HistoryFetchRequest? _pending;
+    private readonly object _lock = new();
+    private Mt5HistoryFetchRequest? _pending;
 
     public void Queue(Mt5HistoryFetchRequest request)
-        => _pending = request;
+    {
+        lock (_lock)
+        {
+            _pending = request;
+        }
+    }
 
-    public Mt5HistoryFetchRequest? GetPending() => _pending;
+    public Mt5HistoryFetchRequest? GetPending()
+    {
+        lock (_lock)
+        {
+            return _pending;
+        }
+    }
 
     public Mt5HistoryFetchRequest? TryConsume()
-        => Interlocked.Exchange(ref _pending, null);
+    {
+        lock (_lock)
+        {
+            var value = _pending;
+            _pending = null;
+            return value;
+        }
+    }
 }
