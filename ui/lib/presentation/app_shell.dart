@@ -2,11 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/network/api_client.dart';
-import '../features/dashboard/presentation/dashboard_screen.dart';
-import '../features/ledger/presentation/ledger_screen.dart';
 import '../features/live_feed/presentation/live_feed_screen.dart';
-import '../features/risk/presentation/risk_control_screen.dart';
-import '../features/sessions/presentation/session_overview_screen.dart';
+import '../features/more/presentation/more_screen.dart';
 import '../features/trades/presentation/trades_screen.dart';
 import 'app_providers.dart';
 
@@ -21,14 +18,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   int _index = 0;
   bool _isEmergencyPaused = false;
 
-  static const _navigationLabels = [
-    'Live Feed',
-    'Dashboard',
-    'Trades',
-    'Sessions',
-    'Risk',
-    'Ledger',
-  ];
+  static const _navigationLabels = ['Monitor', 'Trades', 'More'];
 
   Future<void> _openEnvironmentDialog(BuildContext context) async {
     final selected = ref.read(selectedApiEnvironmentProvider);
@@ -66,9 +56,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                           ),
                         ],
                         onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
+                          if (value == null) return;
                           setDialogState(() => tempEnvironment = value);
                         },
                       ),
@@ -99,21 +87,24 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     if (saved == true) {
       ref.read(selectedApiEnvironmentProvider.notifier).state = tempEnvironment;
-
-      ref
-        ..invalidate(healthProvider)
-        ..invalidate(ledgerProvider)
-        ..invalidate(notificationsProvider)
-        ..invalidate(approvalsProvider)
-        ..invalidate(riskProfilesProvider)
-        ..invalidate(hazardWindowsProvider)
-        ..invalidate(activeTradesProvider)
-        ..invalidate(signalsProvider)
-        ..invalidate(timelineProvider)
-        ..invalidate(sessionsProvider)
-        ..invalidate(runtimeStatusProvider)
-        ..invalidate(kpiProvider);
+      _invalidateAll();
     }
+  }
+
+  void _invalidateAll() {
+    ref
+      ..invalidate(healthProvider)
+      ..invalidate(ledgerProvider)
+      ..invalidate(notificationsProvider)
+      ..invalidate(approvalsProvider)
+      ..invalidate(riskProfilesProvider)
+      ..invalidate(hazardWindowsProvider)
+      ..invalidate(activeTradesProvider)
+      ..invalidate(signalsProvider)
+      ..invalidate(timelineProvider)
+      ..invalidate(sessionsProvider)
+      ..invalidate(runtimeStatusProvider)
+      ..invalidate(kpiProvider);
   }
 
   @override
@@ -123,55 +114,27 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final screens = <Widget>[
       const LiveFeedScreen(),
-      DashboardScreen(isEmergencyPaused: _isEmergencyPaused),
       const TradesScreen(),
-      const SessionOverviewScreen(),
-      const RiskControlScreen(),
-      const LedgerScreen(),
+      const MoreScreen(),
     ];
 
     final destinations = const <NavigationDestination>[
       NavigationDestination(
-          icon: Icon(Icons.stream_outlined),
-          selectedIcon: Icon(Icons.stream),
-          label: 'Live Feed'),
+        icon: Icon(Icons.stream_outlined),
+        selectedIcon: Icon(Icons.stream),
+        label: 'Monitor',
+      ),
       NavigationDestination(
-          icon: Icon(Icons.dashboard_outlined),
-          selectedIcon: Icon(Icons.dashboard),
-          label: 'Dashboard'),
+        icon: Icon(Icons.swap_horiz_outlined),
+        selectedIcon: Icon(Icons.swap_horiz),
+        label: 'Trades',
+      ),
       NavigationDestination(
-          icon: Icon(Icons.swap_horiz_outlined),
-          selectedIcon: Icon(Icons.swap_horiz),
-          label: 'Trades'),
-      NavigationDestination(
-          icon: Icon(Icons.schedule_outlined),
-          selectedIcon: Icon(Icons.schedule),
-          label: 'Sessions'),
-      NavigationDestination(
-          icon: Icon(Icons.shield_outlined),
-          selectedIcon: Icon(Icons.shield),
-          label: 'Risk'),
-      NavigationDestination(
-          icon: Icon(Icons.account_balance_outlined),
-          selectedIcon: Icon(Icons.account_balance),
-          label: 'Ledger'),
+        icon: Icon(Icons.apps_outlined),
+        selectedIcon: Icon(Icons.apps),
+        label: 'More',
+      ),
     ];
-
-    Future<void> refreshEverything() async {
-      ref
-        ..invalidate(healthProvider)
-        ..invalidate(ledgerProvider)
-        ..invalidate(notificationsProvider)
-        ..invalidate(approvalsProvider)
-        ..invalidate(riskProfilesProvider)
-        ..invalidate(hazardWindowsProvider)
-        ..invalidate(activeTradesProvider)
-        ..invalidate(signalsProvider)
-        ..invalidate(timelineProvider)
-        ..invalidate(sessionsProvider)
-        ..invalidate(runtimeStatusProvider)
-        ..invalidate(kpiProvider);
-    }
 
     final isCompact = MediaQuery.sizeOf(context).width < 900;
 
@@ -200,8 +163,8 @@ class _AppShellState extends ConsumerState<AppShell> {
             icon: const Icon(Icons.cloud_sync_outlined),
           ),
           IconButton(
-            onPressed: refreshEverything,
-            tooltip: 'Refresh',
+            onPressed: _invalidateAll,
+            tooltip: 'Refresh all',
             icon: const Icon(Icons.refresh),
           ),
           Padding(
@@ -209,6 +172,14 @@ class _AppShellState extends ConsumerState<AppShell> {
             child: FilledButton(
               onPressed: () =>
                   setState(() => _isEmergencyPaused = !_isEmergencyPaused),
+              style: _isEmergencyPaused
+                  ? FilledButton.styleFrom(
+                      backgroundColor:
+                          Theme.of(context).colorScheme.errorContainer,
+                      foregroundColor:
+                          Theme.of(context).colorScheme.onErrorContainer,
+                    )
+                  : null,
               child: Text(_isEmergencyPaused ? 'Resume' : 'Emergency Pause'),
             ),
           ),
@@ -216,6 +187,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
       body: Column(
         children: [
+          // Emergency pause banner
           AnimatedSize(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
@@ -231,7 +203,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Emergency pause enabled: manual actions only.',
+                              'Emergency pause enabled — manual actions only.',
                             ),
                           ),
                         ],
@@ -240,6 +212,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   )
                 : const SizedBox.shrink(),
           ),
+
           Expanded(
             child: isCompact
                 ? AnimatedSwitcher(
@@ -260,22 +233,20 @@ class _AppShellState extends ConsumerState<AppShell> {
                         labelType: NavigationRailLabelType.all,
                         destinations: const [
                           NavigationRailDestination(
-                              icon: Icon(Icons.stream),
-                              label: Text('Live Feed')),
+                            icon: Icon(Icons.stream_outlined),
+                            selectedIcon: Icon(Icons.stream),
+                            label: Text('Monitor'),
+                          ),
                           NavigationRailDestination(
-                              icon: Icon(Icons.dashboard),
-                              label: Text('Dashboard')),
+                            icon: Icon(Icons.swap_horiz_outlined),
+                            selectedIcon: Icon(Icons.swap_horiz),
+                            label: Text('Trades'),
+                          ),
                           NavigationRailDestination(
-                              icon: Icon(Icons.swap_horiz),
-                              label: Text('Trades')),
-                          NavigationRailDestination(
-                              icon: Icon(Icons.schedule),
-                              label: Text('Sessions')),
-                          NavigationRailDestination(
-                              icon: Icon(Icons.shield), label: Text('Risk')),
-                          NavigationRailDestination(
-                              icon: Icon(Icons.account_balance),
-                              label: Text('Ledger')),
+                            icon: Icon(Icons.apps_outlined),
+                            selectedIcon: Icon(Icons.apps),
+                            label: Text('More'),
+                          ),
                         ],
                       ),
                       const VerticalDivider(width: 1),
@@ -299,7 +270,8 @@ class _AppShellState extends ConsumerState<AppShell> {
           ? NavigationBar(
               selectedIndex: _index,
               destinations: destinations,
-              onDestinationSelected: (value) => setState(() => _index = value),
+              onDestinationSelected: (value) =>
+                  setState(() => _index = value),
             )
           : null,
     );

@@ -54,7 +54,6 @@ public sealed class SignalPollingBackgroundService(
             var ledger = scope.ServiceProvider.GetRequiredService<ITradeLedgerService>();
             var mt5Control = scope.ServiceProvider.GetRequiredService<IMt5ControlStore>();
             var tradingViewStore = scope.ServiceProvider.GetRequiredService<ITradingViewSignalStore>();
-            var simulator = scope.ServiceProvider.GetRequiredService<IMarketSimulationService>();
             var runtimeSettings = scope.ServiceProvider.GetRequiredService<ITradingRuntimeSettingsStore>();
             var db = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
             var timeline = scope.ServiceProvider.GetRequiredService<IRuntimeTimelineWriter>();
@@ -613,48 +612,6 @@ public sealed class SignalPollingBackgroundService(
                     cancellationToken: stoppingToken);
 
                 LogTransitionsIfChanged(db, snapshot, decision, forceWhereToTrade, snapshotHash);
-
-                var simulatorRunning = simulator.GetStatus().IsRunning;
-                if (!decision.IsTradeAllowed
-                    && simulatorRunning
-                    && forceWhereToTrade
-                    && string.Equals(decision.Cause, "MID_AIR_BAN", StringComparison.OrdinalIgnoreCase))
-                {
-                    var primaryClose = snapshot.TimeframeData
-                        .FirstOrDefault(x => string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.Close
-                        ?? snapshot.TimeframeData.First().Close;
-
-                    var fallbackEntry = decimal.Round(primaryClose - Math.Clamp(snapshot.Atr * 0.40m, 6m, 12m), 2);
-                    var fallbackTp = decimal.Round(fallbackEntry + Math.Clamp(snapshot.Atr * 0.95m, 10m, 22m), 2);
-                    var fallbackExpiry = snapshot.Timestamp.AddMinutes(30);
-
-                    decision = decision with
-                    {
-                        IsTradeAllowed = true,
-                        Status = "ARMED",
-                        EngineState = "ARMED",
-                        Cause = "SIM_SHELF_PROOF_BYPASS",
-                        Reason = "Simulation fallback armed after prolonged no-trade shelf-proof gating.",
-                        Bucket = "SIM",
-                        Rail = "BUY_LIMIT",
-                        SizeClass = "SIM_FALLBACK",
-                        Entry = fallbackEntry,
-                        Tp = fallbackTp,
-                        Grams = 100m,
-                        ExpiryUtc = fallbackExpiry,
-                        MaxLifeSeconds = 1800,
-                        RailPermissionA = "ALLOWED",
-                        RailPermissionB = "BLOCKED",
-                        RotationCapThisSession = 1,
-                    };
-
-                    logger.LogInformation(
-                        "Simulation fallback armed to prevent perpetual empty approvals. Cause={Cause}, Session={Session}, Entry={Entry}, TP={Tp}",
-                        decision.Cause,
-                        decision.Session,
-                        decision.Entry,
-                        decision.Tp);
-                }
 
                 if (modeSignal is not null)
                 {

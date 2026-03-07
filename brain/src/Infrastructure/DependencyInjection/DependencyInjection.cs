@@ -28,13 +28,13 @@ public static class DependencyInjection
         services.AddSingleton<ILatestMarketSnapshotStore, InMemoryLatestMarketSnapshotStore>();
         services.AddSingleton<IPendingTradeStore, InMemoryPendingTradeStore>();
         services.AddSingleton<IMt5ControlStore, InMemoryMt5ControlStore>();
+        services.AddSingleton<IHistoryFetchStore, InMemoryHistoryFetchStore>();
         services.AddSingleton<ITradeApprovalStore, InMemoryTradeApprovalStore>();
         services.AddSingleton<ITradingViewSignalStore, InMemoryTradingViewSignalStore>();
         services.AddSingleton<INotificationFeedStore, InMemoryNotificationFeedStore>();
         services.AddSingleton<ITradingRuntimeSettingsStore>(_ =>
             new InMemoryTradingRuntimeSettingsStore(configuration["Execution:Symbol"] ?? "XAUUSD"));
         services.AddSingleton<ITradeLedgerService, DurableTradeLedgerService>();
-        services.AddSingleton<IMarketSimulationService, WeekendMarketSimulationService>();
         services.AddScoped<IMt5BridgeClient, MockMt5BridgeClient>();
         services.AddHttpClient<TelegramNotificationService>()
             .SetHandlerLifetime(TimeSpan.FromMinutes(5));

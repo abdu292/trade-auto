@@ -1007,6 +1007,132 @@ public:
 
         return true;
     }
+
+    // ── History fetch (for replay) ────────────────────────────────────────────
+
+    /// <summary>
+    /// Checks whether the brain has queued a history-fetch request.
+    /// If yes, fills in symbol, fromUnix, toUnix and returns true.
+    /// The request is atomically consumed so only one EA run will process it.
+    /// </summary>
+    bool ConsumeFetchHistoryRequest(string &symbol, long &fromUnix, long &toUnix)
+    {
+        symbol = "";
+        fromUnix = 0;
+        toUnix = 0;
+
+        string url = m_baseUrl + "/mt5/control/fetch-history/consume";
+        string headers = BuildHeaders();
+        char postData[];
+        char result[];
+        string responseHeaders;
+
+        ResetLastError();
+        int code = WebRequest("GET", url, headers, 5000, postData, result, responseHeaders);
+        if (code != 200)
+            return false;
+
+        string response = CharArrayToString(result);
+        if (!JsonGetBool(response, "hasFetchRequest"))
+            return false;
+
+        symbol   = JsonGetString(response, "symbol");
+        fromUnix = (long)JsonGetDouble(response, "from");
+        toUnix   = (long)JsonGetDouble(response, "to");
+        return (symbol != "" && fromUnix > 0 && toUnix >= fromUnix);
+    }
+
+    /// <summary>
+    /// Fetches CopyRates for the given symbol/timeframe between from/to
+    /// and POSTs the candle data to /api/replay/mt5-history.
+    /// Returns the number of candles posted (0 on failure).
+    /// </summary>
+    int FetchAndPostHistory(string symbol, ENUM_TIMEFRAMES tf, string tfName,
+                            datetime fromDt, datetime toDt, bool isFinalBatch)
+    {
+        MqlRates rates[];
+        int count = CopyRates(symbol, tf, fromDt, toDt, rates);
+        if (count <= 0)
+        {
+            Print("FetchAndPostHistory: CopyRates returned ", count, " for ", symbol, " ", tfName);
+            return 0;
+        }
+
+        Print("FetchAndPostHistory: ", symbol, " ", tfName, " — ", count, " candles from ",
+              TimeToString(fromDt), " to ", TimeToString(toDt));
+
+        // Build JSON payload
+        string url = m_baseUrl + "/api/replay/mt5-history";
+        string headers = BuildHeaders();
+
+        // Chunk into batches of 500 to avoid huge payloads
+        int batchSize = 500;
+        int totalSent = 0;
+
+        for (int start = 0; start < count; start += batchSize)
+        {
+            int end = MathMin(start + batchSize, count);
+            bool isLast = isFinalBatch && (end >= count);
+
+            string payload = "{";
+            payload += "\"symbol\":\"" + symbol + "\",";
+            payload += "\"timeframe\":\"" + tfName + "\",";
+            payload += "\"isFinalBatch\":" + (isLast ? "true" : "false") + ",";
+            payload += "\"candles\":[";
+
+            for (int i = start; i < end; i++)
+            {
+                if (i > start) payload += ",";
+                payload += "{";
+                payload += "\"timestampUnix\":" + IntegerToString((long)rates[i].time) + ",";
+                payload += StringFormat("\"open\":%.5f,", rates[i].open);
+                payload += StringFormat("\"high\":%.5f,", rates[i].high);
+                payload += StringFormat("\"low\":%.5f,", rates[i].low);
+                payload += StringFormat("\"close\":%.5f,", rates[i].close);
+                payload += "\"volume\":" + IntegerToString((long)rates[i].tick_volume);
+                payload += "}";
+            }
+
+            payload += "]}";
+
+            char postData[];
+            StringToCharArray(payload, postData, 0, StringLen(payload));
+            char result[];
+            string responseHeaders;
+
+            ResetLastError();
+            int code = WebRequest("POST", url, headers, 15000, postData, result, responseHeaders);
+            if (!(code >= 200 && code < 300))
+            {
+                Print("FetchAndPostHistory POST failed. HTTP=", code, " TF=", tfName,
+                      " Batch=", start, "-", end);
+                return totalSent;
+            }
+
+            totalSent += (end - start);
+        }
+
+        return totalSent;
+    }
+
+    /// <summary>
+    /// Convenience wrapper: fetches M5, M15, H1 candles and posts them to the brain.
+    /// Marks the last batch (H1) as isFinalBatch=true so the brain can auto-start replay.
+    /// </summary>
+    void FetchAndPostAllTimeframes(string symbol, long fromUnix, long toUnix)
+    {
+        datetime fromDt = (datetime)fromUnix;
+        datetime toDt   = (datetime)toUnix;
+
+        Print("Starting history fetch for ", symbol, " from ", TimeToString(fromDt), " to ", TimeToString(toDt));
+
+        int m5Count  = FetchAndPostHistory(symbol, PERIOD_M5,  "M5",  fromDt, toDt, false);
+        int m15Count = FetchAndPostHistory(symbol, PERIOD_M15, "M15", fromDt, toDt, false);
+        int h1Count  = FetchAndPostHistory(symbol, PERIOD_H1,  "H1",  fromDt, toDt, true);
+
+        Print("History fetch complete — M5:", m5Count, " M15:", m15Count, " H1:", h1Count, " candles posted.");
+    }
 };
 
 #endif
+

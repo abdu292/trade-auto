@@ -108,4 +108,40 @@ public sealed record ReplayStatusContract(
     DateTimeOffset? ReplayFrom,
     DateTimeOffset? ReplayTo,
     DateTimeOffset? StartedUtc,
-    string DriverTimeframe);
+    string DriverTimeframe,
+    /// <summary>
+    /// IDLE | MT5_FETCH_QUEUED | MT5_FETCH_RECEIVED | IMPORTING | RUNNING | PAUSED | DONE | ERROR
+    /// </summary>
+    string Phase = "IDLE");
+
+/// <summary>
+/// Candle payload posted by the MT5 EA in response to a history-fetch request.
+/// Each element represents one OHLCV bar.
+/// </summary>
+public sealed record Mt5HistoryCandleDto(
+    long TimestampUnix,   // seconds since unix epoch (MT5 bar open time)
+    double Open,
+    double High,
+    double Low,
+    double Close,
+    long Volume);
+
+/// <summary>
+/// Batch of candles for one symbol + timeframe posted by the MT5 EA.
+/// </summary>
+public sealed record Mt5HistoryBatchRequest(
+    string Symbol,
+    string Timeframe,
+    Mt5HistoryCandleDto[] Candles,
+    bool IsFinalBatch = false);
+
+/// <summary>Request body for the combined MT5-fetch → import → replay endpoint.</summary>
+public sealed record RunReplayRequest(
+    string Symbol = "XAUUSD",
+    DateTimeOffset? From = null,
+    DateTimeOffset? To = null,
+    int SpeedMultiplier = 100,
+    bool UseMockAI = true,
+    decimal InitialCashAed = 50000m,
+    bool IgnoreNewsGate = true,
+    string TelegramReplayState = "QUIET");

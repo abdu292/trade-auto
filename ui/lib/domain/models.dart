@@ -483,6 +483,7 @@ class ReplayStatus {
     this.replayTo,
     this.startedUtc,
     required this.driverTimeframe,
+    this.phase = 'IDLE',
   });
 
   final bool isRunning;
@@ -497,6 +498,7 @@ class ReplayStatus {
   final DateTime? replayTo;
   final DateTime? startedUtc;
   final String driverTimeframe;
+  final String phase;
 
   factory ReplayStatus.fromJson(Map<String, dynamic> json) => ReplayStatus(
         isRunning: _readBool(json, 'isRunning'),
@@ -511,6 +513,7 @@ class ReplayStatus {
         replayTo: _readNullableDateTime(json, 'replayTo'),
         startedUtc: _readNullableDateTime(json, 'startedUtc'),
         driverTimeframe: _readString(json, 'driverTimeframe'),
+        phase: _readString(json, 'phase').isEmpty ? 'IDLE' : _readString(json, 'phase'),
       );
 }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -338,6 +340,23 @@ class LiveFeedScreen extends ConsumerStatefulWidget {
 
 class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
   _FeedFilter _filter = _FeedFilter.all;
+  Timer? _autoRefreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-refresh every 15 seconds so new events appear without scrolling
+    _autoRefreshTimer =
+        Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) ref.invalidate(timelineProvider);
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _refresh() async {
     ref.invalidate(timelineProvider);
