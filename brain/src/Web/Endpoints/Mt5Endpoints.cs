@@ -105,6 +105,34 @@ public static class Mt5Endpoints
             .WithName("ConsumeCancelPendingControl")
             .WithDescription("EA consumes kill-switch command to cancel all broker pending orders.");
 
+        mt5Group.MapGet(
+            "/control/fetch-history/consume",
+            IResult (IHistoryFetchStore fetchStore) =>
+            {
+                var request = fetchStore.TryConsume();
+                if (request is null)
+                {
+                    return TypedResults.Ok(new { hasFetchRequest = false });
+                }
+
+                return TypedResults.Ok(new
+                {
+                    hasFetchRequest = true,
+                    symbol = request.Symbol,
+                    timeframes = request.Timeframes,
+                    from = request.From.ToUnixTimeSeconds(),
+                    to = request.To.ToUnixTimeSeconds(),
+                    fromIso = request.From.UtcDateTime.ToString("o"),
+                    toIso = request.To.UtcDateTime.ToString("o"),
+                });
+            })
+            .WithName("ConsumeFetchHistoryControl")
+            .WithDescription(
+                "EA polls this endpoint to check for a pending history-fetch request. " +
+                "If a request is pending, the EA fetches the specified candles using CopyRates " +
+                "and POSTs them to POST /api/replay/mt5-history in batches.");
+
+
         mt5Group.MapPost(
             "/market-snapshot",
             async Task<IResult> (

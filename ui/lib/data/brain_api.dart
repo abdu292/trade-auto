@@ -140,6 +140,55 @@ class BrainApi {
     return ReplayStatusResponse.fromJson(_asMap(response.data));
   }
 
+  /// One-click: queues an MT5 history fetch + auto-import + replay.
+  /// Returns immediately with phase=MT5_FETCH_QUEUED.
+  Future<ReplayStatusResponse> runReplay({
+    required String symbol,
+    required DateTime from,
+    required DateTime to,
+    int speedMultiplier = 100,
+    bool useMockAI = true,
+    double initialCashAed = 50000,
+  }) async {
+    final response = await _dio.post('/api/replay/run', data: {
+      'symbol': symbol,
+      'from': from.toUtc().toIso8601String(),
+      'to': to.toUtc().toIso8601String(),
+      'speedMultiplier': speedMultiplier,
+      'useMockAI': useMockAI,
+      'initialCashAed': initialCashAed,
+    });
+    final data = _asMap(response.data);
+    return ReplayStatusResponse(
+      status: ReplayStatus.fromJson(_asMap(data['status'])),
+      importedCandles: const {},
+    );
+  }
+
+  /// Starts replay using already-imported candles (after MT5 fetch is done).
+  Future<ReplayStatusResponse> startAfterFetch({
+    required String symbol,
+    DateTime? from,
+    DateTime? to,
+    int speedMultiplier = 100,
+    bool useMockAI = true,
+    double initialCashAed = 50000,
+  }) async {
+    final response = await _dio.post('/api/replay/start-after-fetch', data: {
+      'symbol': symbol,
+      'from': from?.toUtc().toIso8601String(),
+      'to': to?.toUtc().toIso8601String(),
+      'speedMultiplier': speedMultiplier,
+      'useMockAI': useMockAI,
+      'initialCashAed': initialCashAed,
+    });
+    final data = _asMap(response.data);
+    return ReplayStatusResponse(
+      status: ReplayStatus.fromJson(_asMap(data['status'])),
+      importedCandles: const {},
+    );
+  }
+
   Future<ReplayStatusResponse> startReplay({
     required String symbol,
     int speedMultiplier = 100,

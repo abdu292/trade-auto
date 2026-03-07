@@ -14,6 +14,13 @@ public interface IHistoricalReplayService
         Stream csvStream,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Imports candles directly from an in-memory list (used by the MT5 history
+    /// fetch flow where the EA POSTs OHLCV data directly).
+    /// Returns the number of candles stored.
+    /// </summary>
+    int ImportCandlesDirect(string symbol, string timeframe, IEnumerable<ReplayCandle> candles);
+
     /// <summary>Starts the replay loop using previously imported candles.</summary>
     Task StartAsync(ReplayStartRequest request, CancellationToken cancellationToken);
 
@@ -31,4 +38,14 @@ public interface IHistoricalReplayService
 
     /// <summary>Returns the number of imported candles per timeframe for a symbol.</summary>
     IReadOnlyDictionary<string, int> GetImportedCounts(string symbol);
+
+    /// <summary>
+    /// Sets the replay phase string (e.g. MT5_FETCH_QUEUED, MT5_FETCH_RECEIVED,
+    /// IMPORTING, RUNNING, DONE, ERROR, IDLE).
+    /// </summary>
+    void SetPhase(string phase);
+
+    /// <summary>Sets the symbol that the next run will target (needed before fetch).</summary>
+    void SetPendingSymbol(string symbol);
 }
+

@@ -150,6 +150,16 @@ void OnTick()
         CancelAllPendingOrders();
     }
 
+    // Check for history-fetch request (used by one-click replay from the UI)
+    string fetchSymbol;
+    long fetchFrom, fetchTo;
+    if (g_api.ConsumeFetchHistoryRequest(fetchSymbol, fetchFrom, fetchTo))
+    {
+        Print("History fetch request received: ", fetchSymbol,
+              " from=", fetchFrom, " to=", fetchTo);
+        g_api.FetchAndPostAllTimeframes(fetchSymbol, fetchFrom, fetchTo);
+    }
+
     TradeCommand command;
     bool hasCommand = g_api.GetPendingTrade(command);
 

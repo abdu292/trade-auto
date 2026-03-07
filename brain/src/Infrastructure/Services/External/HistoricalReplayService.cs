@@ -40,6 +40,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     private DateTimeOffset? _startedUtc;
     private string _driverTimeframe = "M5";
     private readonly SemaphoreSlim _pauseGate = new(1, 1);
+    private string _phase = "IDLE";
 
     private const decimal DefaultAtrEstimate = 10m; // Default fallback ATR estimate for gold (USD/oz)
 
@@ -50,8 +51,24 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // Phase / pending-symbol helpers
+    // ──────────────────────────────────────────────────────────────────────────
+
+    public void SetPhase(string phase)
+    {
+        _phase = phase;
+        _logger.LogInformation("Replay phase → {Phase}", phase);
+    }
+
+    public void SetPendingSymbol(string symbol)
+    {
+        _symbol = symbol.Trim().ToUpperInvariant();
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // Import
     // ──────────────────────────────────────────────────────────────────────────
+
 
     public async Task<int> ImportCandlesAsync(
         string symbol,
@@ -101,9 +118,23 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         return candles.Count;
     }
 
-    // ──────────────────────────────────────────────────────────────────────────
-    // Control
-    // ──────────────────────────────────────────────────────────────────────────
+    public int ImportCandlesDirect(string symbol, string timeframe, IEnumerable<ReplayCandle> candles)
+    {
+        var symUpper = symbol.Trim().ToUpperInvariant();
+        var tfUpper = timeframe.Trim().ToUpperInvariant();
+        var key = BuildKey(symUpper, tfUpper);
+
+        var list = candles.OrderBy(c => c.Timestamp).ToList();
+        _candles[key] = list;
+
+        _logger.LogInformation(
+            "Replay direct import: {Symbol} {Timeframe} — {Count} candles stored",
+            symUpper, tfUpper, list.Count);
+
+        return list.Count;
+    }
+
+
 
     public async Task StartAsync(ReplayStartRequest request, CancellationToken cancellationToken)
     {
@@ -149,6 +180,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         _startedUtc = DateTimeOffset.UtcNow;
         _isRunning = true;
         _isPaused = false;
+        _phase = "RUNNING";
 
         _replayCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var token = _replayCts.Token;
@@ -168,6 +200,16 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             try
             {
                 await RunReplayLoopAsync(filtered, symUpper, useAI, ignoreNewsGate, replayTelegramState, speedMultiplier, token);
+                _phase = "DONE";
+            }
+            catch (OperationCanceledException)
+            {
+                _phase = "IDLE";
+            }
+            catch (Exception)
+            {
+                _phase = "ERROR";
+                throw;
             }
             finally
             {
@@ -210,6 +252,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         _isPaused = false;
         if (_pauseGate.CurrentCount == 0)
             _pauseGate.Release();
+        _phase = "IDLE";
         _logger.LogInformation("Replay stopped.");
     }
 
@@ -225,7 +268,9 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         ReplayFrom: _replayFrom,
         ReplayTo: _replayTo,
         StartedUtc: _startedUtc,
-        DriverTimeframe: _driverTimeframe);
+        DriverTimeframe: _driverTimeframe,
+        Phase: _phase);
+
 
     public IReadOnlyDictionary<string, int> GetImportedCounts(string symbol)
     {
