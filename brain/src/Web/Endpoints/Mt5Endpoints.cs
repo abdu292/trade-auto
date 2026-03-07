@@ -107,13 +107,20 @@ public static class Mt5Endpoints
 
         mt5Group.MapGet(
             "/control/fetch-history/consume",
-            IResult (IHistoryFetchStore fetchStore) =>
+            IResult (IHistoryFetchStore fetchStore, ILogger<object> logger) =>
             {
                 var request = fetchStore.TryConsume();
                 if (request is null)
                 {
                     return TypedResults.Ok(new { hasFetchRequest = false });
                 }
+
+                logger.LogInformation(
+                    "[ReplayFetch] EA consumed fetch request Symbol={Symbol} From={From:o} To={To:o} Timeframes={Timeframes}",
+                    request.Symbol,
+                    request.From,
+                    request.To,
+                    string.Join(",", request.Timeframes));
 
                 return TypedResults.Ok(new
                 {

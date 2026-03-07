@@ -1,5 +1,6 @@
 using Brain.Application.Common.Interfaces;
 using Brain.Application.Common.Models;
+using Microsoft.Extensions.Logging;
 
 namespace Brain.Web.Endpoints;
 
@@ -69,6 +70,7 @@ public static class ReplayEndpoints
             "/mt5-history",
             IResult (
                 IHistoricalReplayService replay,
+                ILogger<object> logger,
                 Mt5HistoryBatchRequest request) =>
             {
                 if (string.IsNullOrWhiteSpace(request.Symbol))
@@ -94,8 +96,18 @@ public static class ReplayEndpoints
 
                 var count = replay.ImportCandlesDirect(sym, tf, candles);
 
+                logger.LogInformation(
+                    "[ReplayImport] MT5 batch received Symbol={Symbol} TF={Tf} Candles={Count} IsFinalBatch={IsFinalBatch}",
+                    sym,
+                    tf,
+                    count,
+                    request.IsFinalBatch);
+
                 if (request.IsFinalBatch)
+                {
                     replay.SetPhase("MT5_FETCH_RECEIVED");
+                    logger.LogInformation("[ReplayImport] Final batch received; phase moved to MT5_FETCH_RECEIVED for {Symbol}", sym);
+                }
 
                 return TypedResults.Ok(new
                 {
@@ -116,6 +128,7 @@ public static class ReplayEndpoints
             IResult (
                 IHistoricalReplayService replay,
                 IHistoryFetchStore fetchStore,
+                ILogger<object> logger,
                 RunReplayRequest request) =>
             {
                 if (replay.GetStatus().IsRunning)
@@ -140,6 +153,12 @@ public static class ReplayEndpoints
                     From: from,
                     To: to));
 
+                logger.LogInformation(
+                    "[ReplayRun] Fetch queued Symbol={Symbol} From={From:o} To={To:o} Timeframes=M5,M15,H1",
+                    sym,
+                    from,
+                    to);
+
                 return TypedResults.Ok(new
                 {
                     message = "MT5 history fetch queued. The EA will fetch candles and return them. Poll GET /api/replay/status to track progress.",
@@ -163,6 +182,7 @@ public static class ReplayEndpoints
             "/start-after-fetch",
             async Task<IResult> (
                 IHistoricalReplayService replay,
+                ILogger<object> logger,
                 RunReplayRequest request,
                 CancellationToken cancellationToken) =>
             {
@@ -181,11 +201,17 @@ public static class ReplayEndpoints
                         TelegramReplayState: request.TelegramReplayState);
 
                     await replay.StartAsync(startReq, cancellationToken);
+                    logger.LogInformation(
+                        "[ReplayRun] start-after-fetch succeeded Symbol={Symbol} Speed={SpeedMultiplier} UseMockAI={UseMockAI}",
+                        startReq.Symbol,
+                        startReq.SpeedMultiplier,
+                        startReq.UseMockAI);
                     return TypedResults.Ok(new { message = "Replay started.", status = replay.GetStatus() });
                 }
                 catch (InvalidOperationException ex)
                 {
                     replay.SetPhase("ERROR");
+                    logger.LogWarning(ex, "[ReplayRun] start-after-fetch failed for Symbol={Symbol}", request.Symbol);
                     return TypedResults.BadRequest(new { error = ex.Message });
                 }
             })

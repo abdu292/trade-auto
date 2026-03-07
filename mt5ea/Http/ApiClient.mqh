@@ -181,12 +181,25 @@ private:
 
     string JsonGetString(string json, string key)
     {
-        string pattern = "\"" + key + "\":\"";
+        string pattern = "\"" + key + "\":";
         int start = StringFind(json, pattern);
         if (start < 0)
             return "";
 
         start += StringLen(pattern);
+        int len = StringLen(json);
+        while (start < len)
+        {
+            ushort ch = StringGetCharacter(json, start);
+            if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n')
+                break;
+            start++;
+        }
+
+        if (start >= len || StringGetCharacter(json, start) != '"')
+            return "";
+
+        start++;
         int end = StringFind(json, "\"", start);
         if (end < 0)
             return "";
@@ -202,6 +215,15 @@ private:
             return 0.0;
 
         start += StringLen(pattern);
+        int len = StringLen(json);
+        while (start < len)
+        {
+            ushort ch = StringGetCharacter(json, start);
+            if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n')
+                break;
+            start++;
+        }
+
         int endComma = StringFind(json, ",", start);
         int endBrace = StringFind(json, "}", start);
 
@@ -1030,7 +1052,14 @@ public:
         ResetLastError();
         int code = WebRequest("GET", url, headers, 5000, postData, result, responseHeaders);
         if (code != 200)
+        {
+            int lastError = GetLastError();
+            string response = CharArrayToString(result);
+            Print("ConsumeFetchHistoryRequest failed. HTTP=", code,
+                  " LastError=", lastError,
+                  " Response=", response);
             return false;
+        }
 
         string response = CharArrayToString(result);
         if (!JsonGetBool(response, "hasFetchRequest"))
@@ -1039,7 +1068,14 @@ public:
         symbol   = JsonGetString(response, "symbol");
         fromUnix = (long)JsonGetNumber(response, "from");
         toUnix   = (long)JsonGetNumber(response, "to");
-        return (symbol != "" && fromUnix > 0 && toUnix >= fromUnix);
+
+        if (symbol == "" || fromUnix <= 0 || toUnix < fromUnix)
+            return false;
+
+        Print("[ReplayFetch] REQUEST symbol=", symbol,
+              " fromUnix=", fromUnix,
+              " toUnix=", toUnix);
+        return true;
     }
 
     /// <summary>
@@ -1055,6 +1091,40 @@ public:
         if (count <= 0)
         {
             Print("FetchAndPostHistory: CopyRates returned ", count, " for ", symbol, " ", tfName);
+
+            if (isFinalBatch)
+            {
+                // Even if there are no candles on the final timeframe, post a final marker
+                // so the brain can move from MT5_FETCH_QUEUED to the next phase.
+                string markerUrl = m_baseUrl + "/api/replay/mt5-history";
+                string markerHeaders = BuildHeaders();
+                string markerPayload = "{";
+                markerPayload += "\"symbol\":\"" + symbol + "\",";
+                markerPayload += "\"timeframe\":\"" + tfName + "\",";
+                markerPayload += "\"isFinalBatch\":true,";
+                markerPayload += "\"candles\":[]";
+                markerPayload += "}";
+
+                char markerPostData[];
+                StringToCharArray(markerPayload, markerPostData, 0, StringLen(markerPayload));
+                char markerResult[];
+                string markerResponseHeaders;
+
+                ResetLastError();
+                int markerCode = WebRequest("POST", markerUrl, markerHeaders, 15000, markerPostData, markerResult, markerResponseHeaders);
+                if (!(markerCode >= 200 && markerCode < 300))
+                {
+                    Print("FetchAndPostHistory final-marker POST failed. HTTP=", markerCode,
+                          " TF=", tfName,
+                          " LastError=", GetLastError(),
+                          " Response=", CharArrayToString(markerResult));
+                }
+                else
+                {
+                    Print("FetchAndPostHistory final-marker posted for ", tfName,
+                          " (no candles, isFinalBatch=true)");
+                }
+            }
             return 0;
         }
 
@@ -1105,7 +1175,9 @@ public:
             if (!(code >= 200 && code < 300))
             {
                 Print("FetchAndPostHistory POST failed. HTTP=", code, " TF=", tfName,
-                      " Batch=", start, "-", end);
+                    " Batch=", start, "-", end,
+                    " LastError=", GetLastError(),
+                    " Response=", CharArrayToString(result));
                 return totalSent;
             }
 
@@ -1124,13 +1196,19 @@ public:
         datetime fromDt = (datetime)fromUnix;
         datetime toDt   = (datetime)toUnix;
 
-        Print("Starting history fetch for ", symbol, " from ", TimeToString(fromDt), " to ", TimeToString(toDt));
+          Print("[ReplayFetch] START symbol=", symbol,
+              " from=", TimeToString(fromDt),
+              " to=", TimeToString(toDt));
 
         int m5Count  = FetchAndPostHistory(symbol, PERIOD_M5,  "M5",  fromDt, toDt, false);
         int m15Count = FetchAndPostHistory(symbol, PERIOD_M15, "M15", fromDt, toDt, false);
         int h1Count  = FetchAndPostHistory(symbol, PERIOD_H1,  "H1",  fromDt, toDt, true);
 
-        Print("History fetch complete — M5:", m5Count, " M15:", m15Count, " H1:", h1Count, " candles posted.");
+          Print("[ReplayFetch] DONE symbol=", symbol,
+              " M5=", m5Count,
+              " M15=", m15Count,
+              " H1=", h1Count,
+              " candles posted");
     }
 };
 

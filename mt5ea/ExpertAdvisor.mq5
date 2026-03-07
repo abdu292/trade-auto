@@ -13,6 +13,8 @@ input int PollTradeSeconds = 2;
 ApiClient g_api;
 TradeExecutor g_executor;
 RiskGuards g_riskGuards;
+datetime g_lastControlPoll = 0;
+datetime g_lastTradePoll = 0;
 
 struct TrackedTrade
 {
@@ -95,8 +97,44 @@ void CancelAllPendingOrders()
 int OnInit()
 {
     g_api.Configure(BrainBaseUrl, BrainApiKey);
-    Print("Trade Auto EA initialized - Reacting to price ticks");
+    EventSetTimer(MathMax(1, PollTradeSeconds));
+    Print("Trade Auto EA initialized - Reacting to price ticks and timer control polling");
     return(INIT_SUCCEEDED);
+}
+
+void OnDeinit(const int reason)
+{
+    EventKillTimer();
+}
+
+void PollBrainControl()
+{
+    datetime now = TimeLocal();
+    if (now - g_lastControlPoll < PollTradeSeconds)
+        return;
+
+    g_lastControlPoll = now;
+
+    bool cancelPending = false;
+    if (g_api.ConsumeCancelPendingSignal(cancelPending) && cancelPending)
+    {
+        CancelAllPendingOrders();
+    }
+
+    // Check for history-fetch request (used by one-click replay from the UI)
+    string fetchSymbol;
+    long fetchFrom, fetchTo;
+    if (g_api.ConsumeFetchHistoryRequest(fetchSymbol, fetchFrom, fetchTo))
+    {
+        g_api.FetchAndPostAllTimeframes(fetchSymbol, fetchFrom, fetchTo);
+    }
+}
+
+void OnTimer()
+{
+    // Poll replay/control endpoints even when no market ticks arrive,
+    // and regardless of current chart symbol.
+    PollBrainControl();
 }
 
 void OnTick()
@@ -109,7 +147,6 @@ void OnTick()
     g_api.RegisterTick(_Symbol);
 
     static datetime lastSnapshotPush = 0;
-    static datetime lastTradePoll = 0;
     static datetime lastM5Bar = 0;
     static datetime lastM15Bar = 0;
     static datetime lastH1Bar = 0;
@@ -137,28 +174,14 @@ void OnTick()
         lastSnapshotPush = now;
     }
 
-    if (now - lastTradePoll < PollTradeSeconds)
+    PollBrainControl();
+
+    if (now - g_lastTradePoll < PollTradeSeconds)
     {
         return;
     }
 
-    lastTradePoll = now;
-
-    bool cancelPending = false;
-    if (g_api.ConsumeCancelPendingSignal(cancelPending) && cancelPending)
-    {
-        CancelAllPendingOrders();
-    }
-
-    // Check for history-fetch request (used by one-click replay from the UI)
-    string fetchSymbol;
-    long fetchFrom, fetchTo;
-    if (g_api.ConsumeFetchHistoryRequest(fetchSymbol, fetchFrom, fetchTo))
-    {
-        Print("History fetch request received: ", fetchSymbol,
-              " from=", fetchFrom, " to=", fetchTo);
-        g_api.FetchAndPostAllTimeframes(fetchSymbol, fetchFrom, fetchTo);
-    }
+    g_lastTradePoll = now;
 
     TradeCommand command;
     bool hasCommand = g_api.GetPendingTrade(command);

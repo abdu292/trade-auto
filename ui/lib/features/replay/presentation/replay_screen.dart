@@ -54,6 +54,8 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
   bool _pausing = false;
   bool _resuming = false;
   bool _stopping = false;
+  bool _awaitingAutoStart = false;
+  bool _autoStartBusy = false;
 
   Timer? _autoRefreshTimer;
 
@@ -72,9 +74,10 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
 
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
-    _autoRefreshTimer =
-        Timer.periodic(const Duration(seconds: 3), (_) {
-      if (mounted) ref.invalidate(replayStatusProvider);
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      ref.invalidate(replayStatusProvider);
+      _checkAutoStartIfReady();
     });
   }
 
@@ -89,7 +92,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
       context: context,
       initialDate: _fromDate,
       firstDate: DateTime(2020),
-      lastDate: _toDate.subtract(const Duration(days: 1)),
+      lastDate: DateUtils.dateOnly(_toDate),
     );
     if (date == null || !mounted) return;
     final time = await showTimePicker(
@@ -97,17 +100,26 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
       initialTime: TimeOfDay.fromDateTime(_fromDate),
     );
     if (!mounted) return;
-    setState(() {
-      _fromDate = DateTime(date.year, date.month, date.day,
-          time?.hour ?? _fromDate.hour, time?.minute ?? _fromDate.minute);
-    });
+    final candidate = DateTime(date.year, date.month, date.day,
+        time?.hour ?? _fromDate.hour, time?.minute ?? _fromDate.minute);
+    if (!candidate.isBefore(_toDate)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('From time must be earlier than To time.'),
+          ),
+        );
+      }
+      return;
+    }
+    setState(() => _fromDate = candidate);
   }
 
   Future<void> _pickToDate() async {
     final date = await showDatePicker(
       context: context,
       initialDate: _toDate,
-      firstDate: _fromDate.add(const Duration(days: 1)),
+      firstDate: DateUtils.dateOnly(_fromDate),
       lastDate: DateTime.now().add(const Duration(days: 1)),
     );
     if (date == null || !mounted) return;
@@ -116,14 +128,32 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
       initialTime: TimeOfDay.fromDateTime(_toDate),
     );
     if (!mounted) return;
-    setState(() {
-      _toDate = DateTime(date.year, date.month, date.day,
-          time?.hour ?? _toDate.hour, time?.minute ?? _toDate.minute);
-    });
+    final candidate = DateTime(date.year, date.month, date.day,
+        time?.hour ?? _toDate.hour, time?.minute ?? _toDate.minute);
+    if (!candidate.isAfter(_fromDate)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('To time must be later than From time.'),
+          ),
+        );
+      }
+      return;
+    }
+    setState(() => _toDate = candidate);
   }
 
   Future<void> _runReplay() async {
     if (_running) return;
+    if (!_fromDate.isBefore(_toDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Please choose a valid range: From must be earlier than To.'),
+        ),
+      );
+      return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -163,19 +193,26 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
 
     setState(() => _running = true);
     final messenger = ScaffoldMessenger.of(context);
+    final symbol = _symbolController.text.trim().toUpperCase();
 
     try {
       await ref.read(brainApiProvider).runReplay(
-            symbol: _symbolController.text.trim().toUpperCase(),
+            symbol: symbol,
             from: _fromDate,
             to: _toDate,
             speedMultiplier: _speedMultiplier,
             useMockAI: _useMockAi,
           );
+      if (mounted) {
+        setState(() {
+          _awaitingAutoStart = true;
+        });
+      }
       await _refresh();
       messenger.showSnackBar(const SnackBar(
           content: Text(
               'MT5 history fetch queued. Waiting for EA to deliver data…')));
+      await _checkAutoStartIfReady();
     } catch (error) {
       messenger.showSnackBar(
           SnackBar(content: Text('Failed to start replay: $error')));
@@ -198,13 +235,69 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
             to: _toDate,
           );
       await _refresh();
-      messenger.showSnackBar(
-          const SnackBar(content: Text('Replay started using imported candles.')));
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Replay started using imported candles.')));
     } catch (error) {
       messenger.showSnackBar(
           SnackBar(content: Text('Failed to start replay: $error')));
     } finally {
       if (mounted) setState(() => _running = false);
+    }
+  }
+
+  Future<void> _checkAutoStartIfReady() async {
+    if (!_awaitingAutoStart || _autoStartBusy || !mounted) return;
+
+    _autoStartBusy = true;
+    try {
+      final symbol = _symbolController.text.trim().toUpperCase();
+      final statusResponse =
+          await ref.read(brainApiProvider).getReplayStatus(symbol: symbol);
+      final phase = _parsePhase(statusResponse.status.phase);
+      final imported = statusResponse.importedCandles;
+      final hasAllTimeframes = imported.containsKey('M5') &&
+          imported.containsKey('M15') &&
+          imported.containsKey('H1');
+
+      if (phase == _ReplayPhase.mt5FetchReceived ||
+          phase == _ReplayPhase.importing ||
+          (phase == _ReplayPhase.mt5FetchQueued && hasAllTimeframes)) {
+        await ref.read(brainApiProvider).startAfterFetch(
+              symbol: symbol,
+              from: _fromDate,
+              to: _toDate,
+              speedMultiplier: _speedMultiplier,
+              useMockAI: _useMockAi,
+            );
+        if (mounted) {
+          setState(() {
+            _awaitingAutoStart = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content:
+                    Text('Replay started automatically after MT5 import.')),
+          );
+        }
+        await _refresh();
+      } else if (phase == _ReplayPhase.running || phase == _ReplayPhase.done) {
+        if (mounted) {
+          setState(() => _awaitingAutoStart = false);
+        }
+      } else if (phase == _ReplayPhase.error) {
+        if (mounted) {
+          setState(() => _awaitingAutoStart = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text(
+                    'Replay entered ERROR state during MT5 fetch/import.')),
+          );
+        }
+      }
+    } catch (_) {
+      // Keep waiting; transient polling failures should not cancel auto-start.
+    } finally {
+      _autoStartBusy = false;
     }
   }
 
@@ -308,9 +401,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                           child: _DateButton(
-                              label: 'To',
-                              value: _toDate,
-                              onTap: _pickToDate)),
+                              label: 'To', value: _toDate, onTap: _pickToDate)),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -381,12 +472,10 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
                                     width: 18,
                                     height: 18,
                                     child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white))
+                                        strokeWidth: 2, color: Colors.white))
                                 : const Icon(Icons.play_arrow),
-                            label: Text(_running
-                                ? 'Starting…'
-                                : 'Run Replay from MT5'),
+                            label: Text(
+                                _running ? 'Starting…' : 'Run Replay from MT5'),
                           ),
                         ),
                       ],
@@ -435,8 +524,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
                       child: ListTile(
                         dense: true,
                         title: Text('${item.eventType} · ${item.stage}'),
-                        subtitle: Text(
-                            '${_fmtDt(item.createdAtUtc)} · '
+                        subtitle: Text('${_fmtDt(item.createdAtUtc)} · '
                             'cycle=${item.cycleId ?? '-'}'),
                       ),
                     );
@@ -486,6 +574,9 @@ class _StatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final phase = _parsePhase(status.phase);
     final cs = Theme.of(context).colorScheme;
+    final overallProgress = _overallReplayProgress(phase, status);
+    final progressPct =
+        (overallProgress * 100).clamp(0, 100).toStringAsFixed(1);
 
     return Card(
       child: Padding(
@@ -502,7 +593,17 @@ class _StatusCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             _ProgressSteps(phase: phase),
-
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: overallProgress,
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Overall progress: $progressPct%',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             if (status.isRunning) ...[
               const SizedBox(height: 12),
               LinearProgressIndicator(
@@ -516,7 +617,6 @@ class _StatusCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
-
             const SizedBox(height: 12),
             Wrap(
               spacing: 6,
@@ -533,7 +633,6 @@ class _StatusCard extends StatelessWidget {
                   _chip(context, e.key, '${e.value}'),
               ],
             ),
-
             if (status.isRunning) ...[
               const SizedBox(height: 12),
               Wrap(
@@ -554,8 +653,7 @@ class _StatusCard extends StatelessWidget {
                     ),
                   OutlinedButton.icon(
                     onPressed: stopping ? null : onStop,
-                    style:
-                        OutlinedButton.styleFrom(foregroundColor: cs.error),
+                    style: OutlinedButton.styleFrom(foregroundColor: cs.error),
                     icon: const Icon(Icons.stop, size: 18),
                     label: Text(stopping ? 'Stopping…' : 'Stop'),
                   ),
@@ -572,6 +670,23 @@ class _StatusCard extends StatelessWidget {
         label: Text('$label: $value'),
         labelStyle: Theme.of(context).textTheme.labelSmall,
       );
+}
+
+double _overallReplayProgress(_ReplayPhase phase, ReplayStatus status) {
+  final replayProgress = status.totalCandles > 0
+      ? (status.processedCandles / status.totalCandles).clamp(0.0, 1.0)
+      : 0.0;
+
+  return switch (phase) {
+    _ReplayPhase.idle => 0.0,
+    _ReplayPhase.mt5FetchQueued => 0.15,
+    _ReplayPhase.mt5FetchReceived => 0.45,
+    _ReplayPhase.importing => 0.65,
+    _ReplayPhase.running => 0.65 + (replayProgress * 0.35),
+    _ReplayPhase.paused => 0.65 + (replayProgress * 0.35),
+    _ReplayPhase.done => 1.0,
+    _ReplayPhase.error => replayProgress > 0 ? replayProgress : 0.1,
+  };
 }
 
 // ─── Progress steps ───────────────────────────────────────────────────────────
@@ -599,8 +714,7 @@ class _ProgressSteps extends StatelessWidget {
       (
         label: 'Replay',
         done: phase == _ReplayPhase.done,
-        active:
-            phase == _ReplayPhase.running || phase == _ReplayPhase.paused,
+        active: phase == _ReplayPhase.running || phase == _ReplayPhase.paused,
       ),
     ];
 
@@ -660,8 +774,8 @@ class _StepIcon extends StatelessWidget {
                 ? SizedBox(
                     width: 14,
                     height: 14,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: color))
+                    child:
+                        CircularProgressIndicator(strokeWidth: 2, color: color))
                 : done
                     ? Icon(Icons.check, size: 14, color: color)
                     : error
@@ -702,8 +816,8 @@ class _PhaseChip extends StatelessWidget {
 
     return Chip(
       label: Text(label),
-      labelStyle: TextStyle(
-          color: color, fontWeight: FontWeight.bold, fontSize: 12),
+      labelStyle:
+          TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
       backgroundColor: color.withOpacity(0.12),
       side: BorderSide(color: color.withOpacity(0.4)),
     );
@@ -729,8 +843,7 @@ class _DateButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           border: Border.all(
-              color:
-                  Theme.of(context).colorScheme.outline.withOpacity(0.6)),
+              color: Theme.of(context).colorScheme.outline.withOpacity(0.6)),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
@@ -738,8 +851,7 @@ class _DateButton extends StatelessWidget {
           children: [
             Text(label,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color:
-                        Theme.of(context).colorScheme.onSurfaceVariant)),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 2),
             Row(
               children: [

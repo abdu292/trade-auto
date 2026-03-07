@@ -23,7 +23,7 @@ Set `BrainApiKey` to match Brain `Security:ApiKey` value.
 After installing MetaTrader 5 / MetaEditor, run a single command to compile **and** deploy in one step:
 
 ```powershell
-./build-and-deploy.ps1
+./compile-and-deploy.ps1
 ```
 
 This script:
@@ -35,10 +35,10 @@ Optional parameters:
 
 ```powershell
 # Target a specific terminal instance by its ID (the folder name under AppData\Roaming\MetaQuotes\Terminal)
-./build-and-deploy.ps1 -TerminalId <id>
+./compile-and-deploy.ps1 -TerminalId <id>
 
 # Override the compile-log output path
-./build-and-deploy.ps1 -LogPath ./build/metaeditor-compile.log
+./compile-and-deploy.ps1 -LogPath ./build/metaeditor-compile.log
 ```
 
 After running, refresh the EA list inside MT5: right-click **Expert Advisors** in the Navigator and choose **Refresh**.

@@ -83,7 +83,10 @@ class MoreScreen extends StatelessWidget {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: item.builder,
+                    builder: (routeContext) => _MoreRoutePage(
+                      title: item.label,
+                      child: item.builder(routeContext),
+                    ),
                     settings: RouteSettings(name: item.label),
                   ),
                 ),
@@ -158,4 +161,19 @@ class _MoreItem {
   final String subtitle;
   final Color color;
   final WidgetBuilder builder;
+}
+
+class _MoreRoutePage extends StatelessWidget {
+  const _MoreRoutePage({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: SafeArea(child: child),
+    );
+  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/network/api_client.dart';
+import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/live_feed/presentation/live_feed_screen.dart';
 import '../features/more/presentation/more_screen.dart';
 import '../features/trades/presentation/trades_screen.dart';
@@ -17,8 +18,6 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   int _index = 0;
   bool _isEmergencyPaused = false;
-
-  static const _navigationLabels = ['Monitor', 'Trades', 'More'];
 
   Future<void> _openEnvironmentDialog(BuildContext context) async {
     final selected = ref.read(selectedApiEnvironmentProvider);
@@ -112,35 +111,50 @@ class _AppShellState extends ConsumerState<AppShell> {
     final apiEnvironment = ref.watch(selectedApiEnvironmentProvider);
     final effectiveApiBaseUrl = ref.watch(effectiveApiBaseUrlProvider);
 
-    final screens = <Widget>[
-      const LiveFeedScreen(),
-      const TradesScreen(),
-      const MoreScreen(),
+    final navItems = [
+      (
+        label: 'Dashboard',
+        icon: Icons.dashboard_outlined,
+        selectedIcon: Icons.dashboard,
+        screen: DashboardScreen(isEmergencyPaused: _isEmergencyPaused),
+      ),
+      (
+        label: 'Monitor',
+        icon: Icons.stream_outlined,
+        selectedIcon: Icons.stream,
+        screen: const LiveFeedScreen(),
+      ),
+      (
+        label: 'Trades',
+        icon: Icons.swap_horiz_outlined,
+        selectedIcon: Icons.swap_horiz,
+        screen: const TradesScreen(),
+      ),
+      (
+        label: 'More',
+        icon: Icons.apps_outlined,
+        selectedIcon: Icons.apps,
+        screen: const MoreScreen(),
+      ),
     ];
 
-    final destinations = const <NavigationDestination>[
-      NavigationDestination(
-        icon: Icon(Icons.stream_outlined),
-        selectedIcon: Icon(Icons.stream),
-        label: 'Monitor',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.swap_horiz_outlined),
-        selectedIcon: Icon(Icons.swap_horiz),
-        label: 'Trades',
-      ),
-      NavigationDestination(
-        icon: Icon(Icons.apps_outlined),
-        selectedIcon: Icon(Icons.apps),
-        label: 'More',
-      ),
-    ];
+    final screens = navItems.map((item) => item.screen).toList();
+
+    final destinations = navItems
+        .map(
+          (item) => NavigationDestination(
+            icon: Icon(item.icon),
+            selectedIcon: Icon(item.selectedIcon),
+            label: item.label,
+          ),
+        )
+        .toList(growable: false);
 
     final isCompact = MediaQuery.sizeOf(context).width < 900;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_navigationLabels[_index]),
+        title: Text(navItems[_index].label),
         actions: [
           Center(
             child: Padding(
@@ -231,23 +245,15 @@ class _AppShellState extends ConsumerState<AppShell> {
                         onDestinationSelected: (value) =>
                             setState(() => _index = value),
                         labelType: NavigationRailLabelType.all,
-                        destinations: const [
-                          NavigationRailDestination(
-                            icon: Icon(Icons.stream_outlined),
-                            selectedIcon: Icon(Icons.stream),
-                            label: Text('Monitor'),
-                          ),
-                          NavigationRailDestination(
-                            icon: Icon(Icons.swap_horiz_outlined),
-                            selectedIcon: Icon(Icons.swap_horiz),
-                            label: Text('Trades'),
-                          ),
-                          NavigationRailDestination(
-                            icon: Icon(Icons.apps_outlined),
-                            selectedIcon: Icon(Icons.apps),
-                            label: Text('More'),
-                          ),
-                        ],
+                        destinations: navItems
+                            .map(
+                              (item) => NavigationRailDestination(
+                                icon: Icon(item.icon),
+                                selectedIcon: Icon(item.selectedIcon),
+                                label: Text(item.label),
+                              ),
+                            )
+                            .toList(growable: false),
                       ),
                       const VerticalDivider(width: 1),
                       Expanded(
@@ -270,8 +276,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           ? NavigationBar(
               selectedIndex: _index,
               destinations: destinations,
-              onDestinationSelected: (value) =>
-                  setState(() => _index = value),
+              onDestinationSelected: (value) => setState(() => _index = value),
             )
           : null,
     );
