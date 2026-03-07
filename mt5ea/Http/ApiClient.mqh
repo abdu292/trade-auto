@@ -1037,8 +1037,8 @@ public:
             return false;
 
         symbol   = JsonGetString(response, "symbol");
-        fromUnix = (long)JsonGetDouble(response, "from");
-        toUnix   = (long)JsonGetDouble(response, "to");
+        fromUnix = (long)JsonGetNumber(response, "from");
+        toUnix   = (long)JsonGetNumber(response, "to");
         return (symbol != "" && fromUnix > 0 && toUnix >= fromUnix);
     }
 
