@@ -85,7 +85,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
 
     if (saved == true) {
-      ref.read(selectedApiEnvironmentProvider.notifier).state = tempEnvironment;
+      await ref
+          .read(selectedApiEnvironmentProvider.notifier)
+          .setEnvironment(tempEnvironment);
       _invalidateAll();
     }
   }

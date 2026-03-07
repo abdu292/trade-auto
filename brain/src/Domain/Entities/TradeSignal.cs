@@ -30,7 +30,7 @@ public sealed class TradeSignal : BaseEntity<TradeSignalId>
         return new TradeSignal
         {
             Id = TradeSignalId.New(),
-            Symbol = symbol.Trim().ToUpperInvariant(),
+            Symbol = symbol.Trim(),
             Rail = rail,
             Entry = entry,
             TakeProfit = takeProfit,

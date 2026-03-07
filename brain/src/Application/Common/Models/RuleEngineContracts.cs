@@ -86,7 +86,7 @@ public sealed record ReplayCandle(
     long Volume);
 
 public sealed record ReplayStartRequest(
-    string Symbol = "XAUUSD",
+    string Symbol = "XAUUSD.gram",
     DateTimeOffset? From = null,
     DateTimeOffset? To = null,
     int SpeedMultiplier = 100,
@@ -137,7 +137,7 @@ public sealed record Mt5HistoryBatchRequest(
 
 /// <summary>Request body for the combined MT5-fetch → import → replay endpoint.</summary>
 public sealed record RunReplayRequest(
-    string Symbol = "XAUUSD",
+    string Symbol = "XAUUSD.gram",
     DateTimeOffset? From = null,
     DateTimeOffset? To = null,
     int SpeedMultiplier = 100,

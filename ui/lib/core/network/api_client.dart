@@ -1,12 +1,52 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum ApiEnvironment { production, local }
 
-final selectedApiEnvironmentProvider = StateProvider<ApiEnvironment>(
-  (ref) => ApiEnvironment.production,
-);
+const _apiEnvironmentPrefKey = 'selected_api_environment';
+
+ApiEnvironment _parseApiEnvironment(String? raw) {
+  for (final env in ApiEnvironment.values) {
+    if (env.name == raw) {
+      return env;
+    }
+  }
+  return ApiEnvironment.production;
+}
+
+class SelectedApiEnvironmentNotifier extends Notifier<ApiEnvironment> {
+  @override
+  ApiEnvironment build() {
+    _hydrateFromStorage();
+    return ApiEnvironment.production;
+  }
+
+  Future<void> setEnvironment(ApiEnvironment environment) async {
+    if (state == environment) {
+      return;
+    }
+
+    state = environment;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_apiEnvironmentPrefKey, environment.name);
+  }
+
+  Future<void> _hydrateFromStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final restored = _parseApiEnvironment(prefs.getString(_apiEnvironmentPrefKey));
+
+    if (state != restored) {
+      state = restored;
+    }
+  }
+}
+
+final selectedApiEnvironmentProvider =
+    NotifierProvider<SelectedApiEnvironmentNotifier, ApiEnvironment>(
+      SelectedApiEnvironmentNotifier.new,
+    );
 
 final productionApiBaseUrlProvider = Provider<String>((ref) {
   return _stripApiSuffix('https://trade-auto.azurewebsites.net');

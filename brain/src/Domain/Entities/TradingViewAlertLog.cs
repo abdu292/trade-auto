@@ -4,11 +4,13 @@ namespace Brain.Domain.Entities;
 
 public sealed class TradingViewAlertLog : BaseEntity<Guid>
 {
+    private const string DefaultSymbol = "XAUUSD.gram";
+
     private TradingViewAlertLog()
     {
     }
 
-    public string Symbol { get; private set; } = "XAUUSD";
+    public string Symbol { get; private set; } = DefaultSymbol;
     public string Timeframe { get; private set; } = "M15";
     public string Signal { get; private set; } = "NEUTRAL";
     public string ConfirmationTag { get; private set; } = "NEUTRAL";
@@ -37,7 +39,7 @@ public sealed class TradingViewAlertLog : BaseEntity<Guid>
         return new TradingViewAlertLog
         {
             Id = Guid.NewGuid(),
-            Symbol = symbol.Trim().ToUpperInvariant(),
+            Symbol = string.IsNullOrWhiteSpace(symbol) ? DefaultSymbol : symbol.Trim(),
             Timeframe = timeframe.Trim().ToUpperInvariant(),
             Signal = signal.Trim().ToUpperInvariant(),
             ConfirmationTag = confirmationTag.Trim().ToUpperInvariant(),

@@ -7,6 +7,8 @@ namespace Brain.Web.Endpoints;
 
 public static class TradingViewEndpoints
 {
+    private const string DefaultSymbol = "XAUUSD.gram";
+
     public static RouteGroupBuilder MapTradingViewEndpoints(this RouteGroupBuilder group)
     {
         var tradingView = group.MapGroup("/tradingview").WithTags("TradingView");
@@ -37,7 +39,7 @@ public static class TradingViewEndpoints
                 }
 
                 var signal = new TradingViewSignalContract(
-                    Symbol: (request.Symbol ?? "XAUUSD").Trim().ToUpperInvariant(),
+                    Symbol: string.IsNullOrWhiteSpace(request.Symbol) ? DefaultSymbol : request.Symbol.Trim(),
                     Timeframe: (request.Timeframe ?? "M15").Trim().ToUpperInvariant(),
                     Signal: (request.Signal ?? "NEUTRAL").Trim().ToUpperInvariant(),
                     ConfirmationTag: NormalizeConfirmationTag(request.ConfirmationTag),

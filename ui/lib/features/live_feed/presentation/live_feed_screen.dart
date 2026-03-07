@@ -100,7 +100,7 @@ String _describeEvent(RuntimeTimelineItem item) {
 
     case 'CYCLE_STARTED':
     case 'REPLAY_CYCLE_STARTED':
-      final symbol = s('symbol').isNotEmpty ? s('symbol') : 'XAUUSD';
+      final symbol = s('symbol').isNotEmpty ? s('symbol') : 'XAUUSD.gram';
       return 'New decision cycle started for $symbol';
 
     case 'MARKET_REGIME_DETECTED':

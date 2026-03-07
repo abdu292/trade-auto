@@ -26,6 +26,11 @@ _MAX_PROVIDER_TRACES = 120
 _MAX_TRACE_FIELD_CHARS = 3500
 
 
+def _is_supported_symbol(symbol: str) -> bool:
+    normalized = (symbol or "").strip().upper()
+    return normalized.startswith("XAUUSD")
+
+
 def _json_default(value: object) -> object:
     if isinstance(value, (datetime,)):
         return value.isoformat()
@@ -71,8 +76,8 @@ class AnalyzerService:
             )
 
     async def analyze(self, snapshot: MarketSnapshot) -> TradeSignal:
-        if snapshot.symbol.upper() != "XAUUSD":
-            raise ValueError("Only XAUUSD is supported")
+        if not _is_supported_symbol(snapshot.symbol):
+            raise ValueError("Only XAUUSD-family symbols are supported")
 
         allowed_tfs = {"H1", "M15", "M5"}
         scoped_timeframes = [

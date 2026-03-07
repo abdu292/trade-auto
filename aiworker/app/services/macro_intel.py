@@ -15,6 +15,11 @@ from app.ai.config import (
 logger = logging.getLogger(__name__)
 
 
+def _is_supported_symbol(symbol: str) -> bool:
+    normalized = (symbol or "").strip().upper()
+    return normalized.startswith("XAUUSD")
+
+
 @dataclass
 class MacroIntelContext:
     geo_headline: str = "NONE"
@@ -29,7 +34,7 @@ class MacroIntelContext:
 
 class MacroIntelService:
     async def collect_context(self, symbol: str) -> MacroIntelContext:
-        if symbol.upper() != "XAUUSD":
+        if not _is_supported_symbol(symbol):
             return MacroIntelContext()
 
         perplexity_payload = await self._fetch_from_perplexity()

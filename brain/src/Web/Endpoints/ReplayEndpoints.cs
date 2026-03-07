@@ -6,6 +6,11 @@ namespace Brain.Web.Endpoints;
 
 public static class ReplayEndpoints
 {
+    private const string DefaultReplaySymbol = "XAUUSD.gram";
+
+    // Hidden pre-roll to stabilize H1/M15 indicators and structural context.
+    private static readonly TimeSpan ReplayFetchWarmup = TimeSpan.FromHours(30);
+
     public static IEndpointRouteBuilder MapReplayEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/replay")
@@ -26,7 +31,7 @@ public static class ReplayEndpoints
                     return TypedResults.BadRequest(new { error = "A CSV file must be uploaded using the 'file' form field." });
                 }
 
-                var symNorm = (symbol ?? string.Empty).Trim().ToUpperInvariant();
+                var symNorm = (symbol ?? string.Empty).Trim();
                 var tfNorm = (timeframe ?? string.Empty).Trim().ToUpperInvariant();
 
                 if (string.IsNullOrWhiteSpace(symNorm))
@@ -79,7 +84,7 @@ public static class ReplayEndpoints
                 if (string.IsNullOrWhiteSpace(request.Timeframe))
                     return TypedResults.BadRequest(new { error = "Timeframe is required." });
 
-                var sym = request.Symbol.Trim().ToUpperInvariant();
+                var sym = request.Symbol.Trim();
                 var tf = request.Timeframe.Trim().ToUpperInvariant();
 
                 var candles = request.Candles
@@ -134,9 +139,12 @@ public static class ReplayEndpoints
                 if (replay.GetStatus().IsRunning)
                     return TypedResults.BadRequest(new { error = "A replay is already running. Stop it first." });
 
-                var sym = (request.Symbol ?? "XAUUSD").Trim().ToUpperInvariant();
+                var sym = string.IsNullOrWhiteSpace(request.Symbol)
+                    ? DefaultReplaySymbol
+                    : request.Symbol.Trim();
                 var from = request.From ?? DateTimeOffset.UtcNow.AddDays(-7);
                 var to = request.To ?? DateTimeOffset.UtcNow;
+                var fetchFrom = from - ReplayFetchWarmup;
 
                 if (to <= from)
                     return TypedResults.BadRequest(new { error = "'to' must be after 'from'." });
@@ -150,20 +158,23 @@ public static class ReplayEndpoints
                 fetchStore.Queue(new Mt5HistoryFetchRequest(
                     Symbol: sym,
                     Timeframes: ["M5", "M15", "H1"],
-                    From: from,
+                    From: fetchFrom,
                     To: to));
 
                 logger.LogInformation(
-                    "[ReplayRun] Fetch queued Symbol={Symbol} From={From:o} To={To:o} Timeframes=M5,M15,H1",
+                    "[ReplayRun] Fetch queued Symbol={Symbol} RequestedFrom={RequestedFrom:o} FetchFrom={FetchFrom:o} To={To:o} Timeframes=M5,M15,H1 WarmupHours={WarmupHours}",
                     sym,
                     from,
-                    to);
+                    fetchFrom,
+                    to,
+                    ReplayFetchWarmup.TotalHours);
 
                 return TypedResults.Ok(new
                 {
                     message = "MT5 history fetch queued. The EA will fetch candles and return them. Poll GET /api/replay/status to track progress.",
                     symbol = sym,
                     from,
+                    fetchFrom,
                     to,
                     status = replay.GetStatus(),
                 });
@@ -190,7 +201,9 @@ public static class ReplayEndpoints
                 {
                     replay.SetPhase("IMPORTING");
                     var startReq = new ReplayStartRequest(
-                        Symbol: (request.Symbol ?? "XAUUSD").Trim().ToUpperInvariant(),
+                        Symbol: string.IsNullOrWhiteSpace(request.Symbol)
+                            ? DefaultReplaySymbol
+                            : request.Symbol.Trim(),
                         From: request.From,
                         To: request.To,
                         SpeedMultiplier: request.SpeedMultiplier,
@@ -291,7 +304,7 @@ public static class ReplayEndpoints
             {
                 var status = replay.GetStatus();
 
-                var symNorm = (symbol ?? status.Symbol ?? "XAUUSD").Trim().ToUpperInvariant();
+                var symNorm = (symbol ?? status.Symbol ?? DefaultReplaySymbol).Trim();
                 var importedCounts = replay.GetImportedCounts(symNorm);
                 var pendingFetch = fetchStore.GetPending();
 

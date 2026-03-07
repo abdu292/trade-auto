@@ -430,7 +430,7 @@ public static class Mt5Endpoints
                     eventType: "MT5_TRADE_STATUS_RECEIVED",
                     stage: "execution",
                     source: "mt5",
-                    symbol: snapshotStore.TryGet(out var seenSnapshot) && seenSnapshot is not null ? seenSnapshot.Symbol : "XAUUSD",
+                    symbol: snapshotStore.TryGet(out var seenSnapshot) && seenSnapshot is not null ? seenSnapshot.Symbol : "XAUUSD.gram",
                     cycleId: null,
                     tradeId: request.TradeId,
                     payload: new

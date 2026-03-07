@@ -21,7 +21,16 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
 
         // HttpClient for AI Worker service at http://localhost:8001
-        services.AddHttpClient<HttpAIWorkerClient>()
+        var aiWorkerTimeoutSeconds = configuration.GetValue<int?>("External:AIWorkerTimeoutSeconds") ?? 240;
+        if (aiWorkerTimeoutSeconds <= 0)
+        {
+            aiWorkerTimeoutSeconds = 240;
+        }
+
+        services.AddHttpClient<HttpAIWorkerClient>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(aiWorkerTimeoutSeconds);
+            })
             .SetHandlerLifetime(TimeSpan.FromMinutes(5));
         
         services.AddScoped<IAIWorkerClient>(provider => provider.GetRequiredService<HttpAIWorkerClient>());
@@ -33,7 +42,7 @@ public static class DependencyInjection
         services.AddSingleton<ITradingViewSignalStore, InMemoryTradingViewSignalStore>();
         services.AddSingleton<INotificationFeedStore, InMemoryNotificationFeedStore>();
         services.AddSingleton<ITradingRuntimeSettingsStore>(_ =>
-            new InMemoryTradingRuntimeSettingsStore(configuration["Execution:Symbol"] ?? "XAUUSD"));
+            new InMemoryTradingRuntimeSettingsStore(configuration["Execution:Symbol"] ?? "XAUUSD.gram"));
         services.AddSingleton<ITradeLedgerService, DurableTradeLedgerService>();
         services.AddScoped<IMt5BridgeClient, MockMt5BridgeClient>();
         services.AddHttpClient<TelegramNotificationService>()

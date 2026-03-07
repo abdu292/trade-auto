@@ -67,7 +67,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext)
-                .pop(controller.text.trim().toUpperCase()),
+                .pop(controller.text.trim()),
             child: const Text('Save'),
           ),
         ],

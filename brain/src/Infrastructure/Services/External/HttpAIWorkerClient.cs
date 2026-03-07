@@ -15,6 +15,7 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
 {
     private const int MaxAnalyzeResponseBytes = 1_500_000;
     private const int MaxModeResponseBytes = 250_000;
+    private const int MaxErrorBodyLogChars = 1000;
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<HttpAIWorkerClient> _logger;
@@ -186,7 +187,16 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
 
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await ReadResponseBodyLimitedAsync(response, MaxModeResponseBytes, cancellationToken);
+                var clippedBody = ClipForLog(errorBody, MaxErrorBodyLogChars);
+
+                throw new HttpRequestException(
+                    $"AI worker analyze failed with {(int)response.StatusCode} ({response.ReasonPhrase}). Body: {clippedBody}",
+                    inner: null,
+                    response.StatusCode);
+            }
 
             var responseBody = await ReadResponseBodyLimitedAsync(response, MaxAnalyzeResponseBytes, cancellationToken);
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -245,8 +255,9 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         {
             _logger.LogError(
                 ex,
-                "✗ [AIWorker] HTTP request failed. Verify External:AIWorkerBaseUrl is reachable: {BaseUrl}",
-                _baseUrl);
+                "✗ [AIWorker] HTTP request failed for {BaseUrl}/analyze. Status={StatusCode}.",
+                _baseUrl,
+                ex.StatusCode);
             throw;
         }
         catch (TimeoutException ex)
@@ -351,6 +362,16 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         }
 
         return Encoding.UTF8.GetString(ms.ToArray());
+    }
+
+    private static string ClipForLog(string value, int maxChars)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
+        {
+            return value;
+        }
+
+        return value.Substring(0, maxChars) + "...";
     }
 
     /// <summary>

@@ -30,7 +30,7 @@ public sealed class Trade : BaseEntity<TradeId>
         var entity = new Trade
         {
             Id = TradeId.New(),
-            Symbol = symbol.Trim().ToUpperInvariant(),
+            Symbol = symbol.Trim(),
             Rail = rail,
             Entry = entry,
             TakeProfit = takeProfit,

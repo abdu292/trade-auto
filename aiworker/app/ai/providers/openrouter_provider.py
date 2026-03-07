@@ -139,14 +139,14 @@ DO NOT add any explanation outside the JSON."""
     async def validate_response(self, response: Optional[str]) -> Optional[TradeSignal]:
         try:
             if not isinstance(response, str) or not response.strip():
-                logger.warning("OpenRouter returned empty or non-text content")
+                logger.debug("OpenRouter returned empty or non-text content")
                 return None
 
             json_start = response.find("{")
             json_end = response.rfind("}") + 1
 
             if json_start == -1 or json_end == 0:
-                logger.warning("No JSON found in OpenRouter response")
+                logger.debug("No JSON found in OpenRouter response")
                 return None
 
             data = json.loads(response[json_start:json_end])

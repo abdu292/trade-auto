@@ -15,6 +15,8 @@ namespace Brain.Infrastructure.Services.External;
 /// </summary>
 public sealed class HistoricalReplayService : IHistoricalReplayService
 {
+    private const string DefaultReplaySymbol = "XAUUSD.gram";
+
     // Candle storage keyed by "SYMBOL_TIMEFRAME"
     private readonly ConcurrentDictionary<string, List<ReplayCandle>> _candles = new();
 
@@ -43,6 +45,8 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     private string _phase = "IDLE";
 
     private const decimal DefaultAtrEstimate = 10m; // Default fallback ATR estimate for gold (USD/oz)
+    private const int CompressionWindowM15 = 8;
+    private const int CompressionWindowM5 = 10;
 
     public HistoricalReplayService(IServiceProvider serviceProvider, ILogger<HistoricalReplayService> logger)
     {
@@ -62,7 +66,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
 
     public void SetPendingSymbol(string symbol)
     {
-        _symbol = symbol.Trim().ToUpperInvariant();
+        _symbol = string.IsNullOrWhiteSpace(symbol) ? DefaultReplaySymbol : symbol.Trim();
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -76,10 +80,10 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         Stream csvStream,
         CancellationToken cancellationToken)
     {
-        var key = BuildKey(symbol, timeframe);
-        var candles = new List<ReplayCandle>();
-        var symUpper = symbol.Trim().ToUpperInvariant();
+        var sym = string.IsNullOrWhiteSpace(symbol) ? DefaultReplaySymbol : symbol.Trim();
         var tfUpper = timeframe.Trim().ToUpperInvariant();
+        var key = BuildKey(sym, tfUpper);
+        var candles = new List<ReplayCandle>();
 
         using var reader = new StreamReader(csvStream);
         var lineNumber = 0;
@@ -98,7 +102,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
                 continue;
             }
 
-            if (!TryParseCandle(line, symUpper, tfUpper, out var candle))
+            if (!TryParseCandle(line, sym, tfUpper, out var candle))
             {
                 skipped++;
                 _logger.LogDebug("Replay import: skipped line {Line}: {Content}", lineNumber, line);
@@ -113,23 +117,23 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
 
         _logger.LogInformation(
             "Replay import: {Symbol} {Timeframe} — {Count} candles loaded ({Skipped} skipped)",
-            symUpper, tfUpper, candles.Count, skipped);
+            sym, tfUpper, candles.Count, skipped);
 
         return candles.Count;
     }
 
     public int ImportCandlesDirect(string symbol, string timeframe, IEnumerable<ReplayCandle> candles)
     {
-        var symUpper = symbol.Trim().ToUpperInvariant();
+        var sym = string.IsNullOrWhiteSpace(symbol) ? DefaultReplaySymbol : symbol.Trim();
         var tfUpper = timeframe.Trim().ToUpperInvariant();
-        var key = BuildKey(symUpper, tfUpper);
+        var key = BuildKey(sym, tfUpper);
 
         var list = candles.OrderBy(c => c.Timestamp).ToList();
         _candles[key] = list;
 
         _logger.LogInformation(
             "Replay direct import: {Symbol} {Timeframe} — {Count} candles stored",
-            symUpper, tfUpper, list.Count);
+            sym, tfUpper, list.Count);
 
         return list.Count;
     }
@@ -143,18 +147,20 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             throw new InvalidOperationException("Replay is already running. Stop it first.");
         }
 
-        var symUpper = (request.Symbol ?? "XAUUSD").Trim().ToUpperInvariant();
+        var symbol = string.IsNullOrWhiteSpace(request.Symbol)
+            ? DefaultReplaySymbol
+            : request.Symbol.Trim();
 
         // Prefer M5 as driver timeframe; fall back to whatever is imported
-        var driverTf = ChooseDriverTimeframe(symUpper);
+        var driverTf = ChooseDriverTimeframe(symbol);
         if (driverTf is null)
         {
             throw new InvalidOperationException(
-                $"No candles imported for symbol '{symUpper}'. " +
+            $"No candles imported for symbol '{symbol}'. " +
                 $"Use POST /api/replay/import to upload CSV data first.");
         }
 
-        var driverKey = BuildKey(symUpper, driverTf);
+        var driverKey = BuildKey(symbol, driverTf);
         var driverCandles = _candles[driverKey];
 
         var filtered = driverCandles
@@ -165,10 +171,10 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         if (filtered.Count == 0)
         {
             throw new InvalidOperationException(
-                $"No candles in the requested date range for {symUpper}/{driverTf}.");
+                $"No candles in the requested date range for {symbol}/{driverTf}.");
         }
 
-        _symbol = symUpper;
+        _symbol = symbol;
         _driverTimeframe = driverTf;
         _totalCandles = filtered.Count;
         _processedCandles = 0;
@@ -199,7 +205,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         {
             try
             {
-                await RunReplayLoopAsync(filtered, symUpper, useAI, ignoreNewsGate, replayTelegramState, speedMultiplier, token);
+                await RunReplayLoopAsync(filtered, symbol, useAI, ignoreNewsGate, replayTelegramState, speedMultiplier, token);
                 _phase = "DONE";
             }
             catch (OperationCanceledException)
@@ -217,7 +223,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
                 _isPaused = false;
                 _logger.LogInformation(
                     "Replay finished. {Symbol} {Tf}: {Processed}/{Total} candles, {Cycles} cycles, {Setups} setup candidates, {Trades} trades armed.",
-                    symUpper, driverTf, _processedCandles, _totalCandles, _cyclesTriggered, _setupCandidatesFound, _tradesArmed);
+                    symbol, driverTf, _processedCandles, _totalCandles, _cyclesTriggered, _setupCandidatesFound, _tradesArmed);
             }
         }, token);
 
@@ -706,7 +712,9 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         var m15Indicators = indicatorByTimeframe.GetValueOrDefault("M15");
         var m5Indicators = indicatorByTimeframe.GetValueOrDefault("M5");
         var compressionCountM15 = CountCompressionCandles(symbol, primary.Timestamp);
+        var compressionCountM5 = CountCompressionCandles(symbol, "M5", primary.Timestamp, CompressionWindowM5);
         var expansionCountM15 = CountExpansionCandles(symbol, primary.Timestamp);
+        var hasLiquiditySweep = DetectLiquiditySweep(symbol, primary.Timestamp);
         var m5Range = timeframeData.FirstOrDefault(t => string.Equals(t.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.CandleRange ?? 0m;
         var m5Body = timeframeData.FirstOrDefault(t => string.Equals(t.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.CandleBodySize ?? 0m;
         var atrM15 = m15Indicators.Atr14 > 0m ? m15Indicators.Atr14 : atr;
@@ -740,11 +748,13 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             IsAtrExpanding: expansionCountM15 > 0,
             ImpulseStrengthScore: impulseScore,
             HasOverlapCandles: DetectBase(symbol, primary.Timestamp),
+                HasLiquiditySweep: hasLiquiditySweep,
             DayOfWeek: primary.Timestamp.DayOfWeek,
             Mt5ServerTime: primary.Timestamp,
             KsaTime: primary.Timestamp.AddMinutes(50),
             SessionPhase: phase,
             IsFriday: primary.Timestamp.DayOfWeek == DayOfWeek.Friday,
+                CompressionCountM5: compressionCountM5,
             CycleId: $"replay_{primary.Timestamp:yyyyMMddHHmmss}");
     }
 
@@ -913,13 +923,16 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     }
 
     private int CountCompressionCandles(string symbol, DateTimeOffset at)
+        => CountCompressionCandles(symbol, "M15", at, CompressionWindowM15);
+
+    private int CountCompressionCandles(string symbol, string timeframe, DateTimeOffset at, int lookbackCandles)
     {
-        var key = BuildKey(symbol, "M15");
+        var key = BuildKey(symbol, timeframe);
         if (!_candles.TryGetValue(key, out var list)) return 0;
 
         var window = list
             .Where(c => c.Timestamp <= at)
-            .TakeLast(8)
+            .TakeLast(lookbackCandles)
             .ToList();
 
         if (window.Count < 3) return 0;
@@ -927,6 +940,36 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         var averageRange = window.Average(c => c.High - c.Low);
         var threshold = averageRange * 0.80m;
         return window.Count(c => (c.High - c.Low) <= threshold);
+    }
+
+    private bool DetectLiquiditySweep(string symbol, DateTimeOffset at)
+    {
+        var key = BuildKey(symbol, "H1");
+        if (!_candles.TryGetValue(key, out var list))
+            return false;
+
+        var uptoIdx = BinarySearchLastIndexLtEq(list, at);
+        if (uptoIdx < 2)
+            return false;
+
+        // Compare current H1 candle against the most recent 24 prior H1 candles.
+        var current = list[uptoIdx];
+        var priorStart = Math.Max(0, uptoIdx - 24);
+        var priorCount = uptoIdx - priorStart;
+        if (priorCount < 3)
+            return false;
+
+        var priorSwingLow = list
+            .Skip(priorStart)
+            .Take(priorCount)
+            .Min(c => c.Low);
+
+        if (current.Low >= priorSwingLow)
+            return false;
+
+        var h1Range = current.High - current.Low;
+        var reclaimBuffer = h1Range > 0m ? h1Range * 0.20m : 0m;
+        return current.Close >= priorSwingLow + reclaimBuffer;
     }
 
     private int CountExpansionCandles(string symbol, DateTimeOffset at)
@@ -1068,7 +1111,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     {
         foreach (var tf in new[] { "M5", "M15", "H1" })
         {
-            if (_candles.ContainsKey(BuildKey(symbol, tf)))
+            if (_candles.TryGetValue(BuildKey(symbol, tf), out var candles) && candles.Count > 0)
                 return tf;
         }
         return null;

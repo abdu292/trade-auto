@@ -4,12 +4,14 @@ namespace Brain.Domain.Entities;
 
 public sealed class DecisionLog : BaseEntity<Guid>
 {
+    private const string DefaultSymbol = "XAUUSD.gram";
+
     private DecisionLog()
     {
     }
 
     public DateTimeOffset CreatedAtUtc { get; private set; }
-    public string Symbol { get; private set; } = "XAUUSD";
+    public string Symbol { get; private set; } = DefaultSymbol;
     public string Status { get; private set; } = string.Empty;
     public string EngineState { get; private set; } = string.Empty;
     public string Mode { get; private set; } = string.Empty;
@@ -48,7 +50,7 @@ public sealed class DecisionLog : BaseEntity<Guid>
         {
             Id = Guid.NewGuid(),
             CreatedAtUtc = DateTimeOffset.UtcNow,
-            Symbol = string.IsNullOrWhiteSpace(symbol) ? "XAUUSD" : symbol.Trim().ToUpperInvariant(),
+            Symbol = string.IsNullOrWhiteSpace(symbol) ? DefaultSymbol : symbol.Trim(),
             Status = status,
             EngineState = engineState,
             Mode = mode,

@@ -45,7 +45,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
   bool _useMockAi = true;
   int _speedMultiplier = 100;
   final TextEditingController _symbolController =
-      TextEditingController(text: 'XAUUSD');
+  TextEditingController(text: 'XAUUSD.gram');
 
   DateTime _fromDate = DateTime.now().subtract(const Duration(days: 7));
   DateTime _toDate = DateTime.now();
@@ -193,7 +193,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
 
     setState(() => _running = true);
     final messenger = ScaffoldMessenger.of(context);
-    final symbol = _symbolController.text.trim().toUpperCase();
+    final symbol = _symbolController.text.trim();
 
     try {
       await ref.read(brainApiProvider).runReplay(
@@ -227,7 +227,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(brainApiProvider).startReplay(
-            symbol: _symbolController.text.trim().toUpperCase(),
+        symbol: _symbolController.text.trim(),
             speedMultiplier: _speedMultiplier,
             useAI: !_useMockAi,
             useMockAI: _useMockAi,
@@ -250,7 +250,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
 
     _autoStartBusy = true;
     try {
-      final symbol = _symbolController.text.trim().toUpperCase();
+      final symbol = _symbolController.text.trim();
       final statusResponse =
           await ref.read(brainApiProvider).getReplayStatus(symbol: symbol);
       final phase = _parsePhase(statusResponse.status.phase);
@@ -334,6 +334,49 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
     }
   }
 
+  DateTime _toOffset(DateTime localTime, Duration offset) {
+    return localTime.toUtc().add(offset);
+  }
+
+  Widget _buildTimezoneHint(BuildContext context) {
+    final localFrom = _fromDate;
+    final localTo = _toDate;
+    final utcFrom = localFrom.toUtc();
+    final utcTo = localTo.toUtc();
+    final ksaFrom = _toOffset(localFrom, const Duration(hours: 3));
+    final ksaTo = _toOffset(localTo, const Duration(hours: 3));
+    final istFrom = _toOffset(localFrom, const Duration(hours: 5, minutes: 30));
+    final istTo = _toOffset(localTo, const Duration(hours: 5, minutes: 30));
+
+    final cs = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.secondaryContainer.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Selected Range Across Timezones',
+              style: textTheme.titleSmall?.copyWith(color: cs.onSecondaryContainer)),
+          const SizedBox(height: 8),
+          Text('Local: ${_fmtDt(localFrom)} -> ${_fmtDt(localTo)}',
+              style: textTheme.bodySmall),
+          Text('UTC:   ${_fmtDt(utcFrom)} -> ${_fmtDt(utcTo)}',
+              style: textTheme.bodySmall),
+          Text('KSA:   ${_fmtDt(ksaFrom)} -> ${_fmtDt(ksaTo)}',
+              style: textTheme.bodySmall),
+          Text('IST:   ${_fmtDt(istFrom)} -> ${_fmtDt(istTo)}',
+              style: textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final replayAsync = ref.watch(replayStatusProvider);
@@ -404,6 +447,8 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
                               label: 'To', value: _toDate, onTap: _pickToDate)),
                     ],
                   ),
+                  const SizedBox(height: 10),
+                  _buildTimezoneHint(context),
                   const SizedBox(height: 12),
 
                   Row(

@@ -4,6 +4,8 @@ namespace Brain.Infrastructure.Services.External;
 
 public sealed class InMemoryTradingRuntimeSettingsStore : ITradingRuntimeSettingsStore
 {
+    private const string DefaultSymbol = "XAUUSD.gram";
+
     private readonly Lock _gate = new();
     private string _symbol;
 
@@ -30,7 +32,7 @@ public sealed class InMemoryTradingRuntimeSettingsStore : ITradingRuntimeSetting
 
     private static string Normalize(string? symbol)
     {
-        var normalized = (symbol ?? string.Empty).Trim().ToUpperInvariant();
-        return string.IsNullOrWhiteSpace(normalized) ? "XAUUSD" : normalized;
+        var normalized = (symbol ?? string.Empty).Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? DefaultSymbol : normalized;
     }
 }

@@ -14,7 +14,7 @@ async def analyze(snapshot: MarketSnapshot) -> TradeSignal:
     Analyze market data and generate trade signal using AI providers
     
     Request:
-        - symbol: Trading pair (XAUUSD only)
+        - symbol: Trading pair (XAUUSD family, including broker suffixes)
         - close: Current price
         - OHLC + technical indicators
         - session_name: Current trading session

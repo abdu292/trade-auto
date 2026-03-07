@@ -363,7 +363,7 @@ public static class MonitoringEndpoints
             "/runtime-settings",
             IResult (UpdateRuntimeSettingsRequest request, ITradingRuntimeSettingsStore runtimeSettings) =>
             {
-                var symbol = (request.Symbol ?? string.Empty).Trim().ToUpperInvariant();
+                var symbol = (request.Symbol ?? string.Empty).Trim();
                 if (string.IsNullOrWhiteSpace(symbol))
                 {
                     return TypedResults.BadRequest(new { error = "symbol is required." });

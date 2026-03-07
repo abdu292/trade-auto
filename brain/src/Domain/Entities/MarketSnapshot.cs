@@ -5,6 +5,8 @@ namespace Brain.Domain.Entities;
 
 public sealed class MarketSnapshot : BaseEntity<MarketSnapshotId>
 {
+    private const string DefaultSymbol = "XAUUSD.gram";
+
     private readonly List<TimeframeCandle> _timeframeData = [];
 
     private MarketSnapshot()
@@ -31,7 +33,7 @@ public sealed class MarketSnapshot : BaseEntity<MarketSnapshotId>
         var snapshot = new MarketSnapshot
         {
             Id = MarketSnapshotId.New(),
-            Symbol = symbol.Trim().ToUpperInvariant(),
+            Symbol = string.IsNullOrWhiteSpace(symbol) ? DefaultSymbol : symbol.Trim(),
             Atr = atr,
             Adr = adr,
             Ma20 = ma20,

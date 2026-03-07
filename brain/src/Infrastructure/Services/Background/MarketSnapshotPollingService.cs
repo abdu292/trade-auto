@@ -132,7 +132,7 @@ public sealed class MarketSnapshotPollingService : BackgroundService
         var ksaTime = mt5ServerTime.AddMinutes(50);
 
         return new MarketSnapshotContract(
-            Symbol: "XAUUSD",
+            Symbol: "XAUUSD.gram",
             TimeframeData: timeframeData,
             Atr: 14.2m,
             Adr: 18.0m,
