@@ -58,16 +58,26 @@ class AiGate:
 
     # ── public interface ──────────────────────────────────────────────────────
 
-    async def check_async(self, snapshot_timestamp: datetime, session: str, risk_state: str) -> tuple[bool, str]:
+    async def check_async(
+        self,
+        snapshot_timestamp: datetime,
+        session: str,
+        risk_state: str,
+        cycle_id: str | None = None,
+    ) -> tuple[bool, str]:
         """Async version of check() — safe to call from async context.
 
         Returns (blocked, reason).  When blocked is True the caller must not
         invoke any LLM and should return NO_TRADE without spending tokens.
+
+        cycle_id is used to detect replay mode: when the id starts with
+        ``replay_`` the system-time freshness check is skipped because the
+        snapshot timestamp is intentionally historical.
         """
         if not AI_GATE_ENABLED:
             return False, ""
 
-        freshness_reason = self._check_freshness(snapshot_timestamp)
+        freshness_reason = self._check_freshness(snapshot_timestamp, cycle_id=cycle_id)
         if freshness_reason:
             logger.info("AI gate BLOCKED (stale data): %s", freshness_reason)
             return True, freshness_reason
@@ -84,12 +94,22 @@ class AiGate:
         return False, ""
 
     # Keep a synchronous shim for backward-compatibility / testing.
-    def check(self, snapshot_timestamp: datetime, session: str, risk_state: str) -> tuple[bool, str]:
-        """Synchronous version — use only in tests or non-async contexts."""
+    def check(
+        self,
+        snapshot_timestamp: datetime,
+        session: str,
+        risk_state: str,
+        cycle_id: str | None = None,
+    ) -> tuple[bool, str]:
+        """Synchronous version — use only in tests or non-async contexts.
+
+        cycle_id is used to detect replay mode: when the id starts with
+        ``replay_`` the system-time freshness check is skipped.
+        """
         if not AI_GATE_ENABLED:
             return False, ""
 
-        freshness_reason = self._check_freshness(snapshot_timestamp)
+        freshness_reason = self._check_freshness(snapshot_timestamp, cycle_id=cycle_id)
         if freshness_reason:
             return True, freshness_reason
 
@@ -131,8 +151,18 @@ class AiGate:
     # ── private helpers ───────────────────────────────────────────────────────
 
     @staticmethod
-    def _check_freshness(snapshot_timestamp: datetime) -> str:
-        """Return a non-empty reason string if the snapshot is too old."""
+    def _check_freshness(snapshot_timestamp: datetime, cycle_id: str | None = None) -> str:
+        """Return a non-empty reason string if the snapshot is too old.
+
+        In replay mode (cycle_id starts with ``replay_``) the snapshot
+        timestamp is intentionally historical so the system-time comparison
+        is skipped.  Use cycle-relative freshness only: the snapshot is
+        considered fresh as long as it was produced by this replay cycle.
+        """
+        # Replay mode: skip system-time comparison — data is deliberately historical.
+        if cycle_id and cycle_id.lower().startswith("replay_"):
+            return ""
+
         max_age = max(0.0, AI_GATE_MAX_DATA_AGE_SECONDS)
         if max_age <= 0:
             return ""
