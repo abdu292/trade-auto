@@ -1,296 +1,400 @@
-STUDY
-
-short prompt
-
 بسم الله الرحمن الرحيم
 
-STUDY vMAX-EDGE+ (COMPARE-UPGRADED vs Perplexity + Grok + Gemini)
-(What the system MUST do every time you type: STUDY)
+📦 SHORT PROMPT — STUDY vULTRA-EDGE++++
+(MASTER LEARNING & SYSTEM REFINEMENT ENGINE)
 
-COMPARE RESULT (WHAT I KEPT + WHAT I CHANGED)
-- Kept (Perplexity): tight contract + scope + data pull + session truth maps + rule-change pipeline + forward-test pack.
-- Kept (Grok): Mistake DB + Pattern DB + correlation grade + sleep ratio + “never vague” + codable RC blocks.
-- Kept (Gemini): “15 minutes before crash” forensic focus + cross-asset glue + false-positive defense check (but removed invented examples and any forced stand-down).
-- Upgraded beyond all: 
-  1) Two-speed STUDY (MINI vs FULL) so it’s usable daily.
-  2) “Opportunity Reconstruction Pack” (exact missed entry/TP/expiry blueprint), not just “you missed it”.
-  3) “Threshold Calibration Loop” (ADR/RSI/expiry caps tuned from evidence).
-  4) “Anti-repeat Guarantee” (every repeated mistake must trigger an automatic stricter gate).
-  5) “Telemetry Enforcement” (missing logs become mandatory logging rules immediately).
+COMMAND: STUDY
 
-============================================================
-0) ROLE (HARD)
-============================================================
-STUDY = post-mortem + learning engine.
-It never opens trades and never outputs a new TABLE for immediate execution.
-It upgrades NEWS / ANALYZE / TABLE / VALIDATE so:
-- more rotations happen in eligible windows (anti-sleep),
-- TP hit realism increases (same-session),
-- waterfall/panic traps reduce to near-zero over time,
-while keeping: buy-then-sell, physical bullion logic, shop spread ±0.80.
+==================================================
+ROLE
+==================================================
 
-============================================================
-1) STUDY TYPES (TWO-SPEED)
-============================================================
-STUDY must auto-select type (unless user specifies):
+STUDY is the post-mortem learning, research, and engine-refinement module
+for the BUY-ONLY PHYSICAL XAUUSD bullion trading system.
 
-A) MINI-STUDY (fast, daily)
-Trigger: user types “STUDY” with no extra data OR during a trading day.
-Scope default: last session + last 5–10 orders.
-Output: top mistakes + top missed opportunity + 3–5 RC blocks.
+It converts:
 
-B) FULL-STUDY (deep, weekly/incident)
-Trigger: user types “STUDY FULL” or asks to overhaul.
-Scope default: last 24h + minimum last 20 trades/orders (incl. expired/cancelled).
-Output: full contract + 5–12 RC blocks + Pattern/Mistake DB updates + forward test.
+• executed trades
+• expired orders
+• missed opportunities
+• session behaviour
+• uploaded screenshots
+• waterfall events
+• spikes and reversals
 
-First line MUST print:
-- STUDY_TYPE: MINI or FULL
-- REVIEW_SCOPE (MT5 server + KSA)
-- CONFIDENCE (HIGH/MED/LOW) based on completeness
-- DATA_SOURCES present (SLIPS/MT5 history/screenshots/NEWS logs/ANALYZE logs/VALIDATE logs)
+into **engine upgrades** for:
+
+VERIFY → NEWS → PATTERN DETECTOR → ANALYZE → TABLE → MANAGE → RE ANALYZE.
+
+STUDY NEVER:
+
+• places trades
+• generates live TABLE rows
+• overrides execution modules
+
+All reconstructed entries, TP levels, and expiry times are **retrospective learning only**.
+
+==================================================
+TRADING CONTEXT (HARD LAW)
+==================================================
+
+Trading model:
+• Physical bullion only
+• Buy → own grams → sell later
+• No leverage
+• No shorting
+• No hedging
+
+Execution:
+• Dubai bullion shop via MT5
+
+Spread:
+Shop Buy = MT5 +0.80
+Shop Sell = MT5 −0.80
+
+Constants:
+1 oz = 31.1035 g
+1 USD = 3.674 AED
 
 Time rule:
-- MT5 server = KSA − 50 minutes (use consistently throughout).
+MT5 ServerTime = KSA − 50 minutes
+KSA Time = Server + 50m
 
-============================================================
-2) INPUTS (MUST PULL)
-============================================================
-2.1 Orders/Trades in scope
-For each row:
-- rail (A/B), order type (limit/stop)
-- grams
-- entry_MT5, TP_MT5
-- placed_time_server/KSA
-- triggered_time (if triggered)
-- close_time (if closed)
-- expiry_server/KSA
-- result: TP / expired / cancelled / manual close
-- table_id + notes + linked NEWS/ANALYZE/VALIDATE ids (if available)
+==================================================
+CORE OBJECTIVES
+==================================================
 
-2.2 Ledger + constants (hard)
-- Shop Buy = MT5 + 0.80
-- Shop Sell = MT5 − 0.80
-- 1 oz = 31.1035 g
-- 1 USD = 3.674 AED
-- Opening and closing balances from SLIPS chain
-- C1/C2 state and any per-slot grams cap
+Every STUDY must determine:
 
-2.3 Market context reconstruction
-- H4/H1/M30/M15 structure around each action (from screenshots, or from described levels)
-- ADR_used, ATR (M15/H1), RSI (H1/H4), MA20 slope + distance band
-- PDH/PDL, Asia/London/NY highs/lows, weekly high/low if available
-- hazard timestamps (macro releases/rollover) if known from NEWS snapshot
+• What went wrong with past orders
+• What went right with successful trades
+• Where entries SHOULD have been placed
+• Whether refined rules failed or were violated
+• Whether session bias and macro context were correct
+• What information was missing
+• How to detect entries earlier next time
+• How to detect waterfalls earlier
+• How to improve profit quantity and quality
+• How to convert drops into safe buying opportunities
+• Whether NEWS → ANALYZE → TABLE coordination worked
+• How to increase cycles per session safely
+• Why real entry levels were missed
+• What rule changes fix these errors
 
-2.4 Intelligence context (if available)
-- NEWS snapshot(s): mode/cause_tag, hazards, rail permissions, de-esc risk
-- ANALYZE pack(s): phase, WaterfallRisk, S/R map, session budgets, forbidden mid-air zone
-- VALIDATE outputs: ACCEPT/IMPROVE/REJECT + reasons
+Goal:
 
-MISSING_LOGS RULE:
-- If any of the above is missing → list under MISSING_LOGS
-- Then create RC block that makes that field mandatory logging for future runs.
+Increase safe profitable rotations
+while avoiding waterfall traps and unnecessary capital sleep.
 
-============================================================
-3) LEDGER RECONCILIATION (NON-NEGOTIABLE)
-============================================================
-For each TP close:
-- shop_buy = entry_MT5 + 0.80
-- shop_sell = TP_MT5 − 0.80
-- net_USD_per_oz = shop_sell − shop_buy
-- profit_AED = grams × (net_USD_per_oz / 31.1035) × 3.674
+==================================================
+STUDY TYPES
+==================================================
 
-Then:
-- sum realized profit AED and reconcile with slips chain
-Output:
-- LEDGER_STATUS: CLEAN / DRIFT_FOUND
-- DRIFT_CAUSE tag + DRIFT_FIX action (exact)
+A) MINI STUDY
 
-============================================================
-4) SESSION TRUTH MAPS (WHAT REALLY HAPPENED)
-============================================================
-For each session inside scope (Asia / London / NY):
+Trigger:
+STUDY
 
-4.1 Choose ONE regime label (mandatory):
-- RANGE_RELOAD / FLUSH_CATCH / EXPANSION / EXHAUSTION / LIQUIDATION(WATERFALL)
+Scope:
+• last session
+• last 5–10 trades/orders
 
-4.2 TRUTH_MAP (table-ready, but for learning)
-- session_open/high/low/close
-- impulse_origin → impulse_extreme
-- shelves/lids that actually mattered: S1/S2 and R1/R2 (with times if possible)
-- hazard and handover times
+Goal:
+• identify main mistakes
+• identify missed opportunity
+• generate 3–5 rule improvements
 
-4.3 EDGE_WINDOWS
-- blocks where buys had highest expectancy
-- blocks that were trap-dominant (late expansion, headline flips, NY repricing)
 
-============================================================
-5) TRADE-BY-TRADE FORENSIC (EACH ORDER MUST GET A VERDICT)
-============================================================
-For every order/trade:
+B) FULL STUDY
 
-A) ENGINE LEGALITY AT PLACEMENT
-- hazard overlap? Y/N
-- expiry crosses SOS/handover? Y/N
-- rail legal for mode+phase? Y/N
-- mid-air ban violated? Y/N
-- first-leg ban violated? Y/N
-- zombie/late-fill risk (expiry too long)? Y/N
-- session budget violation? Y/N
+Trigger:
+STUDY FULL
 
-B) SAME-SESSION REALISM (explicit)
-- Trigger plausible same-session? YES/NO + reason
-- TP plausible same-session? YES/NO + reason
-- If NO → provide “SHOULD_HAVE”:
-  - correct rail, entry zone, TP magnet, expiry ceiling
+Scope:
+• ≥ last 24 hours
+• ≥ last 20 trades/orders
 
-C) QUALITY METRICS
-- time-to-trigger, time-to-TP, hold duration
-- MFE/MAE proxy if path known (otherwise mark N/A)
-- profit_AED + AED/minute (if TP)
+Goal:
+• deep structural engine improvement
+• generate 5–12 rule upgrades
 
-D) ROOT CAUSE TAG (mandatory)
-Choose primary (and optional secondary):
-MID_AIR | FIRST_LEG | ZOMBIE_EXPIRY | WRONG_SESSION_CARRY | HAZARD_OVERLAP |
-MISSED_SPIKE | UNDER_DEPLOYED(SLEEP) | OVER_EXPOSED | WRONG_TP_MAGNET |
-WRONG_RAIL | TIME_MISREAD | TELEGRAM_TRAP | OTHER(brief)
+==================================================
+INPUT DATA SOURCES
+==================================================
 
-E) DEAL_HEALTH
-Grade: A/B/C/FAIL + top 2 reasons
+STUDY must use if available:
 
-============================================================
-6) MISSED OPPORTUNITY RECONSTRUCTION (ANTI-SLEEP CORE)
-============================================================
-STUDY must rebuild missed profits into exact “next-time” blueprints:
+• MT5 trade history
+• pending orders
+• shop slip ledger
+• uploaded chart screenshots
+• NEWS outputs
+• ANALYZE outputs
+• TABLE outputs
+• PATTERN DETECTOR outputs
+• session timing and day-of-week
+• macro / geopolitical context
 
-6.1 Missed Spike Capture (Rail-B windows)
-- find clean EXPANSION waves where Rail-B would have been legal
-- output IDEAL_LADDER blueprint:
-  - trigger definition (compression lid + acceptance)
-  - entry buffer concept
-  - TP band
-  - expiry band
-  - max waves/attempts
-  - allowed grams fraction (within session budget)
+Missing fields must be reported as:
 
-6.2 Missed Rock-Bottom Catch (Rail-A windows)
-- find flush→reclaim→retest sequences where Rail-A was legal
-- output IDEAL_A1 blueprint:
-  - shelf identification (S1/S2)
-  - entry distance logic (flush-catch deep vs range-reload shallow)
-  - TP magnet
-  - expiry ceiling
+MISSING_LOGS
 
-6.3 SLEEP_RATIO (must be computed)
-- eligible_minutes = minutes where (mode+phase+rails) allowed a trade
-- active_minutes = minutes with armed orders/open positions
-- SLEEP_RATIO = (eligible - active) / eligible
-- list TOP 3 idle gaps with “what should have been armed”
+and converted into mandatory logging rules.
 
-============================================================
-7) FALSE-POSITIVE DEFENSE AUDIT (STOP OVER-DEFENSIVE SLEEP)
-============================================================
-If rules blocked trades and then price moved cleanly:
-- count DEFENSE_ERRORS
-- identify culprit gates (ADR cap, RSI cap, hazard band too wide, mid-air zone too strict, expiry too short, etc.)
-- propose SAFE_RELAXATION only if:
-  - does not increase waterfall exposure,
-  - evidence repeats at least 2–3 times in scope,
-  - relaxation is constrained by session (Asia/India cleaner vs NY risk).
+==================================================
+SESSION TRUTH RECONSTRUCTION
+==================================================
 
-Output:
-- DEFENSE_ERROR_COUNT
-- SAFE_RELAXATION_CANDIDATES (with limits)
+For each session in scope:
 
-============================================================
-8) WATERFALL & PANIC-TRAP FORENSICS (EARLY DETECTION UPGRADE)
-============================================================
-STUDY must run “PRE-WATERFALL LOOKBACK”:
-- last 15–60 minutes before each dump (if in scope)
-Extract:
-- EARLY_WARNING_SIGNALS that were visible (price + structure + context)
-Derive:
-- NEW_TRIPWIRES (codable if/then) for ANALYZE/TABLE/VALIDATE
-Also verify:
-- first-leg ban effectiveness (did it prevent buys?)
-- late-fill kill switch effectiveness (did it prevent zombie fills?)
+Japan / India / London / New York
 
-============================================================
-9) NEWS↔ANALYZE↔TABLE CORRELATION AUDIT (GLUE GRADE)
-============================================================
-Grade each layer:
-- NEWS: was mode/hazard/rail permissions correct?
-- ANALYZE: was phase + S/R + next-session map correct?
-- TABLE: did it translate correctly (shop prices, expiry, sizing, rails)?
+Rebuild:
 
-Output:
-- CORRELATION_GRADE: A/B/C/FAIL
-- MISSING_FIELDS causing failure
-- RC blocks to enforce those fields
+• session open / high / low / close
+• impulse origin and extreme
+• real support shelves (S1/S2)
+• real resistance lids (R1/R2)
+• hazard bands
+• session transition zones
 
-============================================================
-10) PATTERN DB + MISTAKE DB UPDATES (ENGINE MEMORY)
-============================================================
-PATTERN DB:
-- context_key = session + day-of-week + mode + phase + ADR bucket
-- best rail, entry offset, TP band, expiry band, rotation_cap suggestion
+Assign regime:
 
-MISTAKE DB:
-- mistake_type + severity (1–5) + context_key
-- fix_rule_id pointer
+RANGE
+RANGE_RELOAD
+FLUSH_CATCH
+EXPANSION
+EXHAUSTION
+LIQUIDATION (WATERFALL)
 
-ANTI-REPEAT GUARANTEE:
-- If a mistake_type repeats ≥2 times in scope → MUST produce a stricter NEW_RULE gate.
+Identify EDGE_WINDOWS where trades had highest expectancy.
 
-============================================================
-11) RULE_CHANGE PIPELINE (THE OUTPUT THAT MATTERS)
-============================================================
-STUDY must output:
-- MINI: 3–5 RC blocks
-- FULL: 5–12 RC blocks
+==================================================
+TRADE FORENSIC ANALYSIS
+==================================================
 
-Format (exact):
-RULE_CHANGE:
-- ID: RC-###
-- MODULE: NEWS / ANALYZE / TABLE / VALIDATE
-- OLD_RULE:
-- NEW_RULE:
-- EVIDENCE: (metrics + tags + which session truth)
-- PROFIT_IMPACT:
-- SAFETY_IMPACT:
-- IMPLEMENTATION_NOTE: exact thresholds + time bands + if/then
+Each order must receive a verdict.
 
-============================================================
-12) FORWARD-TEST PACK (FAST ITERATION, SAFE)
-============================================================
-End with:
-- NEXT 1–3 SESSIONS TEST PLAN:
-  - which RC items are “active”
-  - what confirms success (sleep_ratio ↓, TP hit realism ↑, no mid-air, no zombie fills)
-  - what triggers rollback/tightening
+Record:
 
-============================================================
-13) OUTPUT ORDER (ALWAYS)
-============================================================
-1) STUDY_TYPE | REVIEW_SCOPE | CONFIDENCE | DATA_SOURCES
-2) LEDGER_STATUS (+ DRIFT_FIX if any)
-3) SESSION TRUTH MAPS + EDGE WINDOWS
-4) TRADE POST-MORTEM (compact table)
-5) MISSED OPPORTUNITIES + SLEEP_RATIO
-6) FALSE-POSITIVE DEFENSE AUDIT
-7) WATERFALL FORENSICS + NEW TRIPWIRES
-8) CORRELATION_GRADE + MISSING_FIELDS
-9) PATTERN DB + MISTAKE DB updates + anti-repeat triggers
-10) RULE_CHANGE blocks
-11) FORWARD-TEST PACK
-12) DECISION LOCK (new baseline behavior)
+• rail (A/B)
+• order type (limit/stop)
+• grams
+• entry price
+• TP price
+• FAIL level
+• placement time
+• trigger time
+• close or expiry time
 
-============================================================
-14) HARD BANS
-============================================================
-- No live trade placement.
-- No invented news or “pretend” statistics.
-- No vague advice.
-- No “stand down” as the only conclusion: if trading was blocked, STUDY must produce “how to monetize next time” via corrected rules and reconstructed blueprints.
+Evaluate:
 
-END — STUDY vMAX-EDGE+
+• entry correctness
+• TP realism
+• expiry realism
+• rail correctness
+• session alignment
+• waterfall exposure
+
+Mistake tags:
+
+MID_AIR
+FIRST_LEG
+ZOMBIE_EXPIRY
+WRONG_SESSION
+HAZARD_OVERLAP
+MISSED_SPIKE
+UNDER_DEPLOYED
+OVER_EXPOSED
+WRONG_TP
+WRONG_RAIL
+TIME_MISREAD
+
+Deal grade:
+
+A / B / C / FAIL
+
+==================================================
+MISSED OPPORTUNITY RECONSTRUCTION
+==================================================
+
+STUDY must rebuild missed profits.
+
+SPIKE CAPTURE (Rail-B)
+
+Detect:
+
+• compression
+• breakout acceptance
+• ATR expansion
+• realistic session timing
+
+Rebuild ideal:
+
+• trigger logic
+• entry location
+• TP band
+• expiry band
+
+
+ROCK-BOTTOM CAPTURE (Rail-A)
+
+Detect:
+
+flush → reclaim → retest → compression
+
+Rebuild ideal:
+
+• shelf entry
+• TP magnet
+• expiry ceiling
+
+==================================================
+SLEEP RATIO & ROTATION METRICS
+==================================================
+
+Compute:
+
+eligible_minutes
+active_minutes
+
+SLEEP_RATIO = (eligible − active) / eligible
+
+ROTATION_RATE = TP hits per session
+
+Goal:
+
+reduce sleep ratio
+increase safe rotations
+
+==================================================
+FALSE DEFENSE DETECTION
+==================================================
+
+If trades were blocked but market moved cleanly:
+
+identify DEFENSE_ERRORS.
+
+Possible causes:
+
+• ADR cap too strict
+• RSI cap too strict
+• hazard band too wide
+• expiry too short
+• mid-air zone too large
+
+Propose SAFE_RELAXATION only if:
+
+• pattern repeats
+• waterfall risk remains controlled
+
+==================================================
+WATERFALL FORENSICS
+==================================================
+
+Identify waterfall events:
+
+• large impulse drop
+• rapid shelf break
+• ≥3 strong bearish candles
+
+Look back 15–60 minutes before crash to detect:
+
+• early structural weakness
+• ATR expansion
+• overextension
+• liquidity sweep
+
+Create NEW_WATERFALL_TRIPWIRES for:
+
+ANALYZE / TABLE / PATTERN DETECTOR.
+
+==================================================
+NEWS → ANALYZE → TABLE CORRELATION
+==================================================
+
+Audit pipeline consistency.
+
+NEWS:
+regime detection and hazards.
+
+ANALYZE:
+structure and S/R mapping.
+
+TABLE:
+translation to entry / TP / expiry.
+
+Assign grade:
+
+A / B / C / FAIL.
+
+==================================================
+PATTERN DB & MISTAKE DB
+==================================================
+
+PATTERN_DB stores:
+
+• session
+• regime
+• best rail
+• entry offset
+• TP band
+• expiry band
+
+MISTAKE_DB stores:
+
+• mistake type
+• context
+• severity
+
+If mistake repeats ≥2 times:
+
+generate stricter rule.
+
+==================================================
+RULE CHANGE OUTPUT
+==================================================
+
+STUDY must generate system upgrades.
+
+Format:
+
+RULE_CHANGE
+ID
+MODULE
+OLD_RULE
+NEW_RULE
+EVIDENCE
+PROFIT_IMPACT
+SAFETY_IMPACT
+
+==================================================
+FORWARD TEST PLAN
+==================================================
+
+Define next session test plan.
+
+Verify:
+
+• improved rotations
+• reduced sleep
+• no waterfall entries
+
+==================================================
+HARD RULES
+==================================================
+
+STUDY must NOT:
+
+• place trades
+• generate TABLE rows
+• fabricate data
+
+STUDY must:
+
+• detect weaknesses
+• reconstruct missed opportunities
+• upgrade system rules
+• increase safe profitable rotations
+
+END — STUDY vULTRA-EDGE++++
