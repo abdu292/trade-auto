@@ -3,7 +3,6 @@ using Brain.Infrastructure.Data;
 using Brain.Infrastructure.DependencyInjection;
 using Brain.Web.Endpoints;
 using Brain.Web.Filters;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -55,25 +54,22 @@ app.MapReplayEndpoints();
 await using (var scope = app.Services.CreateAsyncScope())
 {
 	var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-	await dbContext.Database.EnsureCreatedAsync();
+	var availableMigrations = dbContext.Database.GetMigrations().ToList();
 
-	if (app.Environment.IsDevelopment())
+	if (availableMigrations.Count > 0)
 	{
-		try
+		var pendingMigrations = dbContext.Database.GetPendingMigrations().ToList();
+		if (pendingMigrations.Count > 0)
 		{
-			_ = await dbContext.HazardWindows.AsNoTracking().AnyAsync();
-			_ = await dbContext.TelegramChannels.AsNoTracking().AnyAsync();
-			_ = await dbContext.MacroCacheStates.AsNoTracking().AnyAsync();
-			_ = await dbContext.LedgerAccounts.AsNoTracking().AnyAsync();
-			_ = await dbContext.LedgerPositions.AsNoTracking().AnyAsync();
-			_ = await dbContext.RuntimeTimelineEvents.AsNoTracking().AnyAsync();
+			Log.Information("Applying {MigrationCount} pending database migration(s).", pendingMigrations.Count);
 		}
-		catch (SqlException ex) when (ex.Number == 208)
-		{
-			Log.Warning("Detected outdated development schema. Recreating LocalDB to apply latest model.");
-			await dbContext.Database.EnsureDeletedAsync();
-			await dbContext.Database.EnsureCreatedAsync();
-		}
+
+		await dbContext.Database.MigrateAsync();
+	}
+	else
+	{
+		Log.Warning("No EF Core migrations were found. Falling back to EnsureCreated for compatibility.");
+		await dbContext.Database.EnsureCreatedAsync();
 	}
 }
 
