@@ -159,7 +159,7 @@ class BrainApi {
     required DateTime to,
     int speedMultiplier = 100,
     bool useMockAI = true,
-    double initialCashAed = 50000,
+    double initialCashAed = 350000,
   }) async {
     final response = await _dio.post('/api/replay/run', data: {
       'symbol': symbol,
@@ -183,7 +183,7 @@ class BrainApi {
     DateTime? to,
     int speedMultiplier = 100,
     bool useMockAI = true,
-    double initialCashAed = 50000,
+    double initialCashAed = 350000,
   }) async {
     final response = await _dio.post('/api/replay/start-after-fetch', data: {
       'symbol': symbol,

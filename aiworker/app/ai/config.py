@@ -133,7 +133,7 @@ EXTERNAL_NEWS_BEARISH_KEYWORDS = _read_csv_env(
 
 AI_NEWS_TIMEOUT_SECONDS = float(os.getenv("AI_NEWS_TIMEOUT_SECONDS", "8"))
 AI_MODE_TIMEOUT_SECONDS = float(os.getenv("AI_MODE_TIMEOUT_SECONDS", "10"))
-AI_COMMITTEE_TIMEOUT_SECONDS = float(os.getenv("AI_COMMITTEE_TIMEOUT_SECONDS", "12"))
+AI_COMMITTEE_TIMEOUT_SECONDS = float(os.getenv("AI_COMMITTEE_TIMEOUT_SECONDS", "20"))
 AI_MACRO_TIMEOUT_SECONDS = float(os.getenv("AI_MACRO_TIMEOUT_SECONDS", "10"))
 
 # ── CR9 AI Cost Optimisation ─────────────────────────────────────────────────

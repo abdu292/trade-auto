@@ -44,6 +44,8 @@ class ReplayScreen extends ConsumerStatefulWidget {
 class _ReplayScreenState extends ConsumerState<ReplayScreen> {
   bool _useMockAi = true;
   int _speedMultiplier = 100;
+  final TextEditingController _initialCashController =
+      TextEditingController(text: '350000');
   final TextEditingController _symbolController =
   TextEditingController(text: 'XAUUSD.gram');
 
@@ -67,9 +69,19 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
 
   @override
   void dispose() {
+    _initialCashController.dispose();
     _symbolController.dispose();
     _autoRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  double _initialCashValue() {
+    final parsed = double.tryParse(_initialCashController.text.trim());
+    if (parsed == null || parsed <= 0) {
+      return 350000;
+    }
+
+    return parsed;
   }
 
   void _startAutoRefresh() {
@@ -202,6 +214,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
             to: _toDate,
             speedMultiplier: _speedMultiplier,
             useMockAI: _useMockAi,
+        initialCashAed: _initialCashValue(),
           );
       if (mounted) {
         setState(() {
@@ -268,6 +281,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
               to: _toDate,
               speedMultiplier: _speedMultiplier,
               useMockAI: _useMockAi,
+            initialCashAed: _initialCashValue(),
             );
         if (mounted) {
           setState(() {
@@ -467,6 +481,20 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
                       ),
                       Text('${_speedMultiplier}x'),
                     ],
+                  ),
+
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _initialCashController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: false),
+                    decoration: const InputDecoration(
+                      labelText: 'Replay Initial Cash (AED)',
+                      helperText:
+                          'Replay-only capital; live trading account is unaffected.',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                    ),
                   ),
 
                   SwitchListTile.adaptive(

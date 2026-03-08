@@ -15,6 +15,7 @@ namespace Brain.Infrastructure.Services.External;
 /// </summary>
 public sealed class HistoricalReplayService : IHistoricalReplayService
 {
+    private const decimal ReplayCapitalFloorAed = 350000m;
     private const string DefaultReplaySymbol = "XAUUSD.gram";
 
     // Candle storage keyed by "SYMBOL_TIMEFRAME"
@@ -29,7 +30,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     private CancellationTokenSource? _replayCts;
 
     // initial ledger balance (configurable via start request)
-    private decimal _initialCashAed = 50000m;
+    private decimal _initialCashAed = 100000m;
 
     private string _symbol = string.Empty;
     private int _totalCandles;
@@ -196,7 +197,14 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         var useAI = request.UseMockAI ? false : request.UseAI;
         var ignoreNewsGate = request.IgnoreNewsGate;
         var replayTelegramState = NormalizeReplayTelegramState(request.TelegramReplayState);
-        _initialCashAed = request.InitialCashAed;
+        _initialCashAed = Math.Max(request.InitialCashAed, ReplayCapitalFloorAed);
+        if (_initialCashAed > request.InitialCashAed)
+        {
+            _logger.LogInformation(
+                "Replay capital normalized from {RequestedCash} to {NormalizedCash} AED to preserve 100g minimum-size parity under replay size caps.",
+                request.InitialCashAed,
+                _initialCashAed);
+        }
 
         // Ensure each replay run starts from a clean risk state.
         DecisionEngine.ResetRuntimeGuards();
@@ -811,6 +819,8 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             Bid: close - 0.10m,
             Ask: close + 0.10m,
             Spread: 0.20m,
+            AuthoritativeRate: close,
+            RateAuthority: "REPLAY_CANDLE",
             IsCompression: DetectCompression(symbol, primary.Timestamp),
             CompressionCountM15: compressionCountM15,
             ExpansionCountM15: expansionCountM15,

@@ -555,6 +555,7 @@ class AnalyzerService:
         lead_manager = self._lead_manager
         min_agreement = 1  # single-lead path always requires exactly 1 agreement
         pre_stage_votes: list[str] = []
+        committee_source = "lead"
 
         try:
             committee = await asyncio.wait_for(
@@ -569,6 +570,56 @@ class AnalyzerService:
             logger.warning("AI committee timed out after %.1fs", AI_COMMITTEE_TIMEOUT_SECONDS)
             committee = lead_manager.timeout_decision(required_agreement=min_agreement)
 
+        # Failover: if the lead model cannot provide a usable signal, retry once
+        # with the full analyzer set before triggering deterministic fallback.
+        can_failover = self._manager is not None and self._manager is not lead_manager
+        if can_failover and (not committee.consensus_passed or committee.signal is None):
+            stage_events.append({
+                "eventType": "AI_COMMITTEE_FAILOVER_TRIGGERED",
+                "stage": "committee",
+                "source": "aiworker",
+                "payload": {
+                    "reason": committee.disagreement_reason or "lead_no_signal",
+                },
+            })
+            try:
+                backup_committee = await asyncio.wait_for(
+                    self._manager.analyze_with_committee(
+                        market_context,
+                        min_agreement=1,
+                        entry_tolerance_pct=CONSENSUS_ENTRY_TOLERANCE_PCT,
+                    ),
+                    timeout=max(8.0, AI_COMMITTEE_TIMEOUT_SECONDS + 6.0),
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "AI committee failover timed out after %.1fs",
+                    max(8.0, AI_COMMITTEE_TIMEOUT_SECONDS + 6.0),
+                )
+                backup_committee = self._manager.timeout_decision(required_agreement=1)
+
+            if backup_committee.consensus_passed and backup_committee.signal is not None:
+                committee = backup_committee
+                committee_source = "full_failover"
+                stage_events.append({
+                    "eventType": "AI_COMMITTEE_FAILOVER_SUCCEEDED",
+                    "stage": "committee",
+                    "source": "aiworker",
+                    "payload": {
+                        "agreement_count": committee.agreement_count,
+                        "provider_votes": committee.provider_votes,
+                    },
+                })
+            else:
+                stage_events.append({
+                    "eventType": "AI_COMMITTEE_FAILOVER_FAILED",
+                    "stage": "committee",
+                    "source": "aiworker",
+                    "payload": {
+                        "reason": backup_committee.disagreement_reason or "backup_no_signal",
+                    },
+                })
+
         # CR9: record this call against the session budget
         await self._ai_gate.record_call_async(snapshot.session)
 
@@ -577,6 +628,7 @@ class AnalyzerService:
             "stage": "committee",
             "source": "aiworker",
             "payload": {
+                "committee_source": committee_source,
                 "agreement_count": committee.agreement_count,
                 "required_agreement": committee.required_agreement,
                 "consensus_passed": committee.consensus_passed,
@@ -599,8 +651,7 @@ class AnalyzerService:
                 )
                 fallback.providerVotes = list(dict.fromkeys((pre_stage_votes or []) + (fallback.providerVotes or [])))
                 fallback.summary = (
-                    "Fallback simulation analyzer used after committee produced no usable signal. "
-                    f"reason={committee.disagreement_reason or 'no_consensus'}"
+                    "Fallback simulation analyzer used (AI provider path unavailable for this cycle)."
                 )
                 fallback.aiTraceJson = _safe_json_dumps({
                     "ai_request": _build_request_with_prompt_dispatch(),
@@ -1121,7 +1172,12 @@ def _build_fallback_signal(
     provider_traces: list[dict[str, object]] | None = None,
 ) -> TradeSignal:
     primary_tf = snapshot.timeframeData[0]
-    current_price = float(primary_tf.close)
+    m5_tf = next((item for item in snapshot.timeframeData if (item.timeframe or "").upper() == "M5"), None)
+    current_price = float(
+        snapshot.authoritativeRate
+        if snapshot.authoritativeRate > 0
+        else (m5_tf.close if m5_tf is not None else primary_tf.close)
+    )
     atr = max(float(snapshot.atr), 4.0)
 
     expansion_bias = (

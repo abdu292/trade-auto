@@ -8,8 +8,9 @@ public static class ReplayEndpoints
 {
     private const string DefaultReplaySymbol = "XAUUSD.gram";
 
-    // Hidden pre-roll to stabilize H1/M15 indicators and structural context.
-    private static readonly TimeSpan ReplayFetchWarmup = TimeSpan.FromHours(30);
+    // Hidden pre-roll to stabilize H1/M15 indicators and long-horizon context
+    // (EMA200 on H1 needs at least 200 bars; keep margin above that).
+    private static readonly TimeSpan ReplayFetchWarmup = TimeSpan.FromHours(260);
 
     public static IEndpointRouteBuilder MapReplayEndpoints(this IEndpointRouteBuilder app)
     {
