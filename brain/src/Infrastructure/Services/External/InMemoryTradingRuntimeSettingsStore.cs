@@ -8,10 +8,12 @@ public sealed class InMemoryTradingRuntimeSettingsStore : ITradingRuntimeSetting
 
     private readonly Lock _gate = new();
     private string _symbol;
+    private bool _autoTradeEnabled;
 
-    public InMemoryTradingRuntimeSettingsStore(string initialSymbol)
+    public InMemoryTradingRuntimeSettingsStore(string initialSymbol, bool initialAutoTradeEnabled = false)
     {
         _symbol = Normalize(initialSymbol);
+        _autoTradeEnabled = initialAutoTradeEnabled;
     }
 
     public string GetSymbol()
@@ -27,6 +29,24 @@ public sealed class InMemoryTradingRuntimeSettingsStore : ITradingRuntimeSetting
         lock (_gate)
         {
             _symbol = Normalize(symbol);
+        }
+    }
+
+    /// <inheritdoc />
+    public bool GetAutoTradeEnabled()
+    {
+        lock (_gate)
+        {
+            return _autoTradeEnabled;
+        }
+    }
+
+    /// <inheritdoc />
+    public void SetAutoTradeEnabled(bool enabled)
+    {
+        lock (_gate)
+        {
+            _autoTradeEnabled = enabled;
         }
     }
 

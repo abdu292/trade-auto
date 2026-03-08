@@ -354,7 +354,8 @@ public static class MonitoringEndpoints
             IResult (ITradingRuntimeSettingsStore runtimeSettings) =>
             {
                 var symbol = runtimeSettings.GetSymbol();
-                return TypedResults.Ok(new { symbol });
+                var autoTradeEnabled = runtimeSettings.GetAutoTradeEnabled();
+                return TypedResults.Ok(new { symbol, autoTradeEnabled });
             })
             .WithName("GetRuntimeSettings")
             .WithDescription("Returns mutable runtime trading settings managed from app UI.");
@@ -370,10 +371,71 @@ public static class MonitoringEndpoints
                 }
 
                 runtimeSettings.SetSymbol(symbol);
-                return TypedResults.Ok(new { symbol = runtimeSettings.GetSymbol() });
+
+                if (request.AutoTradeEnabled.HasValue)
+                {
+                    runtimeSettings.SetAutoTradeEnabled(request.AutoTradeEnabled.Value);
+                }
+
+                return TypedResults.Ok(new
+                {
+                    symbol = runtimeSettings.GetSymbol(),
+                    autoTradeEnabled = runtimeSettings.GetAutoTradeEnabled(),
+                });
             })
             .WithName("UpdateRuntimeSettings")
             .WithDescription("Updates mutable runtime trading settings without server restart.");
+
+        monitoring.MapPut(
+            "/runtime-settings/auto-trade",
+            IResult (AutoTradeToggleRequest request, ITradingRuntimeSettingsStore runtimeSettings) =>
+            {
+                runtimeSettings.SetAutoTradeEnabled(request.Enabled);
+                return TypedResults.Ok(new
+                {
+                    autoTradeEnabled = runtimeSettings.GetAutoTradeEnabled(),
+                });
+            })
+            .WithName("SetAutoTradeEnabled")
+            .WithDescription("Toggles Auto Trade mode. When disabled (default), all ARMED trades go to approval queue. When enabled, ARMED trades are routed directly to MT5.");
+
+        monitoring.MapPost(
+            "/panic-interrupt",
+            async Task<IResult> (
+                IPendingTradeStore pendingTrades,
+                IMt5ControlStore mt5Control,
+                IRuntimeTimelineWriter timeline,
+                CancellationToken cancellationToken) =>
+            {
+                var canceled = pendingTrades.Clear();
+                mt5Control.RequestCancelPending("panic_interrupt");
+
+                await timeline.WriteAsync(
+                    eventType: "PANIC_INTERRUPT_TRIGGERED",
+                    stage: "safety",
+                    source: "brain",
+                    symbol: "XAUUSD",
+                    cycleId: null,
+                    tradeId: null,
+                    payload: new
+                    {
+                        trigger = "client_manual_panic",
+                        pendingCanceled = canceled,
+                        triggeredAtUtc = DateTimeOffset.UtcNow,
+                        message = "Global panic interrupt — all pending orders canceled, MT5 cancel signal sent.",
+                    },
+                    cancellationToken: cancellationToken);
+
+                return TypedResults.Ok(new
+                {
+                    triggered = true,
+                    pendingCanceled = canceled,
+                    message = $"Panic interrupt executed. {canceled} pending order(s) cleared. Cancel signal sent to EA.",
+                    triggeredAtUtc = DateTimeOffset.UtcNow,
+                });
+            })
+            .WithName("TriggerPanicInterrupt")
+            .WithDescription("Global panic interrupt: cancels all pending orders immediately and sends cancel signal to MT5 EA. Use when FAIL is threatened, sudden liquidation, or macro shock.");
 
         monitoring.MapGet(
             "/macro-cache",
@@ -823,5 +885,7 @@ public sealed record CreateHazardWindowRequest(
 public sealed record LedgerActionRequest(decimal AmountAed, string? Note);
 public sealed record LedgerAdjustmentRequest(decimal AdjustmentAed, string? Note);
 
-public sealed record UpdateRuntimeSettingsRequest(string? Symbol);
+public sealed record UpdateRuntimeSettingsRequest(string? Symbol, bool? AutoTradeEnabled = null);
+
+public sealed record AutoTradeToggleRequest(bool Enabled);
 

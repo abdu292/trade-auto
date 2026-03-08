@@ -71,6 +71,17 @@ class BrainApi {
     return RuntimeSettings.fromJson(_asMap(response.data));
   }
 
+  Future<void> setAutoTradeEnabled(bool enabled) async {
+    await _dio.put('/api/monitoring/runtime-settings/auto-trade', data: {
+      'enabled': enabled,
+    });
+  }
+
+  Future<Map<String, dynamic>> triggerPanicInterrupt() async {
+    final response = await _dio.post('/api/monitoring/panic-interrupt');
+    return _asMap(response.data);
+  }
+
   Future<AiHealthStatus> getAiHealthStatus() async {
     final response = await _dio.get('/api/monitoring/ai-health');
     return AiHealthStatus.fromJson(_asMap(response.data));

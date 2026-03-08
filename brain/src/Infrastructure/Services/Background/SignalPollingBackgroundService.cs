@@ -198,6 +198,41 @@ public sealed class SignalPollingBackgroundService(
 
                 var setupCandidate = RuleEngine.Evaluate(snapshot);
 
+                // ── Pattern Detector (CR8): runs after regime check, before AI ──────────────
+                // Produces structured pattern intelligence for ANALYZE/TABLE/MANAGE/STUDY feeds.
+                // Non-executing: no trades placed here, only intelligence emitted.
+                var patterns = PatternDetector.Detect(snapshot);
+                if (patterns.Count > 0)
+                {
+                    await timeline.WriteAsync(
+                        eventType: "PATTERN_DETECTOR_RESULTS",
+                        stage: "pattern",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            patternCount = patterns.Count,
+                            patterns = patterns.Select(p => new
+                            {
+                                patternId = p.PatternId,
+                                patternVersion = p.PatternVersion,
+                                detectionMode = p.DetectionMode.ToString(),
+                                patternType = p.PatternType.ToString(),
+                                subtype = p.Subtype,
+                                confidence = p.Confidence,
+                                session = p.Session,
+                                timeframePrimary = p.TimeframePrimary,
+                                entrySafety = p.EntrySafety,
+                                waterfallRisk = p.WaterfallRisk,
+                                failThreatened = p.FailThreatened,
+                                recommendedAction = p.RecommendedAction.ToString(),
+                            }).ToList(),
+                        },
+                        cancellationToken: stoppingToken);
+                }
+
                 await timeline.WriteAsync(
                     eventType: setupCandidate.IsValid ? "RULE_ENGINE_SETUP_CANDIDATE" : "RULE_ENGINE_ABORT",
                     stage: "rule_engine",
@@ -705,6 +740,36 @@ public sealed class SignalPollingBackgroundService(
                         },
                         cancellationToken: stoppingToken);
 
+                    // BLOCKED_VALID_SETUP_CANDIDATE (CR8): when a setup passed scoring but was
+                    // blocked by the final bottom-permission gate, tag it as a study candidate.
+                    // STUDY module uses these to determine if the permission rule is too strict.
+                    if (string.Equals(decision.Cause, "BOTTOMPERMISSION_FALSE", StringComparison.Ordinal))
+                    {
+                        logger.LogInformation(
+                            "BLOCKED_VALID_SETUP_CANDIDATE — setup passed scoring (score>={Threshold}) but blocked by BottomPermission. Queued for STUDY.",
+                            TradeScoreCalculator.NoTradeThreshold);
+
+                        await timeline.WriteAsync(
+                            eventType: "BLOCKED_VALID_SETUP_CANDIDATE",
+                            stage: "study",
+                            source: "brain",
+                            symbol: snapshot.Symbol,
+                            cycleId: cycleId,
+                            tradeId: null,
+                            payload: new
+                            {
+                                cause = decision.Cause,
+                                bottomPermissionReason = decision.Reason,
+                                tradeScore = tradeScore.TotalScore,
+                                session = snapshot.Session,
+                                sessionPhase = snapshot.SessionPhase,
+                                waterfallRisk = decision.WaterfallRisk,
+                                note = "Study candidate: passed scoring but blocked by BottomPermission. " +
+                                       "STUDY should determine if block saved from waterfall or if rule is too strict.",
+                            },
+                            cancellationToken: stoppingToken);
+                    }
+
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -818,7 +883,10 @@ public sealed class SignalPollingBackgroundService(
 
                 var executionMode = ResolveExecutionMode(configuration["Execution:Mode"]);
                 var hybridSessions = ResolveHybridAutoSessions(configuration["Execution:HybridAutoSessions"]);
-                var directToMt5 = ShouldQueueToMt5(executionMode, pending.Session, hybridSessions);
+                var autoTradeEnabled = runtimeSettings.GetAutoTradeEnabled();
+                // Auto Trade toggle (CR7): when disabled (default OFF), all ARMED trades go to approval queue
+                // regardless of execution mode, preventing unintended automated execution.
+                var directToMt5 = autoTradeEnabled && ShouldQueueToMt5(executionMode, pending.Session, hybridSessions);
 
                 if (directToMt5)
                 {
@@ -877,6 +945,7 @@ public sealed class SignalPollingBackgroundService(
                         pending.Cause,
                         route = directToMt5 ? "MT5_PENDING" : "APPROVAL_QUEUE",
                         executionMode = executionMode.ToString().ToUpperInvariant(),
+                        autoTradeEnabled,
                     },
                     cancellationToken: stoppingToken);
 
