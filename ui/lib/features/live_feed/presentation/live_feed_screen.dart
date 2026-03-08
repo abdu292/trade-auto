@@ -40,12 +40,14 @@ _EventCategory _classifyEvent(RuntimeTimelineItem item) {
       t == 'AI_CONSENSUS_FAILED' ||
       t == 'AI_SKIPPED_RULE_ENGINE_ABORT' ||
       t == 'CYCLE_ABORTED' ||
+      t == 'BLOCKED_VALID_SETUP_CANDIDATE' ||
       (t == 'FINAL_DECISION' && item.payload['finalDecision'] == 'NO_TRADE') ||
       t == 'REPLAY_CYCLE_NO_TRADE') {
     return _EventCategory.noTrade;
   }
   if (t == 'MT5_MARKET_SNAPSHOT_RECEIVED' ||
       t == 'MARKET_REGIME_DETECTED' ||
+      t == 'PATTERN_DETECTOR_RESULTS' ||
       t == 'MT5_PENDING_TRADE_DEQUEUED' ||
       t == 'MT5_TRADE_STATUS_RECEIVED') {
     return _EventCategory.market;
@@ -110,6 +112,32 @@ String _describeEvent(RuntimeTimelineItem item) {
       final reason = s('reason');
       final base = 'Market regime: $regime — $tradeable';
       return reason.isNotEmpty ? '$base · $reason' : base;
+
+    case 'PATTERN_DETECTOR_RESULTS':
+      final patternCount = p['patternCount'];
+      final countLabel = patternCount != null ? '$patternCount' : '?';
+      final patterns = p['patterns'];
+      if (patterns is List && patterns.isNotEmpty) {
+        final types = patterns
+            .whereType<Map>()
+            .map((pat) => pat['patternType']?.toString() ?? '')
+            .where((t) => t.isNotEmpty)
+            .toList();
+        final typeLabel = types.take(3).join(', ');
+        final moreLabel = types.length > 3 ? ' +${types.length - 3} more' : '';
+        return 'Pattern detector: $countLabel pattern(s) found — $typeLabel$moreLabel';
+      }
+      return 'Pattern detector: $countLabel pattern(s) detected';
+
+    case 'BLOCKED_VALID_SETUP_CANDIDATE':
+      final session = s('session');
+      final cause = s('cause');
+      final score = n('tradeScore');
+      var blockedDesc = '⚠️ Blocked valid setup (study candidate)';
+      if (session.isNotEmpty) blockedDesc += ' · Session: $session';
+      if (score.isNotEmpty) blockedDesc += ' · Score: $score';
+      if (cause.isNotEmpty) blockedDesc += ' · Cause: $cause';
+      return blockedDesc;
 
     case 'RULE_ENGINE_SETUP_CANDIDATE':
       final regimeLabel = s('marketRegime');

@@ -392,10 +392,11 @@ Current code implements a core subset in the live path, while other modules rema
 ### Current Code Status (Implemented)
 1. CAPITAL UTILIZATION — implemented via ledger/runtime sizing and guard checks
 2. NEWS — implemented economic-news gate
-3. PATTERN DETECTOR — implemented deterministic detector with required classes and schema
+3. PATTERN DETECTOR — implemented deterministic detector with required classes and schema; runs in both live and replay paths, emitting `PATTERN_DETECTOR_RESULTS` timeline events
 4. VALIDATE — implemented scoring/validation gates in decision flow
 5. SLIPS — implemented for BUY and TP sell fills, with ledger updates
 6. Core decision/routing spine — implemented (`NO_TRADE`/`ARMED`, Auto Trade toggle, execution modes, approvals, panic interrupt)
+7. BLOCKED_VALID_SETUP_CANDIDATE tagging — implemented in both live and replay paths; emits study-candidate timeline events when a setup passes scoring but is blocked by the bottom-permission gate
 
 ### Planned / Partial (Target CR8 Scope)
 The following CR8 map items are target modules and not fully implemented as standalone production modules yet:
@@ -508,6 +509,18 @@ The key principle from CR7:
 ## Optional Appendix: Replay/Backtest Path (Same Core Logic)
 There is also a replay path where MT5 history is fetched/imported and run through the same decision pipeline.
 This is used for testing behavior consistency without live order execution.
+
+The replay cycle runs the same stages as the live path:
+- Market regime detection
+- Rule engine (structural validity)
+- **Pattern Detector** — runs after regime/rule-engine, emits `PATTERN_DETECTOR_RESULTS` timeline events
+- News gate (or bypass with `ignoreNewsGate=true` for pure backtest runs)
+- AI analysis (or mock AI)
+- Trade scoring
+- Decision engine (dual-path bottom permission, all hard gates)
+- **BLOCKED_VALID_SETUP_CANDIDATE** tagging — emitted when a setup passes scoring but is blocked by the bottom-permission gate, same as the live path
+
+Real order execution is always disabled in replay mode. All timeline events are tagged with `replayMode: true`.
 
 ---
 

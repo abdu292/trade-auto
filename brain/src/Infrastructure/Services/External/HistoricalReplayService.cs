@@ -404,6 +404,49 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
 
         Interlocked.Increment(ref _setupCandidatesFound);
 
+        // ── Pattern Detector (CR8): mirrors the live path — runs after regime/rule-engine ──
+        // Produces structured pattern intelligence for ANALYZE/TABLE/MANAGE/STUDY feeds.
+        // Non-executing: no trades placed here, only intelligence emitted.
+        try
+        {
+            var patterns = PatternDetector.Detect(snapshot);
+            if (patterns.Count > 0)
+            {
+                await timeline.WriteAsync(
+                    eventType: "PATTERN_DETECTOR_RESULTS",
+                    stage: "pattern",
+                    source: "replay_engine",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        patternCount = patterns.Count,
+                        replayMode = true,
+                        patterns = patterns.Select(p => new
+                        {
+                            patternId = p.PatternId,
+                            patternVersion = p.PatternVersion,
+                            detectionMode = p.DetectionMode.ToString(),
+                            patternType = p.PatternType.ToString(),
+                            subtype = p.Subtype,
+                            confidence = p.Confidence,
+                            session = p.Session,
+                            timeframePrimary = p.TimeframePrimary,
+                            entrySafety = p.EntrySafety,
+                            waterfallRisk = p.WaterfallRisk,
+                            failThreatened = p.FailThreatened,
+                            recommendedAction = p.RecommendedAction.ToString(),
+                        }).ToList(),
+                    },
+                    cancellationToken: ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Replay [{CycleId}] Pattern detector failed; continuing cycle.", cycleId);
+        }
+
         if (ignoreNewsGate)
         {
             await timeline.WriteAsync(
@@ -601,6 +644,31 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             _logger.LogInformation(
                 "Replay [{CycleId}] Trade candidate: {Rail} {Symbol} @ {Entry} TP={Tp} grams={Grams} (NOT executed — replay mode)",
                 cycleId, decision.Rail, snapshot.Symbol, decision.Entry, decision.Tp, decision.Grams);
+        }
+        else if (string.Equals(decision.Cause, "BOTTOMPERMISSION_FALSE", StringComparison.Ordinal))
+        {
+            // BLOCKED_VALID_SETUP_CANDIDATE (CR8): mirrors the live path — tag study candidates
+            // when a setup passed scoring but was blocked by the bottom-permission gate.
+            await timeline.WriteAsync(
+                eventType: "BLOCKED_VALID_SETUP_CANDIDATE",
+                stage: "study",
+                source: "replay_engine",
+                symbol: snapshot.Symbol,
+                cycleId: cycleId,
+                tradeId: null,
+                payload: new
+                {
+                    cause = decision.Cause,
+                    bottomPermissionReason = decision.Reason,
+                    tradeScore = tradeScore.TotalScore,
+                    session = snapshot.Session,
+                    sessionPhase = snapshot.SessionPhase,
+                    waterfallRisk = decision.WaterfallRisk,
+                    replayMode = true,
+                    note = "Replay study candidate: passed scoring but blocked by BottomPermission. " +
+                           "STUDY should determine if block saved from waterfall or if rule is too strict.",
+                },
+                cancellationToken: ct);
         }
     }
 
