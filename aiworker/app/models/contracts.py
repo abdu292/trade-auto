@@ -142,6 +142,35 @@ class PostTradeAnalysisSuggestion(BaseModel):
     reasoning: str
 
 
+class StudyRefinementRequest(BaseModel):
+    """Request for autonomous study/self-crosscheck refinement (PRD point 4).
+
+    Called by Brain when STUDY_LOCK is active (after consecutive waterfall failures).
+    Uses ALL configured analyzers (not just the lead) to perform a deeper review.
+    """
+    snapshot: MarketSnapshot
+    consecutiveWaterfallFailures: int = 0
+    studyCycleId: str | None = None
+    recentBlockedCandidates: list[dict] = Field(default_factory=list)
+    recentWaterfallReasons: list[str] = Field(default_factory=list)
+
+
+class StudyRefinementSuggestion(BaseModel):
+    """Result from the autonomous study/self-crosscheck refinement loop.
+
+    Verdict fields use the following values:
+    - bottomPermissionVerdict: TOO_STRICT | CORRECT | TOO_LOOSE
+    - waterfallVerdict: CORRECT | OVER_SENSITIVE | UNDER_SENSITIVE
+    """
+    studyCycleId: str | None = None
+    bottomPermissionVerdict: str = "CORRECT"
+    waterfallVerdict: str = "CORRECT"
+    ruleAdjustments: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
+    reasoning: str = ""
+    providerVotes: list[str] = Field(default_factory=list)
+
+
 class TradeSignal(BaseModel):
     rail: str
     entry: float
