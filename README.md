@@ -20,6 +20,18 @@ See each project README for run instructions.
 3. Run Flutter UI with production/local defines (see `ui/README.md`).
 4. Point MT5 EA `BrainBaseUrl` to backend host.
 
+### Database migrations
+A handy helper script lives at the repository root:
+
+```powershell
+# from workspace root
+.\add-migration.ps1 -Name "MyMigrationName"
+```
+
+This executes `dotnet ef migrations add` using the Infrastructure project as the
+motivation and Web as the startup project; new files appear under
+`brain/src/Infrastructure/Data/Migrations`.
+
 ## Documentation
 
 - **Start Here (Run + Test)**: [docs/RUN_AND_TEST_GUIDE.md](docs/RUN_AND_TEST_GUIDE.md)
