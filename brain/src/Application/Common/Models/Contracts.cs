@@ -323,3 +323,27 @@ public sealed record TradeScoreContract(
     int SentimentScore,
     int TotalScore,
     string DecisionTier);
+
+/// <summary>
+/// Context passed to the aiworker /study-analyze endpoint when STUDY_LOCK is active.
+/// Contains information about recent waterfall failures and blocked trade candidates.
+/// </summary>
+public sealed record StudyContextContract(
+    int ConsecutiveWaterfallFailures,
+    string StudyCycleId,
+    IReadOnlyCollection<object> RecentBlockedCandidates,
+    IReadOnlyCollection<string> RecentWaterfallReasons);
+
+/// <summary>
+/// Result from the aiworker autonomous study/self-crosscheck refinement loop.
+/// Verdicts: bottomPermissionVerdict = TOO_STRICT | CORRECT | TOO_LOOSE,
+///           waterfallVerdict = CORRECT | OVER_SENSITIVE | UNDER_SENSITIVE.
+/// </summary>
+public sealed record StudyRefinementSuggestionContract(
+    string StudyCycleId,
+    string BottomPermissionVerdict,
+    string WaterfallVerdict,
+    IReadOnlyCollection<string> RuleAdjustments,
+    double Confidence,
+    string Reasoning,
+    IReadOnlyCollection<string> ProviderVotes);

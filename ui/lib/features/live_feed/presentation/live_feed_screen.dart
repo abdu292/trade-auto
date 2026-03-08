@@ -178,7 +178,40 @@ String _describeEvent(RuntimeTimelineItem item) {
       return 'AI pre-stage completed — provider votes collected';
 
     case 'AI_COMMITTEE_EVALUATED':
-      return 'AI committee evaluated — checking agreement across providers';
+      final committeeSource = s('committeeSource');
+      final agreementCount = n('agreementCount');
+      final base2 = 'AI committee evaluated';
+      if (committeeSource == 'lead') return '$base2 — lead model decision';
+      if (committeeSource == 'full_failover') return '$base2 — full failover succeeded ✅';
+      if (agreementCount.isNotEmpty) return '$base2 · agreement=$agreementCount';
+      return base2;
+
+    case 'AI_COMMITTEE_FAILOVER_TRIGGERED':
+      final reason = s('reason');
+      return reason.isNotEmpty
+          ? 'AI lead committee failed — retrying with full analyzer set · $reason'
+          : 'AI lead committee failed — retrying with full analyzer set';
+
+    case 'AI_COMMITTEE_FAILOVER_SUCCEEDED':
+      final fAgreement = n('agreementCount');
+      return fAgreement.isNotEmpty
+          ? 'AI failover succeeded ✅ — agreement=$fAgreement'
+          : 'AI failover succeeded ✅ — full analyzer set produced a signal';
+
+    case 'AI_COMMITTEE_FAILOVER_FAILED':
+      final ffReason = s('reason');
+      return ffReason.isNotEmpty
+          ? 'AI failover also failed ⚠️ — using fallback simulation · $ffReason'
+          : 'AI failover also failed ⚠️ — using fallback simulation';
+
+    case 'AI_FALLBACK_TRIGGERED':
+      final fbReason = s('reason');
+      return fbReason.isNotEmpty
+          ? 'AI fallback simulation triggered — no live AI signal · $fbReason'
+          : 'AI fallback simulation triggered — no live AI signal';
+
+    case 'AI_SIGNAL_FALLBACK_USED':
+      return '⚠️ AI signal: deterministic fallback used (all AI providers unavailable this cycle)';
 
     case 'AI_VALIDATION_EVALUATED':
       return 'AI validation stage — checking signal consistency';
@@ -196,6 +229,22 @@ String _describeEvent(RuntimeTimelineItem item) {
       return withReason(
           'AI consensus failed 🚫 — not enough agreement to trade',
           s('reason'));
+
+    case 'STUDY_REFINEMENT_STARTED':
+      final failures = n('consecutiveWaterfallFailures');
+      return failures.isNotEmpty
+          ? '🔬 Study & self-crosscheck started — analyzing $failures waterfall failure(s) with all AI models'
+          : '🔬 Study & self-crosscheck started — full AI review in progress';
+
+    case 'STUDY_REFINEMENT_RESULT':
+      final bottomVerdict = s('bottomPermissionVerdict');
+      final waterfallVerdict = s('waterfallVerdict');
+      final adjustments = s('ruleAdjustments');
+      var studyDesc = '🔬 Study complete';
+      if (bottomVerdict.isNotEmpty) studyDesc += ' · BottomPerm: $bottomVerdict';
+      if (waterfallVerdict.isNotEmpty) studyDesc += ' · Waterfall: $waterfallVerdict';
+      if (adjustments.isNotEmpty && adjustments != '[]') studyDesc += ' · Adjustments suggested';
+      return studyDesc;
 
     case 'TRADE_SCORE_CALCULATION':
       final total = n('totalScore');

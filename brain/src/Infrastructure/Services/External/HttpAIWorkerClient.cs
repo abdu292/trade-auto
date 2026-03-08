@@ -326,6 +326,215 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         }
     }
 
+    public async Task<StudyRefinementSuggestionContract?> StudyAnalyzeAsync(
+        MarketSnapshotContract snapshot,
+        StudyContextContract context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation(
+                "→ [AIWorker] POST {BaseUrl}/study-analyze studyCycleId={StudyCycleId} failures={Failures}",
+                _baseUrl,
+                context.StudyCycleId,
+                context.ConsecutiveWaterfallFailures);
+
+            var request = new
+            {
+                snapshot = BuildSnapshotRequest(snapshot),
+                consecutiveWaterfallFailures = context.ConsecutiveWaterfallFailures,
+                studyCycleId = context.StudyCycleId,
+                recentBlockedCandidates = context.RecentBlockedCandidates,
+                recentWaterfallReasons = context.RecentWaterfallReasons,
+            };
+
+            var jsonContent = new StringContent(
+                JsonSerializer.Serialize(request),
+                Encoding.UTF8,
+                "application/json");
+
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/study-analyze")
+            {
+                Content = jsonContent,
+            };
+
+            using var response = await _httpClient.SendAsync(
+                requestMessage,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await ReadResponseBodyLimitedAsync(response, MaxModeResponseBytes, cancellationToken);
+                _logger.LogWarning(
+                    "← [AIWorker] Study analyze returned {StatusCode}. Body: {Body}",
+                    (int)response.StatusCode,
+                    ClipForLog(errorBody, MaxErrorBodyLogChars));
+                return null;
+            }
+
+            var responseBody = await ReadResponseBodyLimitedAsync(response, MaxAnalyzeResponseBytes, cancellationToken);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var result = JsonSerializer.Deserialize<StudyRefinementResponse>(responseBody, options);
+            if (result is null)
+            {
+                return null;
+            }
+
+            _logger.LogInformation(
+                "← [AIWorker] Study analysis complete: bottom={Bottom} waterfall={Waterfall} adjustments={Adjustments}",
+                result.BottomPermissionVerdict,
+                result.WaterfallVerdict,
+                result.RuleAdjustments?.Count ?? 0);
+
+            return new StudyRefinementSuggestionContract(
+                StudyCycleId: result.StudyCycleId ?? context.StudyCycleId,
+                BottomPermissionVerdict: result.BottomPermissionVerdict ?? "CORRECT",
+                WaterfallVerdict: result.WaterfallVerdict ?? "CORRECT",
+                RuleAdjustments: result.RuleAdjustments ?? [],
+                Confidence: result.Confidence ?? 0.5,
+                Reasoning: result.Reasoning ?? string.Empty,
+                ProviderVotes: result.ProviderVotes ?? []);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "AI worker study-analyze endpoint unavailable; skipping study refinement.");
+            return null;
+        }
+    }
+
+    private static object BuildSnapshotRequest(MarketSnapshotContract snapshot)
+    {
+        return new
+        {
+            symbol = snapshot.Symbol,
+            timeframeData = snapshot.TimeframeData.Select(tf => new
+            {
+                timeframe = tf.Timeframe,
+                open = tf.Open,
+                high = tf.High,
+                low = tf.Low,
+                close = tf.Close,
+                volume = tf.Volume,
+                candleStartTime = tf.CandleStartTime,
+                candleCloseTime = tf.CandleCloseTime,
+                candleBodySize = tf.CandleBodySize,
+                upperWickSize = tf.UpperWickSize,
+                lowerWickSize = tf.LowerWickSize,
+                candleRange = tf.CandleRange,
+                ma20Value = tf.Ma20Value,
+                ma20Distance = tf.Ma20Distance,
+                rsi = tf.Rsi,
+                atr = tf.Atr,
+            }),
+            atr = snapshot.Atr,
+            adr = snapshot.Adr,
+            ma20 = snapshot.Ma20,
+            ma20H4 = snapshot.Ma20H4,
+            ma20H1 = snapshot.Ma20H1,
+            ma20M30 = snapshot.Ma20M30,
+            rsiH1 = snapshot.RsiH1,
+            rsiM15 = snapshot.RsiM15,
+            atrH1 = snapshot.AtrH1,
+            atrM15 = snapshot.AtrM15,
+            previousDayHigh = snapshot.PreviousDayHigh,
+            previousDayLow = snapshot.PreviousDayLow,
+            weeklyHigh = snapshot.WeeklyHigh,
+            weeklyLow = snapshot.WeeklyLow,
+            dayOpen = snapshot.DayOpen,
+            weekOpen = snapshot.WeekOpen,
+            sessionHigh = snapshot.SessionHigh,
+            sessionLow = snapshot.SessionLow,
+            sessionHighJapan = snapshot.SessionHighJapan,
+            sessionLowJapan = snapshot.SessionLowJapan,
+            sessionHighIndia = snapshot.SessionHighIndia,
+            sessionLowIndia = snapshot.SessionLowIndia,
+            sessionHighLondon = snapshot.SessionHighLondon,
+            sessionLowLondon = snapshot.SessionLowLondon,
+            sessionHighNy = snapshot.SessionHighNy,
+            sessionLowNy = snapshot.SessionLowNy,
+            previousSessionHigh = snapshot.PreviousSessionHigh,
+            previousSessionLow = snapshot.PreviousSessionLow,
+            ema50H1 = snapshot.Ema50H1,
+            ema200H1 = snapshot.Ema200H1,
+            adrUsedPct = snapshot.AdrUsedPct,
+            session = snapshot.Session,
+            sessionPhase = snapshot.SessionPhase,
+            timestamp = snapshot.Timestamp,
+            volatilityExpansion = snapshot.VolatilityExpansion,
+            dayOfWeek = snapshot.DayOfWeek.ToString(),
+            mt5ServerTime = snapshot.Mt5ServerTime,
+            ksaTime = snapshot.KsaTime,
+            uaeTime = snapshot.UaeTime,
+            indiaTime = snapshot.IndiaTime,
+            internalClockUtc = snapshot.InternalClockUtc,
+            utcReferenceTime = snapshot.UtcReferenceTime,
+            timeSkewMs = snapshot.TimeSkewMs,
+            mt5ToKsaOffsetMinutes = snapshot.Mt5ToKsaOffsetMinutes,
+            telegramImpactTag = snapshot.TelegramImpactTag,
+            tradingViewConfirmation = snapshot.TradingViewConfirmation,
+            isCompression = snapshot.IsCompression,
+            isExpansion = snapshot.IsExpansion,
+            isAtrExpanding = snapshot.IsAtrExpanding,
+            hasOverlapCandles = snapshot.HasOverlapCandles,
+            hasImpulseCandles = snapshot.HasImpulseCandles,
+            hasLiquiditySweep = snapshot.HasLiquiditySweep,
+            hasPanicDropSequence = snapshot.HasPanicDropSequence,
+            isPostSpikePullback = snapshot.IsPostSpikePullback,
+            isLondonNyOverlap = snapshot.IsLondonNyOverlap,
+            isBreakoutConfirmed = snapshot.IsBreakoutConfirmed,
+            isUsRiskWindow = snapshot.IsUsRiskWindow,
+            isFriday = snapshot.IsFriday,
+            bid = snapshot.Bid,
+            ask = snapshot.Ask,
+            spread = snapshot.Spread,
+            spreadMedian60m = snapshot.SpreadMedian60m,
+            spreadMax60m = snapshot.SpreadMax60m,
+            compressionCountM15 = snapshot.CompressionCountM15,
+            expansionCountM15 = snapshot.ExpansionCountM15,
+            impulseStrengthScore = snapshot.ImpulseStrengthScore,
+            telegramState = snapshot.TelegramState,
+            panicSuspected = snapshot.PanicSuspected,
+            tvAlertType = snapshot.TvAlertType,
+            tickRatePer30s = snapshot.TickRatePer30s,
+            freezeGapDetected = snapshot.FreezeGapDetected,
+            slippageEstimatePoints = snapshot.SlippageEstimatePoints,
+            sessionVwap = snapshot.SessionVwap,
+            systemFetchedGoldRate = snapshot.SystemFetchedGoldRate,
+            rateDeltaUsd = snapshot.RateDeltaUsd,
+            rateAuthority = snapshot.RateAuthority,
+            authoritativeRate = snapshot.AuthoritativeRate,
+            cycleId = snapshot.CycleId,
+            compressionRangesM15 = snapshot.CompressionRangesM15 ?? [],
+            freeMargin = snapshot.FreeMargin,
+            equity = snapshot.Equity,
+            balance = snapshot.Balance,
+            pendingOrders = (snapshot.PendingOrders ?? []).Select(item => new
+            {
+                type = item.Type,
+                price = item.Price,
+                tp = item.Tp,
+                expiry = item.Expiry,
+                volumeGramsEquivalent = item.VolumeGramsEquivalent,
+            }),
+            openPositions = (snapshot.OpenPositions ?? []).Select(item => new
+            {
+                entryPrice = item.EntryPrice,
+                currentPnlPoints = item.CurrentPnlPoints,
+                tp = item.Tp,
+                volumeGramsEquivalent = item.VolumeGramsEquivalent,
+            }),
+            orderExecutionEvents = (snapshot.OrderExecutionEvents ?? []).Select(item => new
+            {
+                status = item.Status,
+                timestamp = item.Timestamp,
+                price = item.Price,
+                volumeGramsEquivalent = item.VolumeGramsEquivalent,
+                ticket = item.Ticket,
+            }),
+        };
+    }
+
     private static string ResolveBaseUrl(IConfiguration configuration)
     {
         var configured = (configuration["External:AIWorkerBaseUrl"] ?? string.Empty).Trim().TrimEnd('/');
@@ -420,4 +629,13 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         IReadOnlyCollection<string>? Keywords,
         int TtlSeconds,
         DateTimeOffset? CapturedAtUtc);
+
+    private sealed record StudyRefinementResponse(
+        string? StudyCycleId,
+        string? BottomPermissionVerdict,
+        string? WaterfallVerdict,
+        IReadOnlyCollection<string>? RuleAdjustments,
+        double? Confidence,
+        string? Reasoning,
+        IReadOnlyCollection<string>? ProviderVotes);
 }

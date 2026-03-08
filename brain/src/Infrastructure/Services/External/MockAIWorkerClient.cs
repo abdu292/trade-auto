@@ -46,4 +46,22 @@ public sealed class MockAIWorkerClient : IAIWorkerClient
 
         return Task.FromResult<ModeSignalContract?>(result);
     }
+
+    public Task<StudyRefinementSuggestionContract?> StudyAnalyzeAsync(
+        MarketSnapshotContract snapshot,
+        StudyContextContract context,
+        CancellationToken cancellationToken)
+    {
+        // Mock: return a reasonable default verdict for dev/test environments
+        var result = new StudyRefinementSuggestionContract(
+            StudyCycleId: context.StudyCycleId,
+            BottomPermissionVerdict: "CORRECT",
+            WaterfallVerdict: "CORRECT",
+            RuleAdjustments: [],
+            Confidence: 0.6,
+            Reasoning: $"Mock study: {context.ConsecutiveWaterfallFailures} waterfall failure(s) reviewed. No rule changes recommended in mock mode.",
+            ProviderVotes: ["mock-study:CORRECT@default"]);
+
+        return Task.FromResult<StudyRefinementSuggestionContract?>(result);
+    }
 }

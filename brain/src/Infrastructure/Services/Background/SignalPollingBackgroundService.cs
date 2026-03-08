@@ -36,6 +36,14 @@ public sealed class SignalPollingBackgroundService(
     private const int StudyLockWaterfallThreshold = 2;
     private static readonly TimeSpan StudyLockDuration = TimeSpan.FromMinutes(30);
 
+    // Study refinement: autonomous study/self-crosscheck is triggered once per STUDY_LOCK period.
+    // _studyRanForLockExpiry tracks the lock expiry for which the study has already been dispatched
+    // so we don't re-run the study on every 30-second polling cycle during the lock window.
+    private static DateTimeOffset _studyRanForLockExpiry = DateTimeOffset.MinValue;
+    private static readonly List<string> _recentWaterfallReasons = [];
+    private static readonly Lock _studyGate = new();
+    private const int MaxRecentWaterfallReasons = 10;
+
     // Candle-aligned execution: strategy runs only on new M5 or M15 candle close.
     private static DateTimeOffset? _lastM5CandleTime = null;
     private static DateTimeOffset? _lastM15CandleTime = null;
@@ -83,6 +91,95 @@ public sealed class SignalPollingBackgroundService(
                         "Perform STUDY & SELF_CROSSCHECK before trading resumes. Lock expires in {RemainingMinutes:0.0}m.",
                         StudyLockWaterfallThreshold,
                         remaining.TotalMinutes);
+
+                    // Autonomous study refinement: dispatch once per STUDY_LOCK period so the
+                    // aiworker can run a full self-crosscheck with ALL analyzers and surface
+                    // rule adjustment suggestions to the timeline.
+                    bool shouldRunStudy;
+                    DateTimeOffset currentLockExpiry;
+                    IReadOnlyCollection<string> capturedReasons;
+                    lock (_studyGate)
+                    {
+                        currentLockExpiry = _studyLockExpiry;
+                        shouldRunStudy = _studyRanForLockExpiry != currentLockExpiry;
+                        capturedReasons = [.. _recentWaterfallReasons];
+                    }
+
+                    if (shouldRunStudy)
+                    {
+                        lock (_studyGate)
+                        {
+                            _studyRanForLockExpiry = currentLockExpiry;
+                        }
+
+                        var studyCycleId = $"study_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}";
+
+                        try
+                        {
+                            var rawSnapshotForStudy = await marketData.GetSnapshotAsync(
+                                runtimeSettings.GetSymbol(), stoppingToken);
+                            var snapshotForStudy = rawSnapshotForStudy with { CycleId = studyCycleId };
+
+                            await timeline.WriteAsync(
+                                eventType: "STUDY_REFINEMENT_STARTED",
+                                stage: "study",
+                                source: "brain",
+                                symbol: snapshotForStudy.Symbol,
+                                cycleId: studyCycleId,
+                                tradeId: null,
+                                payload: new
+                                {
+                                    studyCycleId,
+                                    consecutiveWaterfallFailures = StudyLockWaterfallThreshold,
+                                    recentWaterfallReasons = capturedReasons,
+                                    note = "Autonomous study refinement dispatched to aiworker (all analyzers).",
+                                },
+                                cancellationToken: stoppingToken);
+
+                            var studyContext = new StudyContextContract(
+                                ConsecutiveWaterfallFailures: StudyLockWaterfallThreshold,
+                                StudyCycleId: studyCycleId,
+                                RecentBlockedCandidates: [],
+                                RecentWaterfallReasons: capturedReasons);
+
+                            var studyResult = await aiWorker.StudyAnalyzeAsync(
+                                snapshotForStudy, studyContext, stoppingToken);
+
+                            if (studyResult is not null)
+                            {
+                                await timeline.WriteAsync(
+                                    eventType: "STUDY_REFINEMENT_RESULT",
+                                    stage: "study",
+                                    source: "aiworker",
+                                    symbol: snapshotForStudy.Symbol,
+                                    cycleId: studyCycleId,
+                                    tradeId: null,
+                                    payload: new
+                                    {
+                                        studyResult.StudyCycleId,
+                                        studyResult.BottomPermissionVerdict,
+                                        studyResult.WaterfallVerdict,
+                                        studyResult.RuleAdjustments,
+                                        studyResult.Confidence,
+                                        studyResult.Reasoning,
+                                        studyResult.ProviderVotes,
+                                    },
+                                    cancellationToken: stoppingToken);
+
+                                logger.LogInformation(
+                                    "STUDY_REFINEMENT_RESULT — bottom={Bottom} waterfall={Waterfall} adjustments={Adjustments} confidence={Confidence:0.00}",
+                                    studyResult.BottomPermissionVerdict,
+                                    studyResult.WaterfallVerdict,
+                                    studyResult.RuleAdjustments.Count,
+                                    studyResult.Confidence);
+                            }
+                        }
+                        catch (Exception studyEx)
+                        {
+                            logger.LogWarning(studyEx, "Study refinement call failed for studyCycleId={StudyCycleId}.", studyCycleId);
+                        }
+                    }
+
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -448,6 +545,38 @@ public sealed class SignalPollingBackgroundService(
 
                 await EmitAiStageEventsAsync(timeline, snapshot.Symbol, cycleId, aiSignal, stoppingToken);
 
+                // Detect when the aiworker used a deterministic fallback simulation (no live AI providers).
+                // This happens when all configured AI analyzers fail or are unavailable. The fallback
+                // signal is technically valid (consensusPassed=true) but does not come from a live AI model.
+                var isFallbackSimulation = aiSignal.ProviderVotes is not null
+                    && aiSignal.ProviderVotes.Any(v => v.StartsWith("fallback-sim:", StringComparison.OrdinalIgnoreCase));
+
+                if (isFallbackSimulation)
+                {
+                    logger.LogWarning(
+                        "AI_SIGNAL_FALLBACK_USED — deterministic fallback simulation used for cycle {CycleId}. " +
+                        "Lead committee and full failover were both unavailable. " +
+                        "Check aiworker provider configuration and API key health.",
+                        cycleId);
+
+                    await timeline.WriteAsync(
+                        eventType: "AI_SIGNAL_FALLBACK_USED",
+                        stage: "ai",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            reason = "All AI providers unavailable; deterministic fallback simulation used.",
+                            providerVotes = aiSignal.ProviderVotes,
+                            summary = aiSignal.Summary,
+                            note = "LEAD_COMMITTEE: uses first configured analyzer. If it fails, FAILOVER tries all analyzers. " +
+                                   "If all fail, FALLBACK SIMULATION generates a rule-based signal deterministically.",
+                        },
+                        cancellationToken: stoppingToken);
+                }
+
                 if (modeSignal is not null)
                 {
                     aiSignal = aiSignal with
@@ -695,6 +824,17 @@ public sealed class SignalPollingBackgroundService(
                                     "System locked for {DurationMinutes}m. Perform STUDY & SELF_CROSSCHECK.",
                                     _consecutiveWaterfallFailures,
                                     StudyLockDuration.TotalMinutes);
+                            }
+                        }
+
+                        // Capture the failure reason for the upcoming study refinement context.
+                        lock (_studyGate)
+                        {
+                            _recentWaterfallReasons.Add(
+                                $"{DateTimeOffset.UtcNow:yyyy-MM-ddTHH:mm:ss}|{decision.Cause}|{decision.Reason}");
+                            if (_recentWaterfallReasons.Count > MaxRecentWaterfallReasons)
+                            {
+                                _recentWaterfallReasons.RemoveAt(0);
                             }
                         }
                     }
