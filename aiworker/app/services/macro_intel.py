@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,6 +11,7 @@ from app.ai.config import (
     PERPLEXITY_MODEL,
     OPENROUTER_API_KEY,
     OPENROUTER_MODEL_GEMINI,
+    MACRO_INTEL_CACHE_TTL_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,16 +34,30 @@ class MacroIntelContext:
     summary: str = "No macro intelligence available."
 
 
+# Module-level TTL cache: { symbol -> (timestamp, MacroIntelContext) }
+_macro_intel_cache: dict[str, tuple[float, MacroIntelContext]] = {}
+
+
 class MacroIntelService:
     async def collect_context(self, symbol: str) -> MacroIntelContext:
         if not _is_supported_symbol(symbol):
             return MacroIntelContext()
 
+        # ── CR9: serve from TTL cache to avoid re-calling Perplexity + Gemini every cycle ──
+        cache_ttl = max(0.0, MACRO_INTEL_CACHE_TTL_SECONDS)
+        if cache_ttl > 0:
+            cached = _macro_intel_cache.get(symbol)
+            if cached is not None:
+                cached_ts, cached_ctx = cached
+                if (time.monotonic() - cached_ts) < cache_ttl:
+                    logger.debug("Macro intel cache HIT for %s (ttl=%.0fs)", symbol, cache_ttl)
+                    return cached_ctx
+
         perplexity_payload = await self._fetch_from_perplexity()
         gemini_payload = await self._fetch_from_openrouter_gemini()
 
         merged = self._merge_payloads(perplexity_payload, gemini_payload)
-        return MacroIntelContext(
+        ctx = MacroIntelContext(
             geo_headline=merged.get("geo_headline", "NONE"),
             dxy_bias=merged.get("dxy_bias", "NEUTRAL"),
             yields_bias=merged.get("yields_bias", "NEUTRAL"),
@@ -51,6 +67,12 @@ class MacroIntelService:
             event_risk=merged.get("event_risk", "LOW"),
             summary=merged.get("summary", "Macro intelligence blended from available providers."),
         )
+
+        if cache_ttl > 0:
+            _macro_intel_cache[symbol] = (time.monotonic(), ctx)
+            logger.debug("Macro intel cache SET for %s (ttl=%.0fs)", symbol, cache_ttl)
+
+        return ctx
 
     async def _fetch_from_perplexity(self) -> dict[str, Any]:
         if not PERPLEXITY_API_KEY:

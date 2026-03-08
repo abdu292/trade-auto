@@ -135,8 +135,26 @@ AI_NEWS_TIMEOUT_SECONDS = float(os.getenv("AI_NEWS_TIMEOUT_SECONDS", "8"))
 AI_MODE_TIMEOUT_SECONDS = float(os.getenv("AI_MODE_TIMEOUT_SECONDS", "10"))
 AI_COMMITTEE_TIMEOUT_SECONDS = float(os.getenv("AI_COMMITTEE_TIMEOUT_SECONDS", "12"))
 AI_MACRO_TIMEOUT_SECONDS = float(os.getenv("AI_MACRO_TIMEOUT_SECONDS", "10"))
+
+# ── CR9 AI Cost Optimisation ─────────────────────────────────────────────────
+# Hard gate: reject AI calls when data is stale (seconds)
+AI_GATE_ENABLED = os.getenv("AI_GATE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+AI_GATE_MAX_DATA_AGE_SECONDS = float(os.getenv("AI_GATE_MAX_DATA_AGE_SECONDS", "180"))
+
+# Per-session call budget.  AI is skipped once the budget is exhausted for the
+# current session (e.g. LONDON, NEW_YORK).  Reset automatically on session change.
+AI_SESSION_MAX_CALLS = _read_int_env("AI_SESSION_MAX_CALLS", 12)
+
+# When True: use only the first (lead) analyzer for the live decision path.
+# Other configured analyzers are reserved for post-trade STUDY / SELF CROSSCHECK.
+AI_SINGLE_LEAD_MODEL = os.getenv("AI_SINGLE_LEAD_MODEL", "true").strip().lower() in {"1", "true", "yes", "on"}
+
+# Macro intelligence TTL cache: re-use previous result for this many seconds
+# instead of calling Perplexity + Gemini on every cycle.
+MACRO_INTEL_CACHE_TTL_SECONDS = float(os.getenv("MACRO_INTEL_CACHE_TTL_SECONDS", "1800"))
 TELEGRAM_MAX_CHANNELS_PER_POLL = _read_int_env("TELEGRAM_MAX_CHANNELS_PER_POLL", 20)
 TELEGRAM_PER_CHANNEL_TIMEOUT_SECONDS = float(os.getenv("TELEGRAM_PER_CHANNEL_TIMEOUT_SECONDS", "1.5"))
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def build_analyzers() -> List[AIProviderConfig]:
