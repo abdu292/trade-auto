@@ -8,6 +8,7 @@ It is written to help confirm whether the real behavior matches your intended op
 - strong risk protection
 - AI-assisted decisions with verification layers
 - final client control before execution (approve/reject)
+- Auto Trade toggle for fully automated execution when you are ready
 
 Scope note:
 - This covers core backend + MT5 + AI workflow.
@@ -20,13 +21,14 @@ The system works like a guarded decision factory:
 
 1. MT5 continuously sends live market state to Brain.
 2. Brain runs strict structural and risk filters first.
-3. Only valid opportunities are sent to the AI worker.
-4. AI is run with committee + validation steps and prompt stages.
-5. Brain applies final capital/risk/order rules.
-6. Trade is either rejected, queued for client approval, or sent to MT5 queue (based on execution mode).
-7. Client can approve or reject queued trades.
-8. MT5 executes only after final release and sends status back.
-9. Brain records outcomes and adjusts operational state/learning data.
+3. Pattern Detector identifies live structural patterns (sweep, waterfall, breakout, trap, etc.).
+4. Only valid opportunities are sent to the AI worker.
+5. AI is run with committee + validation steps and prompt stages.
+6. Brain applies final capital/risk/order rules.
+7. Trade is either rejected, queued for client approval, or sent to MT5 queue (based on Auto Trade toggle and execution mode).
+8. Client can approve or reject queued trades.
+9. MT5 executes only after final release and sends status back.
+10. Brain records outcomes and adjusts operational state/learning data.
 
 The result: AI can propose, but cannot bypass the system rules or the client decision handoff path.
 
@@ -55,9 +57,9 @@ What it enforces locally before placing an order:
 What it does:
 - central decision engine and orchestration layer
 - receives market snapshots
-- runs rule engine, regime checks, news checks, AI orchestration, scoring, and final decisioning
-- routes orders either to MT5 queue or to manual approval queue
-- exposes endpoints for approval (`approve/reject`) and monitoring
+- runs rule engine, pattern detector, regime checks, news checks, AI orchestration, scoring, and final decisioning
+- routes orders either to MT5 queue or to manual approval queue based on Auto Trade toggle
+- exposes endpoints for approval (`approve/reject`), monitoring, and control actions (panic interrupt)
 - logs full timeline events for each cycle
 
 
@@ -135,6 +137,31 @@ If rule engine fails:
 - cycle ends `NO_TRADE`
 
 This prevents AI from inventing trades without structure.
+
+
+## Step 4b: Pattern Detector (CR8 — New)
+After the rule engine, the Pattern Detector runs to identify live structural patterns.
+
+**Purpose:** non-executing intelligence module — feeds ANALYZE, TABLE, MANAGE, RE ANALYZE, and STUDY.
+
+**Mandatory pattern classes:**
+- `LIQUIDITY_SWEEP` — sweep of intraday swing lows with or without reclaim
+- `WATERFALL_RISK` — active panic drop or elevated volatility pattern
+- `CONTINUATION_BREAKOUT` — lid break or compression release confirmation
+- `FALSE_BREAKOUT` — spike that reversed back into range
+- `RANGE_RELOAD` — tight consolidation with no expansion, liquidity coiling
+- `SESSION_TRANSITION_TRAP` — false move at session open (stop hunt / fake spike)
+
+**Detection mode:** `RULE_ONLY` (deterministic rules first) or `RULE_PLUS_AI` (rules + optional AI confidence)
+
+**Output fields per pattern:**
+- `PATTERN_ID`, `PATTERN_VERSION`, `DETECTION_MODE`
+- `PATTERN_TYPE`, `SUBTYPE`, `CONFIDENCE`, `SESSION`, `TIMEFRAME_PRIMARY`
+- `ENTRY_SAFETY`, `WATERFALL_RISK`, `FAIL_THREATENED`, `RECOMMENDED_ACTION`
+
+**Recommended actions:** `ALLOW_RAIL_A_ONLY`, `ALLOW_RAIL_B`, `WAIT_RECLAIM`, `WAIT_RETEST`, `WAIT_COMPRESSION`, `NO_BREAKOUT_BUY`, `BLOCK_NEW_BUYS`, `CAPITAL_PROTECTED`
+
+**Important:** AI ranking never overrides hard bans (FAIL threatened, waterfall, no base/compression).
 
 
 ## Step 5: Economic News Gate
@@ -217,8 +244,8 @@ Decision engine applies many hard protections including:
 - live-impulse ban
 - top-liquidation ban
 - structural-breakdown ban
-- bottom-permission hard gate
-- session-specific TP and expiry constraints
+- bottom-permission hard gate (dual-path — see below)
+- session-specific TP and expiry constraints (adaptive by session)
 - bucket sizing and minimum grams capacity checks
 
 Output is either:
@@ -227,11 +254,59 @@ Output is either:
 
 Important: AI does not override this layer.
 
+### 7.3 Bottom Permission — Dual Path (CR8 — New)
+The bottom-permission gate now supports two legal paths instead of one:
 
-## Step 8: Routing Decision (Auto vs Manual Approval)
-If final decision is allowed (`ARMED`), Brain routes by execution mode:
-- direct MT5 pending queue, or
-- manual approval queue
+**Path A — Reversal (existing):**
+- H1 sweep + reclaim confirmed
+- M15 base (overlapping candles, compression ≥ 2, or ≥ 4 for London)
+- M5 compression (≥ 6 candles, contracting range)
+- Momentum: RSI(M15) > 35
+
+**Path B — Continuation (new):**
+- H1 bullish context intact (H1 close above MA20)
+- M15 compression base (≥ 3 candles, or ≥ 4 for London)
+- M5 entry alignment (compression + ≥ 3 candles)
+- No FAIL threat (ADR usage ≤ 85%)
+- No waterfall signature (no panic drop, no concurrent expansion + ATR expansion)
+- No hazard conflict (no high-impact US risk window)
+- NY-specific: additional spread guard (strictest spike check)
+
+This allows clean pullback continuations to trade without requiring a dramatic H1 sweep, while keeping all anti-waterfall protections intact.
+
+### 7.4 BLOCKED_VALID_SETUP_CANDIDATE Tagging (CR8 — New)
+When a setup passes scoring but is blocked by the bottom-permission gate, the system:
+- emits a `BLOCKED_VALID_SETUP_CANDIDATE` timeline event with full context
+- tags the cause, score, session, waterfall risk, and bottom-permission reason
+- queues this for STUDY module analysis
+
+This allows STUDY to determine whether the block saved from a waterfall or whether the permission rule was too strict for that scenario.
+
+### 7.5 Session-Adaptive Risk (CR7 — New)
+The decision engine applies adaptive risk by session rather than binary block/allow:
+
+**Japan / India:** highest automation freedom, standard thresholds
+**London:** stronger structure confirmation (M15 compression threshold raised)
+**New York:** strictest spike/liquidity checks (additional spread guard at bottom permission)
+**Friday:** reduced size, tighter expiry, higher caution (existing behavior)
+
+
+## Step 8: Routing Decision (Auto Trade Toggle + Execution Mode)
+If final decision is allowed (`ARMED`), Brain routes based on two factors:
+
+### 8.1 Auto Trade Toggle (CR7 — New)
+The system has a client-controlled **Auto Trade toggle** (default: **OFF**):
+
+- **OFF (default):** ALL ARMED trades go to the approval queue, requiring manual client approval. This is the safe default until the client is comfortable.
+- **ON:** ARMED trades are routed directly to MT5 for execution (subject to execution mode below).
+
+The toggle can be controlled from the Risk screen in the app.
+
+### 8.2 Execution Mode
+Even when Auto Trade is ON, the execution mode controls routing:
+- `AUTO`: direct MT5 pending queue
+- `HYBRID`: direct MT5 for configured sessions (default: Japan + India), approval queue for others
+- `MANUAL`: always requires manual approval
 
 In manual path:
 - trade appears in approvals queue
@@ -243,7 +318,7 @@ Brain exposes approval actions:
 - `approve`: moves trade from approval queue into MT5 pending queue
 - `reject`: removes trade from approval queue
 
-So client has final say before execution when manual/hybrid routing is active.
+So client has final say before execution when Auto Trade is OFF or manual/hybrid routing is active.
 
 This is the explicit handover checkpoint you requested.
 
@@ -265,6 +340,23 @@ System keeps protective controls active continuously:
 - high-risk waterfalls can clear pending queue and trigger cancel signals
 - repeated waterfall failures trigger temporary study lock
 - stale/no snapshot conditions stop cycle execution
+
+### 11.1 Global Panic Interrupt (CR7 — New)
+A client-triggered global panic interrupt is available from the Risk screen:
+
+Trigger conditions (use when any of these are detected):
+- FAIL threatened
+- sudden liquidation pattern
+- spread explosion
+- macro shock confirmation
+- multiple high-risk signals together
+
+Actions:
+- cancels ALL pending orders immediately
+- sends cancel signal to MT5 EA
+- logs `PANIC_INTERRUPT_TRIGGERED` to timeline
+
+This applies in **all sessions**.
 
 ---
 
@@ -290,6 +382,46 @@ These are used as staged policy layers in the AI worker flow, not just documenta
 
 ---
 
+## 24-Module Engine Map (CR8)
+
+The engine now follows a 24-module architecture:
+
+### A) Execution Spine (Live Path)
+1. CAPITAL UTILIZATION — compute usable capital, split C1/C2, enforce slot/bucket discipline
+2. VERIFY — verify Telegram/external items, classify credibility and pipeline impact
+3. NEWS — classify macro/geo/hazard regime, decide tradable vs protected environment
+4. PATTERN DETECTOR — live pattern recognition (new in CR8)
+5. ANALYZE — build current/next-session structure map, define S1/S2/R1/R2/FAIL
+6. TABLE — compile legal executable order rows, size grams, TP, expiry, profit math
+7. VALIDATE — audit table legality, same-session realism, expiry, sizing
+8. MANAGE — monitor live/pending trades, tighten TP, cancel zombie orders
+9. RE ANALYZE — reassess live structure after orders exist
+10. SLIPS — generate buy/sell slips, update ledger, log cap breach/shop correction
+
+### B) Forecasting / Guard Modules
+11. SESSION SIMULATOR — pre-session forecast
+12. SESSION TRANSITION GUARD — detect handover volatility/false transitions
+13. LIQUIDITY MAP ENGINE — map magnets, sweep zones, liquidity pools
+14. LIQUIDITY TRAP DETECTOR — detect fake breakouts/stop hunts/first-leg traps
+
+### C) Learning / Refinement
+15. DATA LOGGER — record structured engine outputs and execution history
+16. TRADE JOURNAL ANALYZER — summarize trade performance by session/setup/result
+17. STUDY — post-mortem learning and engine refinement (processes BLOCKED_VALID_SETUP_CANDIDATEs)
+
+### D) Cross-AI / Governance
+18. COMPARE — compare two AI answers on same topic
+19. COMPARE-RESEARCH — targeted external research support
+20. CROSS CHECK — cross-AI synthesis
+21. SELF CROSSCHECK — highest-level self-audit, detect profit leaks/paranoia
+22. REGRESSION TEST — test refined engine against historical scenarios
+23. ENGINE HEALTH CHECK — overall readiness audit
+
+### E) Backup / Integrity
+24. GENERATE MASTER PROMPT — rebuild full engine spec, detect drift
+
+---
+
 ## Decision Outcomes You Will See
 At cycle end, system lands in one of these practical outcomes:
 
@@ -301,13 +433,19 @@ Reason examples:
 - score too low
 - decision engine hard gates blocked
 
-2. `TRADE_APPROVED` routed to approval queue
+2. `BLOCKED_VALID_SETUP_CANDIDATE`
+Special case: setup passed scoring but was blocked by bottom-permission gate.
+System emits a study-queue event for STUDY module analysis.
+
+3. `TRADE_APPROVED` routed to approval queue
 - waiting for your approve/reject action
+- always used when Auto Trade toggle is OFF
 
-3. `TRADE_APPROVED` routed to MT5 queue
+4. `TRADE_APPROVED` routed to MT5 queue
 - eligible for immediate EA pull and placement
+- only when Auto Trade toggle is ON and execution mode permits
 
-4. Post-release execution states
+5. Post-release execution states
 - order placed
 - buy triggered
 - TP hit
@@ -320,13 +458,19 @@ The implemented system is not a single AI auto-fire flow.
 It is a layered control stack:
 
 - deterministic structure rules first
+- pattern detection (new in CR8)
 - news and risk gates
 - multi-provider AI with consensus and validation
-- final non-AI decision engine
+- final non-AI decision engine with dual bottom-permission paths (new in CR8)
+- Auto Trade toggle — default OFF, client enables when ready (new in CR7)
 - optional manual human approval checkpoint
 - local MT5 validation before execution
+- global panic interrupt for emergency protection (new in CR7)
 
 So operationally, it is designed to prioritize protection and controlled execution over uncontrolled AI autonomy.
+
+The key principle from CR7:
+> **The system must automate the monitoring itself and automatically execute trades if the Auto Trade toggle is on and whenever all core laws pass, across all sessions, using adaptive safety rather than paranoia.**
 
 ---
 
@@ -342,10 +486,12 @@ From MT5 intake to final release, the live core follows this rule:
 No single layer can force a trade by itself.
 A trade must pass:
 1) structural validity,
-2) risk/news gates,
-3) AI consensus + validation,
-4) decision engine protections,
-5) routing policy,
-6) and (if manual path) your explicit approval.
+2) pattern safety check,
+3) risk/news gates,
+4) AI consensus + validation,
+5) decision engine protections (including dual-path bottom permission),
+6) routing policy and Auto Trade toggle check,
+7) and (if Auto Trade OFF or manual path) your explicit approval.
 
 That is the real, code-backed end-to-end architecture currently running in this project.
+

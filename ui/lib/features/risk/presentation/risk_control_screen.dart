@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../domain/models.dart';
 import '../../../presentation/app_providers.dart';
 
 class RiskControlScreen extends ConsumerStatefulWidget {
@@ -17,6 +18,8 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
   String _selectedCategory = 'EVENT';
   int _selectedDurationMinutes = 60;
   bool _isCreatingHazard = false;
+  bool _isTogglingAutoTrade = false;
+  bool _isTriggeringPanic = false;
   final Set<String> _disablingHazardIds = <String>{};
 
   static const List<String> _categories = <String>[
@@ -105,10 +108,134 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
     }
   }
 
+  Future<void> _toggleAutoTrade(bool currentValue) async {
+    if (_isTogglingAutoTrade) return;
+
+    final newValue = !currentValue;
+    final messenger = ScaffoldMessenger.of(context);
+
+    // Require confirmation when enabling Auto Trade
+    if (newValue) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Enable Auto Trade?'),
+          content: const Text(
+            'When Auto Trade is ON, the system will automatically route ARMED trades '
+            'directly to MT5 for execution without manual approval — as long as all '
+            'core laws pass.\n\n'
+            'Make sure you are comfortable with the current risk settings before enabling this.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Enable Auto Trade'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    setState(() => _isTogglingAutoTrade = true);
+    try {
+      await ref.read(brainApiProvider).setAutoTradeEnabled(newValue);
+      ref.invalidate(runtimeSettingsProvider);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(newValue
+              ? '✅ Auto Trade ENABLED — trades will be sent to MT5 automatically.'
+              : '⏸ Auto Trade DISABLED — trades will go to approval queue.'),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to toggle Auto Trade: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isTogglingAutoTrade = false);
+      }
+    }
+  }
+
+  Future<void> _triggerPanicInterrupt() async {
+    if (_isTriggeringPanic) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber, color: Theme.of(ctx).colorScheme.error),
+            const SizedBox(width: 8),
+            const Text('Global Panic Interrupt'),
+          ],
+        ),
+        content: const Text(
+          'This will:\n'
+          '• Cancel ALL pending orders immediately\n'
+          '• Send cancel signal to the MT5 EA\n'
+          '• Freeze new releases briefly\n\n'
+          'Use only when FAIL is threatened, sudden liquidation pattern, '
+          'or macro shock is detected.\n\n'
+          'Are you sure?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('TRIGGER PANIC INTERRUPT'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isTriggeringPanic = true);
+    try {
+      final result = await ref.read(brainApiProvider).triggerPanicInterrupt();
+      ref
+        ..invalidate(runtimeStatusProvider)
+        ..invalidate(activeTradesProvider);
+      final message = result['message']?.toString() ?? 'Panic interrupt executed.';
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('🚨 $message'),
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to trigger panic interrupt: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isTriggeringPanic = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final riskProfiles = ref.watch(riskProfilesProvider);
     final hazardWindows = ref.watch(hazardWindowsProvider);
+    final runtimeSettings = ref.watch(runtimeSettingsProvider);
 
     Future<void> activate(String id) async {
       final messenger = ScaffoldMessenger.of(context);
@@ -126,11 +253,27 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
         ref
           ..invalidate(riskProfilesProvider)
           ..invalidate(hazardWindowsProvider)
-          ..invalidate(runtimeStatusProvider);
+          ..invalidate(runtimeStatusProvider)
+          ..invalidate(runtimeSettingsProvider);
       },
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // ── Auto Trade Toggle ───────────────────────────────────────────────
+          _AutoTradeToggleCard(
+            runtimeSettings: runtimeSettings,
+            isToggling: _isTogglingAutoTrade,
+            onToggle: _toggleAutoTrade,
+          ),
+          const SizedBox(height: 12),
+
+          // ── Global Panic Interrupt ──────────────────────────────────────────
+          _PanicInterruptCard(
+            isTriggeringPanic: _isTriggeringPanic,
+            onTrigger: _triggerPanicInterrupt,
+          ),
+          const SizedBox(height: 12),
+
           // Anomaly Alerts
           _AnomalyAlertsCard(),
           const SizedBox(height: 12),
@@ -340,6 +483,178 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Auto Trade Toggle Card ─────────────────────────────────────────────────────
+
+class _AutoTradeToggleCard extends StatelessWidget {
+  const _AutoTradeToggleCard({
+    required this.runtimeSettings,
+    required this.isToggling,
+    required this.onToggle,
+  });
+
+  final AsyncValue<RuntimeSettings> runtimeSettings;
+  final bool isToggling;
+  final void Function(bool currentValue) onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.smart_toy, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Auto Trade',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'When ON, ARMED trades are routed directly to MT5 for automatic execution '
+              'without manual approval — as long as all core laws pass.\n\n'
+              'Default: OFF. Enable only when you are comfortable with the current settings.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            runtimeSettings.when(
+              data: (settings) {
+                final enabled = settings.autoTradeEnabled;
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            enabled ? '✅ Auto Trade is ON' : '⏸ Auto Trade is OFF',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: enabled ? Colors.green.shade700 : cs.onSurfaceVariant,
+                            ),
+                          ),
+                          Text(
+                            enabled
+                                ? 'Trades go directly to MT5 queue'
+                                : 'Trades go to approval queue',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isToggling)
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Switch(
+                        value: enabled,
+                        onChanged: (_) => onToggle(enabled),
+                        activeColor: Colors.green.shade600,
+                      ),
+                  ],
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => Text(
+                'Could not load Auto Trade status: $error',
+                style: TextStyle(color: cs.error),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Global Panic Interrupt Card ───────────────────────────────────────────────
+
+class _PanicInterruptCard extends StatelessWidget {
+  const _PanicInterruptCard({
+    required this.isTriggeringPanic,
+    required this.onTrigger,
+  });
+
+  final bool isTriggeringPanic;
+  final VoidCallback onTrigger;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      color: cs.errorContainer.withOpacity(0.3),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber, color: cs.error),
+                const SizedBox(width: 8),
+                Text(
+                  'Global Panic Interrupt',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: cs.error,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Immediately cancels ALL pending orders and sends a cancel signal to the '
+              'MT5 EA. Use only when FAIL is threatened, sudden liquidation pattern, '
+              'spread explosion, or macro shock is detected.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: cs.error,
+                  foregroundColor: cs.onError,
+                ),
+                onPressed: isTriggeringPanic ? null : onTrigger,
+                icon: isTriggeringPanic
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.dangerous),
+                label: Text(
+                    isTriggeringPanic ? 'Triggering...' : 'Trigger Panic Interrupt'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

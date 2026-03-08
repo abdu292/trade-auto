@@ -461,12 +461,16 @@ class RuntimeStatus {
 }
 
 class RuntimeSettings {
-  const RuntimeSettings({required this.symbol});
+  const RuntimeSettings({required this.symbol, this.autoTradeEnabled = false});
 
   final String symbol;
+  final bool autoTradeEnabled;
 
   factory RuntimeSettings.fromJson(Map<String, dynamic> json) =>
-      RuntimeSettings(symbol: _readString(json, 'symbol'));
+      RuntimeSettings(
+        symbol: _readString(json, 'symbol'),
+        autoTradeEnabled: _readBool(json, 'autoTradeEnabled'),
+      );
 }
 
 class ReplayStatus {
