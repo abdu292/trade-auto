@@ -6,15 +6,15 @@ from pathlib import Path
 
 from app.ai.config import (
     AI_ANALYZERS,
-    AI_STRATEGY,
     CONSENSUS_ENTRY_TOLERANCE_PCT,
-    CONSENSUS_MIN_AGREEMENT,
     AI_NEWS_TIMEOUT_SECONDS,
     AI_COMMITTEE_TIMEOUT_SECONDS,
     AI_MACRO_TIMEOUT_SECONDS,
+    AI_SINGLE_LEAD_MODEL,
 )
 from app.ai.provider_manager import AIProviderManager
 from app.models.contracts import MarketSnapshot, TradeSignal
+from app.services.ai_gate import AiGate
 from app.services.external_news import ExternalNewsContext
 from app.services.macro_intel import MacroIntelContext, MacroIntelService
 from app.services.telegram_news import TelegramNewsContext, TelegramNewsService
@@ -69,6 +69,24 @@ class AnalyzerService:
         self._manager = AIProviderManager(AI_ANALYZERS) if self._has_live_analyzers else None
         self._telegram_news = TelegramNewsService()
         self._macro_intel = MacroIntelService()
+        self._ai_gate = AiGate()
+
+        # CR9: build a single-lead-model manager for the live decision path.
+        # Other configured analyzers are reserved for STUDY / SELF CROSSCHECK only.
+        # When there is only one analyzer or AI_SINGLE_LEAD_MODEL is off, use the
+        # full manager.  This is set to a non-None value whenever _has_live_analyzers
+        # is True (the only case where this code path is reached).
+        if self._has_live_analyzers and AI_SINGLE_LEAD_MODEL and len(AI_ANALYZERS) > 1:
+            self._lead_manager: AIProviderManager = AIProviderManager(AI_ANALYZERS[:1])
+            logger.info(
+                "CR9 single-lead-model active: live path uses %s; %d other model(s) reserved for STUDY.",
+                AI_ANALYZERS[0].name,
+                len(AI_ANALYZERS) - 1,
+            )
+        elif self._has_live_analyzers:
+            self._lead_manager = self._manager  # type: ignore[assignment]
+        else:
+            self._lead_manager = None  # type: ignore[assignment]
 
         if not self._has_live_analyzers:
             logger.warning(
@@ -459,7 +477,7 @@ class AnalyzerService:
                 cycleId=snapshot.cycleId,
             )
 
-        if not self._has_live_analyzers or self._manager is None:
+        if not self._has_live_analyzers or self._manager is None or self._lead_manager is None:
             return _build_fallback_signal(
                 snapshot,
                 volatility_expansion,
@@ -471,54 +489,75 @@ class AnalyzerService:
                 _compact_provider_traces(),
             )
 
-        min_agreement = 1 if AI_STRATEGY == "single" else max(2, CONSENSUS_MIN_AGREEMENT)
+        # ── CR9 AI Gate: check data freshness and session budget before calling LLM ──
+        gate_blocked, gate_reason = await self._ai_gate.check_async(
+            snapshot_timestamp=snapshot.timestamp,
+            session=snapshot.session,
+            risk_state=risk_state,
+        )
+        if gate_blocked:
+            stage_events.append({
+                "eventType": "AI_GATE_BLOCKED",
+                "stage": "ai_gate",
+                "source": "aiworker",
+                "payload": {"reason": gate_reason},
+            })
+            return TradeSignal(
+                rail="NO_TRADE",
+                entry=0.0,
+                tp=0.0,
+                pe=snapshot.timestamp + timedelta(minutes=5),
+                ml=300,
+                confidence=0.0,
+                safetyTag="BLOCK",
+                directionBias="NEUTRAL",
+                alignmentScore=0.0,
+                newsImpactTag=_resolve_news_impact_tag(snapshot, telegram_news, external_news),
+                tvConfirmationTag=_resolve_tv_confirmation(snapshot),
+                newsTags=_resolve_news_tags(snapshot, volatility_expansion, telegram_news, external_news),
+                summary=f"AI gate blocked: {gate_reason}",
+                consensusPassed=True,
+                agreementCount=1,
+                requiredAgreement=1,
+                disagreementReason=gate_reason,
+                providerVotes=[f"ai_gate:blocked:{gate_reason}"],
+                modeHint=_resolve_mode_hint(snapshot, telegram_news, external_news),
+                modeConfidence=_resolve_mode_confidence(snapshot, telegram_news, external_news),
+                modeTtlSeconds=_resolve_mode_ttl(snapshot, telegram_news, external_news),
+                modeKeywords=_resolve_mode_keywords(telegram_news, external_news),
+                regimeTag=regime_tag,
+                riskState=risk_state,
+                geoHeadline=macro_intel.geo_headline,
+                dxyBias=macro_intel.dxy_bias,
+                yieldsBias=macro_intel.yields_bias,
+                crossMetalsBias=macro_intel.cross_metals_bias,
+                cbFlow=macro_intel.cb_flow,
+                instPositioning=macro_intel.inst_positioning,
+                eventRisk=macro_intel.event_risk,
+                promptRefs=prompt_refs,
+                providerModels=provider_models,
+                aiTraceJson=_safe_json_dumps({
+                    "ai_request": _build_request_with_prompt_dispatch(),
+                    "provider_traces": _compact_provider_traces(),
+                    "stage": "ai_gate",
+                    "result": "blocked",
+                    "reason": gate_reason,
+                    "events": stage_events,
+                }),
+                cycleId=snapshot.cycleId,
+            )
 
-        pre_stage_prompts = {
-            "news": _load_short_prompt("short_prompt_news.md"),
-            "analyze": _load_short_prompt("short_prompt_analyze.md"),
-        }
+        # ── CR9: use single lead model for the live decision path ────────────
+        # pre-stage (news / analyze) committee calls have been removed per CR9:
+        # the market context already carries telegram / macro / news data so
+        # there is no need for a separate AI round-trip to interpret them.
+        lead_manager = self._lead_manager
+        min_agreement = 1  # single-lead path always requires exactly 1 agreement
         pre_stage_votes: list[str] = []
-        for stage_name, stage_prompt in pre_stage_prompts.items():
-            if not stage_prompt.strip():
-                continue
-            stage_context = dict(market_context)
-            stage_context["_pipeline_stage"] = stage_name
-            stage_context["_extra_system_prompt"] = stage_prompt
-            try:
-                stage_decision = await asyncio.wait_for(
-                    self._manager.analyze_with_committee(
-                        stage_context,
-                        min_agreement=1,
-                        entry_tolerance_pct=CONSENSUS_ENTRY_TOLERANCE_PCT,
-                    ),
-                    timeout=max(5.0, AI_COMMITTEE_TIMEOUT_SECONDS),
-                )
-                pre_stage_votes.extend(stage_decision.provider_votes)
-                stage_events.append({
-                    "eventType": "AI_PRE_STAGE_COMPLETED",
-                    "stage": f"pre:{stage_name}",
-                    "source": "aiworker",
-                    "payload": {
-                        "provider_votes": stage_decision.provider_votes,
-                        "agreement_count": stage_decision.agreement_count,
-                        "required_agreement": stage_decision.required_agreement,
-                        "consensus_passed": stage_decision.consensus_passed,
-                    },
-                })
-            except asyncio.TimeoutError:
-                logger.warning("AI %s stage timed out after %.1fs", stage_name, AI_COMMITTEE_TIMEOUT_SECONDS)
-                stage_events.append({
-                    "eventType": "AI_PRE_STAGE_TIMEOUT",
-                    "stage": f"pre:{stage_name}",
-                    "source": "aiworker",
-                    "payload": {
-                        "timeout_seconds": AI_COMMITTEE_TIMEOUT_SECONDS,
-                    },
-                })
 
         try:
             committee = await asyncio.wait_for(
-                self._manager.analyze_with_committee(
+                lead_manager.analyze_with_committee(
                     market_context,
                     min_agreement=min_agreement,
                     entry_tolerance_pct=CONSENSUS_ENTRY_TOLERANCE_PCT,
@@ -527,7 +566,10 @@ class AnalyzerService:
             )
         except asyncio.TimeoutError:
             logger.warning("AI committee timed out after %.1fs", AI_COMMITTEE_TIMEOUT_SECONDS)
-            committee = self._manager.timeout_decision(required_agreement=min_agreement)
+            committee = lead_manager.timeout_decision(required_agreement=min_agreement)
+
+        # CR9: record this call against the session budget
+        await self._ai_gate.record_call_async(snapshot.session)
 
         stage_events.append({
             "eventType": "AI_COMMITTEE_EVALUATED",
@@ -639,160 +681,11 @@ class AnalyzerService:
 
         signal = committee.signal
 
-        validation_prompts = [
-            ("validate", _load_short_prompt("short_prompt_validate.md")),
-            ("study", _load_short_prompt("short_prompt_study.md")),
-            ("self_crosscheck", _load_short_prompt("short_prompt_self_crosscheck.md")),
-            ("capital_utilization", _load_short_prompt("short_prompt_captial_utilization.md")),
-        ]
-        validation_required = 3
-        validation_passed = 0
+        # ── CR9: validation AI stages (validate/study/self_crosscheck/capital_utilization)
+        # have been moved OUT of the live path.  Running 4 more full-committee AI
+        # calls per cycle was the single largest source of wasted tokens.
+        # These stages are preserved for the async STUDY / SELF CROSSCHECK module.
         validation_votes: list[str] = []
-        for validation_name, validation_prompt in validation_prompts:
-            if not validation_prompt.strip():
-                continue
-
-            validation_context = dict(market_context)
-            validation_context["_pipeline_stage"] = f"validate:{validation_name}"
-            validation_context["_extra_system_prompt"] = validation_prompt
-            validation_context["candidate_signal"] = {
-                "rail": signal.rail,
-                "entry": signal.entry,
-                "tp": signal.tp,
-                "pe": signal.pe,
-                "ml": signal.ml,
-                "confidence": signal.confidence,
-                "reasoning": signal.reasoning,
-            }
-
-            try:
-                validation_decision = await asyncio.wait_for(
-                    self._manager.analyze_with_committee(
-                        validation_context,
-                        min_agreement=min_agreement,
-                        entry_tolerance_pct=CONSENSUS_ENTRY_TOLERANCE_PCT,
-                    ),
-                    timeout=max(5.0, AI_COMMITTEE_TIMEOUT_SECONDS),
-                )
-            except asyncio.TimeoutError:
-                logger.warning("Validation stage %s timed out after %.1fs", validation_name, AI_COMMITTEE_TIMEOUT_SECONDS)
-                stage_events.append({
-                    "eventType": "AI_VALIDATION_TIMEOUT",
-                    "stage": f"validate:{validation_name}",
-                    "source": "aiworker",
-                    "payload": {
-                        "timeout_seconds": AI_COMMITTEE_TIMEOUT_SECONDS,
-                    },
-                })
-                continue
-
-            validation_votes.extend(validation_decision.provider_votes)
-            if not validation_decision.consensus_passed or validation_decision.signal is None:
-                stage_events.append({
-                    "eventType": "AI_VALIDATION_REJECTED",
-                    "stage": f"validate:{validation_name}",
-                    "source": "aiworker",
-                    "payload": {
-                        "consensus_passed": validation_decision.consensus_passed,
-                        "agreement_count": validation_decision.agreement_count,
-                        "required_agreement": validation_decision.required_agreement,
-                        "provider_votes": validation_decision.provider_votes,
-                    },
-                })
-                continue
-
-            candidate = validation_decision.signal
-            if candidate.rail != signal.rail:
-                stage_events.append({
-                    "eventType": "AI_VALIDATION_MISMATCH",
-                    "stage": f"validate:{validation_name}",
-                    "source": "aiworker",
-                    "payload": {
-                        "candidate_rail": candidate.rail,
-                        "signal_rail": signal.rail,
-                        "provider_votes": validation_decision.provider_votes,
-                    },
-                })
-                continue
-            if signal.entry <= 0:
-                continue
-            entry_diff = abs(candidate.entry - signal.entry) / abs(signal.entry)
-            if entry_diff <= max(CONSENSUS_ENTRY_TOLERANCE_PCT * 2, 0.01):
-                validation_passed += 1
-
-            stage_events.append({
-                "eventType": "AI_VALIDATION_EVALUATED",
-                "stage": f"validate:{validation_name}",
-                "source": "aiworker",
-                "payload": {
-                    "entry_diff_pct": entry_diff,
-                    "accepted": entry_diff <= max(CONSENSUS_ENTRY_TOLERANCE_PCT * 2, 0.01),
-                    "validation_passed": validation_passed,
-                    "validation_required": validation_required,
-                    "provider_votes": validation_decision.provider_votes,
-                },
-            })
-
-        if validation_passed < validation_required:
-            return TradeSignal(
-                rail="NO_TRADE",
-                entry=0.0,
-                tp=0.0,
-                pe=snapshot.timestamp + timedelta(minutes=5),
-                ml=300,
-                confidence=0.0,
-                safetyTag="BLOCK",
-                directionBias="NEUTRAL",
-                alignmentScore=0.0,
-                newsImpactTag=_resolve_news_impact_tag(snapshot, telegram_news, external_news),
-                tvConfirmationTag=_resolve_tv_confirmation(snapshot),
-                newsTags=_resolve_news_tags(snapshot, volatility_expansion, telegram_news, external_news),
-                summary=(
-                    f"TABLE validation failed: passed={validation_passed}/{validation_required}. "
-                    "Blocked by cross-AI validation stages (validate/study/self_crosscheck/capital_utilization)."
-                ),
-                consensusPassed=False,
-                agreementCount=validation_passed,
-                requiredAgreement=validation_required,
-                disagreementReason="PRD_VALIDATE_STAGE_FAILED",
-                providerVotes=list(dict.fromkeys((pre_stage_votes or []) + (committee.provider_votes or []) + validation_votes)),
-                modeHint=_resolve_mode_hint(snapshot, telegram_news, external_news),
-                modeConfidence=_resolve_mode_confidence(snapshot, telegram_news, external_news),
-                modeTtlSeconds=_resolve_mode_ttl(snapshot, telegram_news, external_news),
-                modeKeywords=_resolve_mode_keywords(telegram_news, external_news),
-                regimeTag=regime_tag,
-                riskState=risk_state,
-                geoHeadline=macro_intel.geo_headline,
-                dxyBias=macro_intel.dxy_bias,
-                yieldsBias=macro_intel.yields_bias,
-                crossMetalsBias=macro_intel.cross_metals_bias,
-                cbFlow=macro_intel.cb_flow,
-                instPositioning=macro_intel.inst_positioning,
-                eventRisk=macro_intel.event_risk,
-                promptRefs=prompt_refs,
-                providerModels=provider_models,
-                aiTraceJson=_safe_json_dumps({
-                    "ai_request": _build_request_with_prompt_dispatch(),
-                    "provider_traces": _compact_provider_traces(),
-                    "stage": "validation",
-                    "result": "failed",
-                    "validation_passed": validation_passed,
-                    "validation_required": validation_required,
-                    "pre_stage_votes": pre_stage_votes,
-                    "committee_votes": committee.provider_votes,
-                    "validation_votes": validation_votes,
-                    "events": stage_events + [{
-                        "eventType": "AI_VALIDATION_FAILED",
-                        "stage": "validation",
-                        "source": "aiworker",
-                        "payload": {
-                            "validation_passed": validation_passed,
-                            "validation_required": validation_required,
-                        },
-                    }],
-                }),
-                cycleId=snapshot.cycleId,
-            )
 
         pending_expiry = _parse_pe(snapshot.timestamp, signal.pe)
         max_life = _parse_ml(signal.ml)
@@ -836,11 +729,7 @@ class AnalyzerService:
                 "provider_traces": _compact_provider_traces(),
                 "stage": "final",
                 "result": "trade_signal",
-                "pre_stage_votes": pre_stage_votes,
                 "committee_votes": committee.provider_votes,
-                "validation_votes": validation_votes,
-                "validation_passed": validation_passed,
-                "validation_required": validation_required,
                 "agreement_count": committee.agreement_count,
                 "required_agreement": committee.required_agreement,
                 "telegram_summary": telegram_news.summary,
@@ -854,8 +743,6 @@ class AnalyzerService:
                         "entry": signal.entry,
                         "tp": signal.tp,
                         "confidence": signal.confidence,
-                        "validation_passed": validation_passed,
-                        "validation_required": validation_required,
                     },
                 }],
             }),
