@@ -5,6 +5,388 @@ It must always aim to increase safe profitable rotations, reduce capital sleep,
 and prevent waterfall, panic-sell, and black-swan traps without driving the
 engine into over-defensive paranoia.
 
+===========================
+السلام عليكم
+
+I cross-checked the Pattern Detector design again.
+
+It aligns correctly with our engine, automation spec, and current architecture.
+
+Please treat PATTERN DETECTOR as an official new module feeding:
+
+- ANALYZE
+- TABLE
+- MANAGE
+- RE ANALYZE
+- STUDY
+
+Its role is non-executing:
+
+- no trades
+- no TABLE rows
+- only structured pattern intelligence
+
+Mandatory pattern classes:
+
+- LIQUIDITY_SWEEP
+- WATERFALL_RISK
+- CONTINUATION_BREAKOUT
+- FALSE_BREAKOUT
+- RANGE_RELOAD
+- SESSION_TRANSITION_TRAP
+
+Implementation approach:
+
+1) deterministic pattern rules first
+2) optional AI confidence / ranking second
+
+AI ranking must never override hard bans such as:
+
+- FAIL threatened
+- no reclaim / no base / no compression
+- high waterfall structure
+
+Please also add these fields to the output:
+
+- PATTERN_ID
+- PATTERN_VERSION
+- DETECTION_MODE (RULE_ONLY / RULE_PLUS_AI)
+
+These are needed for:
+
+- logging
+- regression testing
+- later STUDY / SELF CROSSCHECK analysis
+- comparing detector improvements over time
+
+Expected output fields:
+
+- PATTERN_TYPE
+- SUBTYPE
+- CONFIDENCE
+- SESSION
+- TIMEFRAME_PRIMARY
+- ENTRY_SAFETY
+- WATERFALL_RISK
+- FAIL_THREATENED
+- RECOMMENDED_ACTION
+
+Recommended actions must be standardized as:
+
+- ALLOW_RAIL_A_ONLY
+- ALLOW_RAIL_B
+- WAIT_RECLAIM
+- WAIT_RETEST
+- WAIT_COMPRESSION
+- NO_BREAKOUT_BUY
+- BLOCK_NEW_BUYS
+- CAPITAL_PROTECTED
+
+This module should be used:
+
+A) before ANALYZE / TABLE
+B) during MANAGE / RE ANALYZE
+C) during STUDY and pattern-library learning
+
+Goal:
+
+- improve entry precision
+- reduce first-leg waterfall catches
+- reduce false breakout entries
+- improve same-session rotation quality
+- reduce unnecessary no-trade behavior
+
+Please implement it as an official module in the engine.
+============================================
+بسم الله الرحمن الرحيم
+
+ENGINE MODULE MAP — PHYSICAL BULLION AI ENGINE
+(24-MODULE INTEGRATION MAP)
+
+==================================================
+A) EXECUTION SPINE (LIVE PATH)
+==================================================
+
+1) CAPITAL UTILIZATION
+Role:
+- compute usable capital
+- split C1 / C2
+- enforce slot / bucket discipline
+Feeds:
+- NEWS
+- ANALYZE
+- TABLE
+
+2) VERIFY
+Role:
+- verify Telegram / external items
+- classify credibility and pipeline impact
+Feeds:
+- NEWS
+
+3) NEWS
+Role:
+- classify macro / geo / hazard regime
+- decide tradable vs protected environment
+Feeds:
+- PATTERN DETECTOR
+- ANALYZE
+- TABLE
+- MANAGE
+- RE ANALYZE
+
+4) PATTERN DETECTOR
+Role:
+- live pattern recognition
+- detect sweep / waterfall / breakout / trap / range state
+Feeds:
+- ANALYZE
+- TABLE
+- MANAGE
+- RE ANALYZE
+- STUDY
+
+5) ANALYZE
+Role:
+- build current and next-session structure map
+- define S1 / S2 / R1 / R2 / FAIL
+- rail legality and where-to-trade triggers
+Feeds:
+- TABLE
+- VALIDATE
+- MANAGE
+- RE ANALYZE
+- STUDY
+
+6) TABLE
+Role:
+- compile legal executable order rows
+- size grams, TP, expiry, profit math
+Feeds:
+- VALIDATE
+- SLIPS
+- MANAGE
+
+7) VALIDATE
+Role:
+- audit table legality, same-session realism, expiry, sizing
+Feeds:
+- user / execution router
+- STUDY
+
+8) MANAGE
+Role:
+- monitor live / pending trades
+- tighten TP, cancel zombie orders, enforce runtime protection
+Feeds:
+- RE ANALYZE
+- SLIPS
+- STUDY
+
+9) RE ANALYZE
+Role:
+- reassess live structure after orders exist
+- decide keep / tighten / cancel
+Feeds:
+- MANAGE
+- STUDY
+
+10) SLIPS
+Role:
+- generate buy/sell slips
+- update ledger
+- log cap breach / shop correction if needed
+Feeds:
+- DATA LOGGER
+- TRADE JOURNAL ANALYZER
+- STUDY
+- CAPITAL UTILIZATION
+
+==================================================
+B) FORECASTING / GUARD MODULES
+==================================================
+
+11) SESSION SIMULATOR
+Role:
+- pre-session forecast
+- identify likely session behavior and opportunity pockets
+Feeds:
+- NEWS
+- ANALYZE
+
+12) SESSION TRANSITION GUARD
+Role:
+- detect handover volatility / false transitions
+Feeds:
+- NEWS
+- ANALYZE
+- MANAGE
+
+13) LIQUIDITY MAP ENGINE
+Role:
+- map magnets, sweep zones, liquidity pools
+Feeds:
+- ANALYZE
+- TABLE
+- STUDY
+
+14) LIQUIDITY TRAP DETECTOR
+Role:
+- detect fake breakouts / stop hunts / first-leg traps
+Feeds:
+- ANALYZE
+- TABLE
+- MANAGE
+- RE ANALYZE
+
+==================================================
+C) LEARNING / REFINEMENT
+==================================================
+
+15) DATA LOGGER
+Role:
+- record structured engine outputs and execution history
+Feeds:
+- TRADE JOURNAL ANALYZER
+- STUDY
+- SELF CROSSCHECK
+- REGRESSION TEST
+
+16) TRADE JOURNAL ANALYZER
+Role:
+- summarize trade performance by session / setup / result
+Feeds:
+- STUDY
+- SELF CROSSCHECK
+
+17) STUDY
+Role:
+- post-mortem learning and engine refinement
+- convert charts, trades, misses, waterfalls into rule upgrades
+Feeds:
+- SELF CROSSCHECK
+- REGRESSION TEST
+- ENGINE HEALTH CHECK
+- GENERATE MASTER PROMPT
+
+==================================================
+D) CROSS-AI / GOVERNANCE
+==================================================
+
+18) COMPARE
+Role:
+- compare two AI answers on same topic
+Feeds:
+- CROSS CHECK
+- STUDY
+- SELF CROSSCHECK
+
+19) COMPARE-RESEARCH
+Role:
+- targeted external research support
+Feeds:
+- COMPARE
+- CROSS CHECK
+- STUDY
+
+20) CROSS CHECK
+Role:
+- cross-AI synthesis
+- adopt good / reject bad / assign capability-aware refinements
+Feeds:
+- SELF CROSSCHECK
+- GENERATE MASTER PROMPT
+
+21) SELF CROSSCHECK
+Role:
+- highest-level self-audit
+- detect profit leaks, paranoia, complexity, loop risks
+Feeds:
+- REGRESSION TEST
+- ENGINE HEALTH CHECK
+- GENERATE MASTER PROMPT
+
+22) REGRESSION TEST
+Role:
+- test refined engine against historical scenarios
+Feeds:
+- ENGINE HEALTH CHECK
+- GENERATE MASTER PROMPT
+
+23) ENGINE HEALTH CHECK
+Role:
+- overall readiness audit
+- verify module integrity and deployment safety
+Feeds:
+- GENERATE MASTER PROMPT
+
+==================================================
+E) BACKUP / INTEGRITY
+==================================================
+
+24) GENERATE MASTER PROMPT
+Role:
+- rebuild full engine spec
+- detect drift
+- produce backup-ready architecture snapshot
+
+==================================================
+F) PRIMARY LIVE FLOW
+==================================================
+
+CAPITAL UTILIZATION
+→ VERIFY (if external inputs exist)
+→ NEWS
+→ PATTERN DETECTOR
+→ ANALYZE
+→ TABLE
+→ VALIDATE
+→ EXECUTION
+→ SLIPS
+→ MANAGE
+→ RE ANALYZE
+
+==================================================
+G) LEARNING FLOW
+==================================================
+
+SLIPS
+→ DATA LOGGER
+→ TRADE JOURNAL ANALYZER
+→ STUDY
+→ SELF CROSSCHECK
+→ REGRESSION TEST
+→ ENGINE HEALTH CHECK
+→ GENERATE MASTER PROMPT
+
+==================================================
+H) SUPPORT FLOW
+==================================================
+
+SESSION SIMULATOR
+SESSION TRANSITION GUARD
+LIQUIDITY MAP ENGINE
+LIQUIDITY TRAP DETECTOR
+
+These support the live spine but never place trades.
+
+==================================================
+I) HARD ARCHITECTURE LAW
+==================================================
+
+- Live execution modules must stay compact and fast.
+- Support / learning modules must not place live trades.
+- STUDY and PATTERN DETECTOR must remain separate:
+  • PATTERN DETECTOR = live structure recognition
+  • STUDY = post-trade learning and rule refinement
+- Telegram / external AI / TradingView are inputs only, not execution authority.
+- Ledger and SLIPS are source of truth for balances.
+- Safety must be adaptive, not paranoid.
+- All-session automation is allowed, but with session-specific risk behavior.
+
+END — ENGINE MODULE MAP
+====================================
+
 السلام عليكم ورحمة الله وبركاته
 
 Thank you for sharing the cycle log and for checking the live account data. I appreciate the effort.
