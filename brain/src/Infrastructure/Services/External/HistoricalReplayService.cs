@@ -370,6 +370,9 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
                 regime = marketRegimePrecheck.Regime,
                 isTradeable = marketRegimePrecheck.IsTradeable,
                 reason = marketRegimePrecheck.Reason,
+                ema50H1 = snapshot.Ema50H1,
+                ema200H1 = snapshot.Ema200H1,
+                rsiH1 = snapshot.RsiH1,
             },
             cancellationToken: ct);
 

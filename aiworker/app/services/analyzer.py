@@ -494,6 +494,7 @@ class AnalyzerService:
             snapshot_timestamp=snapshot.timestamp,
             session=snapshot.session,
             risk_state=risk_state,
+            cycle_id=snapshot.cycleId,
         )
         if gate_blocked:
             stage_events.append({

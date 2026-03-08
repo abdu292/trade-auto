@@ -125,6 +125,13 @@ System can block trading if market is structurally poor:
 - CHOPPY
 - strong bearish conditions for this buy-only approach
 
+Each regime detection cycle emits a `MARKET_REGIME_DETECTED` timeline event that includes:
+- `regime`, `isTradeable`, `reason`
+- `ema50H1`, `ema200H1` — EMA values from the snapshot used for the golden/death-cross check
+- `rsiH1` — H1 RSI value used in the regime classification
+
+These fields are present in both the live and replay timeline logs for full observability.
+
 ### 4.2 Four-layer structural rule engine
 Must pass all relevant layers:
 - H1 context
@@ -174,7 +181,7 @@ If news gate blocks:
 - no AI order candidate is released
 
 
-## Step 6: AI Analysis Is Requested (Multi-Stage, Multi-Provider)
+## Step 6: AI Analysis Is Requested (CR9 — Single Lead Model)
 Only after rule + news gate pass.
 
 Brain sends full market payload to AI worker and logs this event.
@@ -191,34 +198,30 @@ AI worker then runs this pipeline:
 If pre-classification marks risk as blocked:
 - immediate `NO_TRADE`
 
-### 6.3 Pre-stage AI passes
-Runs staged checks with dedicated short prompts:
-- `short_prompt_news.md`
-- `short_prompt_analyze.md`
+### 6.3 CR9 AI Gate (hard pre-flight check)
+Before any LLM call, a hard gate enforces:
 
-### 6.4 Committee decision
-Runs configured analyzers/providers (OpenRouter/OpenAI/Grok/Perplexity/Gemini as configured).
+1. **Data freshness** — snapshot must not be older than `AI_GATE_MAX_DATA_AGE_SECONDS` (default 180 s).
+   - **In LIVE mode**: uses strict system-time comparison.
+   - **In REPLAY mode**: freshness check is skipped because the snapshot timestamp is intentionally historical. Cycle-relative freshness applies (snapshot is fresh for its cycle as long as it was produced by the current replay cycle).
+   - Replay mode is detected by checking if `cycleId` starts with `replay_`.
+2. **Risk state** — AI is skipped when the deterministic risk classifier returns `BLOCK`.
+3. **Session budget** — per-session call counter; resets automatically on session transition.
 
-Consensus logic:
-- requires minimum agreement count
-- requires entry-price agreement tolerance
+If any condition fails: returns `NO_TRADE` without invoking any LLM.
 
-If committee fails:
-- returns `NO_TRADE`
-- if no usable output at all, falls back to deterministic fallback signal logic with explicit trace
+### 6.4 Single lead model decision (CR9)
+CR9 simplified the live path to use one lead reasoning model only.
 
-### 6.5 Validation stages (cross-check)
-Runs additional validation prompts:
-- `short_prompt_validate.md`
-- `short_prompt_study.md`
-- `short_prompt_self_crosscheck.md`
-- `short_prompt_captial_utilization.md`
+- Pre-stage AI passes (`short_prompt_news.md`, `short_prompt_analyze.md`) have been removed from the live path. The market context already carries telegram/macro/news data.
+- Validation stages (`short_prompt_validate.md`, `short_prompt_study.md`, `short_prompt_self_crosscheck.md`, `short_prompt_captial_utilization.md`) have been moved out of the live path. They are preserved for the async STUDY / SELF CROSSCHECK module.
+- A single lead model is selected via `AI_SINGLE_LEAD_MODEL` flag (default: on). Other configured providers are reserved for STUDY / SELF CROSSCHECK only.
 
-Rule in code:
-- minimum validation passes required (3)
-- else trade is blocked (`NO_TRADE`)
+Consensus logic (single-lead path):
+- requires exactly 1 agreement (lead model)
+- if lead model fails or times out: returns `NO_TRADE` with explicit trace
 
-### 6.6 Final AI response
+### 6.5 Final AI response
 Returns structured payload including:
 - rail suggestion
 - entry/tp/time windows
@@ -397,6 +400,12 @@ Current code implements a core subset in the live path, while other modules rema
 5. SLIPS — implemented for BUY and TP sell fills, with ledger updates
 6. Core decision/routing spine — implemented (`NO_TRADE`/`ARMED`, Auto Trade toggle, execution modes, approvals, panic interrupt)
 7. BLOCKED_VALID_SETUP_CANDIDATE tagging — implemented in both live and replay paths; emits study-candidate timeline events when a setup passes scoring but is blocked by the bottom-permission gate
+8. CR9 AI Gate — implemented in AI worker (`aiworker/app/services/ai_gate.py`):
+   - data freshness gate (strict in LIVE mode; skipped for replay cycles — cycle-relative freshness only)
+   - risk-state block gate
+   - per-session call budget with automatic session-change reset
+9. CR9 Single Lead Model — live path uses one lead reasoning model; others reserved for STUDY/SELF CROSSCHECK
+10. CR9 MARKET_REGIME_DETECTED logging — `ema50H1`, `ema200H1`, `rsiH1` are emitted as explicit fields in the timeline log payload for both live and replay cycles
 
 ### Planned / Partial (Target CR8 Scope)
 The following CR8 map items are target modules and not fully implemented as standalone production modules yet:
@@ -511,11 +520,11 @@ There is also a replay path where MT5 history is fetched/imported and run throug
 This is used for testing behavior consistency without live order execution.
 
 The replay cycle runs the same stages as the live path:
-- Market regime detection
+- Market regime detection — `MARKET_REGIME_DETECTED` timeline event includes `ema50H1`, `ema200H1`, `rsiH1`
 - Rule engine (structural validity)
 - **Pattern Detector** — runs after regime/rule-engine, emits `PATTERN_DETECTOR_RESULTS` timeline events
 - News gate (or bypass with `ignoreNewsGate=true` for pure backtest runs)
-- AI analysis (or mock AI)
+- AI analysis (or mock AI) — AI Gate uses **cycle-relative freshness** in replay mode: the system-time comparison is skipped because snapshot timestamps are intentionally historical. The gate detects replay mode from the `cycleId` prefix (`replay_`).
 - Trade scoring
 - Decision engine (dual-path bottom permission, all hard gates)
 - **BLOCKED_VALID_SETUP_CANDIDATE** tagging — emitted when a setup passes scoring but is blocked by the bottom-permission gate, same as the live path
@@ -532,10 +541,11 @@ A trade must pass:
 1) structural validity,
 2) pattern safety check,
 3) risk/news gates,
-4) AI consensus + validation,
-5) decision engine protections (including dual-path bottom permission),
-6) routing policy and Auto Trade toggle check,
-7) and (if Auto Trade OFF or manual path) your explicit approval.
+4) CR9 AI Gate (freshness, risk state, session budget),
+5) AI single-lead model decision,
+6) decision engine protections (including dual-path bottom permission),
+7) routing policy and Auto Trade toggle check,
+8) and (if Auto Trade OFF or manual path) your explicit approval.
 
 That is the real, code-backed end-to-end architecture currently running in this project.
 
