@@ -28,7 +28,7 @@ The system works like a guarded decision factory:
 7. Trade is either rejected, queued for client approval, or sent to MT5 queue (based on Auto Trade toggle and execution mode).
 8. Client can approve or reject queued trades.
 9. MT5 executes only after final release and sends status back.
-10. Brain records outcomes and adjusts operational state/learning data.
+10. Brain records outcomes, updates ledger/slips for fill events, and tags study candidates for later analysis.
 
 The result: AI can propose, but cannot bypass the system rules or the client decision handoff path.
 
@@ -142,7 +142,8 @@ This prevents AI from inventing trades without structure.
 ## Step 4b: Pattern Detector (CR8 — New)
 After the rule engine, the Pattern Detector runs to identify live structural patterns.
 
-**Purpose:** non-executing intelligence module — feeds ANALYZE, TABLE, MANAGE, RE ANALYZE, and STUDY.
+**Purpose (current code):** non-executing intelligence module that produces structured pattern signals for timeline/logging and downstream decision visibility.
+Support wiring for deeper module-to-module consumption is planned.
 
 **Mandatory pattern classes:**
 - `LIQUIDITY_SWEEP` — sweep of intraday swing lows with or without reclaim
@@ -152,7 +153,8 @@ After the rule engine, the Pattern Detector runs to identify live structural pat
 - `RANGE_RELOAD` — tight consolidation with no expansion, liquidity coiling
 - `SESSION_TRANSITION_TRAP` — false move at session open (stop hunt / fake spike)
 
-**Detection mode:** `RULE_ONLY` (deterministic rules first) or `RULE_PLUS_AI` (rules + optional AI confidence)
+**Detection mode:** Runtime currently uses `RULE_ONLY` (deterministic rules first).
+Schema also supports `RULE_PLUS_AI` for a future extension.
 
 **Output fields per pattern:**
 - `PATTERN_ID`, `PATTERN_VERSION`, `DETECTION_MODE`
@@ -278,9 +280,9 @@ This allows clean pullback continuations to trade without requiring a dramatic H
 When a setup passes scoring but is blocked by the bottom-permission gate, the system:
 - emits a `BLOCKED_VALID_SETUP_CANDIDATE` timeline event with full context
 - tags the cause, score, session, waterfall risk, and bottom-permission reason
-- queues this for STUDY module analysis
+- marks it as a study candidate in timeline/log data
 
-This allows STUDY to determine whether the block saved from a waterfall or whether the permission rule was too strict for that scenario.
+This creates a clean handoff for later STUDY analysis workflows.
 
 ### 7.5 Session-Adaptive Risk (CR7 — New)
 The decision engine applies adaptive risk by session rather than binary block/allow:
@@ -384,7 +386,36 @@ These are used as staged policy layers in the AI worker flow, not just documenta
 
 ## 24-Module Engine Map (CR8)
 
-The engine now follows a 24-module architecture:
+CR8 defines a 24-module target architecture.
+Current code implements a core subset in the live path, while other modules remain planned.
+
+### Current Code Status (Implemented)
+1. CAPITAL UTILIZATION — implemented via ledger/runtime sizing and guard checks
+2. NEWS — implemented economic-news gate
+3. PATTERN DETECTOR — implemented deterministic detector with required classes and schema
+4. VALIDATE — implemented scoring/validation gates in decision flow
+5. SLIPS — implemented for BUY and TP sell fills, with ledger updates
+6. Core decision/routing spine — implemented (`NO_TRADE`/`ARMED`, Auto Trade toggle, execution modes, approvals, panic interrupt)
+
+### Planned / Partial (Target CR8 Scope)
+The following CR8 map items are target modules and not fully implemented as standalone production modules yet:
+- VERIFY
+- ANALYZE (as separate module)
+- TABLE (as separate module)
+- MANAGE
+- RE ANALYZE
+- SESSION SIMULATOR
+- SESSION TRANSITION GUARD
+- LIQUIDITY MAP ENGINE
+- LIQUIDITY TRAP DETECTOR
+- DATA LOGGER (as separate analytics module)
+- TRADE JOURNAL ANALYZER
+- STUDY automation consumer loop
+- COMPARE / COMPARE-RESEARCH / CROSS CHECK
+- SELF CROSSCHECK
+- REGRESSION TEST
+- ENGINE HEALTH CHECK
+- GENERATE MASTER PROMPT
 
 ### A) Execution Spine (Live Path)
 1. CAPITAL UTILIZATION — compute usable capital, split C1/C2, enforce slot/bucket discipline
@@ -435,7 +466,7 @@ Reason examples:
 
 2. `BLOCKED_VALID_SETUP_CANDIDATE`
 Special case: setup passed scoring but was blocked by bottom-permission gate.
-System emits a study-queue event for STUDY module analysis.
+System emits a timeline study-candidate event for downstream analysis.
 
 3. `TRADE_APPROVED` routed to approval queue
 - waiting for your approve/reject action
