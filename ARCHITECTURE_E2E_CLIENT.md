@@ -49,7 +49,7 @@ What it does:
 
 What it enforces locally before placing an order:
 - valid price/TP/lifetime
-- minimum size (100g)
+- configurable minimum grams (runtime setting; default can be 0.1g for micro/live-experience testing)
 - only BUY_LIMIT or BUY_STOP
 - blocks execution if order is marked high-risk or capital-protected
 
@@ -152,8 +152,8 @@ This prevents AI from inventing trades without structure.
 ## Step 4b: Pattern Detector
 After the rule engine, the Pattern Detector runs to identify live structural patterns.
 
-**Purpose (current code):** non-executing intelligence module that produces structured pattern signals for timeline/logging and downstream decision visibility.
-Support wiring for deeper module-to-module consumption is planned.
+**Purpose (current code):** active execution gate input for PRETABLE + structured timeline/logging output.
+Pattern output is consumed before final decisioning and can hard-block trading.
 
 **Mandatory pattern classes:**
 - `LIQUIDITY_SWEEP` — sweep of intraday swing lows with or without reclaim
@@ -174,6 +174,19 @@ Schema also supports `RULE_PLUS_AI` for a future extension.
 **Recommended actions:** `ALLOW_RAIL_A_ONLY`, `ALLOW_RAIL_B`, `WAIT_RECLAIM`, `WAIT_RETEST`, `WAIT_COMPRESSION`, `NO_BREAKOUT_BUY`, `BLOCK_NEW_BUYS`, `CAPITAL_PROTECTED`
 
 **Important:** AI ranking never overrides hard bans (FAIL threatened, waterfall, no base/compression).
+
+### 4.3 Pattern -> PRETABLE active gate contract
+Pattern Detector feeds PRETABLE directly:
+
+- Hard block rule:
+   - `PATTERN_TYPE=WATERFALL_RISK` with `WATERFALL_RISK=HIGH` or `FAIL_THREATENED=true`
+   - Result: `PRETABLE=BLOCK` -> immediate `NO_TRADE`
+- Breakout continuation pathway:
+   - `PATTERN_TYPE=CONTINUATION_BREAKOUT` with safe entry and no FAIL threat
+   - Result: may keep/upgrade legal continuation path to `BUY_STOP` (still subject to all legality gates)
+- Range/reload pathway:
+   - `RANGE_RELOAD` / `LIQUIDITY_SWEEP` / reclaim-retest-compression actions
+   - Result: biases legal pending pullback path (`BUY_LIMIT`) at structural reclaim/base zones
 
 
 ## Step 5: Economic News Gate
@@ -259,10 +272,15 @@ Hard behavior:
 - `BLOCK` risk level -> immediate `NO_TRADE`
 - `rotation mode = STAND_DOWN` -> immediate `NO_TRADE`
 - effective sizing passed to decision engine uses: `pretableSizeModifier * dynamicSessionModifier`
+- dynamic session modifier affects **size only**, never legality
 
 Implementation note from current code:
 - Dynamic Session Risk currently provides bootstrap/bounded modifiers in live flow via `GetModifier(...)`.
 - Methods for recording waterfall/success outcomes and updating modifiers exist in service code, but those feedback writes are not yet wired in the live polling path.
+
+Target bounds used by refinement requirements:
+- default modifier envelope: `0.45 -> 0.80`
+- temporary cap reduction: if waterfall-entry pressure is high, session cap can be reduced (for example max `0.60`)
 
 ### 7.3 Decision engine (final authority)
 Decision engine applies many hard protections including:
@@ -282,6 +300,15 @@ Output is either:
 - `ARMED` trade with full details (rail, entry, tp, grams, expiry, reason, tags)
 
 Important: AI does not override this layer.
+
+### 7.7 Hard execution legality laws (non-negotiable)
+- No market buys:
+   - MT5 execution path is restricted to `BUY_LIMIT` / `BUY_STOP`.
+   - Any invalid market-buy suggestion must be converted to a valid pending plan or rejected as `NO_TRADE`.
+- Pending-before-level law:
+   - `BUY_STOP` must satisfy `entryPrice > currentAsk`.
+   - `BUY_LIMIT` must satisfy `entryPrice < currentBid`.
+   - Violations are rejected (`NO_TRADE`) and never auto-converted into market execution.
 
 ### 7.3 Bottom Permission — Dual Path
 The bottom-permission gate now supports two legal paths instead of one:
@@ -336,12 +363,33 @@ Before routing, live flow runs final execution legality gates:
 - validates affordability against cash and authoritative/MT5 buy price
 - can resize grams downward (`RESIZE_REQUIRED`) or reject (`NO_TRADE`) when cash is insufficient
 - emits a capital-utilization timeline event
+- capital basis is free cash (AED) only for buy sizing; existing physical-gold inventory is treated as separate holdings, not new-buy cash
 
 ### 8.2 Portfolio Exposure Gate
 - rejects when projected open exposure exceeds symbol cap (25% of equity, converted to grams)
 - emits an exposure-rejection timeline event when blocked
 
 Only orders that pass both gates can proceed to routing.
+
+## Step 8b: Micro Rotation Mode (live-experience mode)
+Special runtime mode for small-balance live validation with full safety stack retained.
+
+Operational intent:
+- uses free cash for new buys (example operating scenario: `2237.42 AED` free cash)
+- keeps existing inventory (example: `2292g`) as separate holdings
+- validates pending-order placement quality, TP/expiry enforcement, slips, and ledger flow
+
+Mode rules:
+- one active pending plan at a time
+- `BUY_LIMIT` / `BUY_STOP` only
+- TP mandatory
+- expiry mandatory
+- ladder disabled initially
+
+Rollout phases:
+- Phase 1: single pending, no ladder, verify slips/ledger/expiry behavior
+- Phase 2: engine may select `BUY_LIMIT`, `BUY_STOP`, or `STAND_DOWN`
+- Phase 3: laddering can be re-enabled only after confidence criteria
 
 
 ## Step 9: Routing Decision (Auto Trade Toggle + Execution Mode)
@@ -459,6 +507,8 @@ Current code implements a core subset in the live path, while other modules rema
 11. Capital Utilization Gate — live post-decision affordability gate (approve/resize/reject) with timeline logging
 12. Pre-execution risk-intelligence stack — Impulse Exhaustion Guard + Liquidity Sweep Detector + risk classifier + execution mode selector + dynamic session risk modifier lookup, with timeline events
 13. Portfolio Exposure Gate — live post-decision exposure cap check (25% equity in grams) with `SYMBOL_EXPOSURE_REJECTED` event on block
+14. Hard pending-only execution law — live/EA path constrained to `BUY_LIMIT` and `BUY_STOP`; pending-before-level checks enforced in decision layer
+15. Micro Rotation Mode controls — runtime toggle with single-pending cap behavior and no-ladder-first operating profile
 
 ### Planned / Partial
 The following map items are target modules and not fully implemented as standalone production modules yet:
@@ -544,6 +594,21 @@ System emits a timeline study-candidate event for downstream analysis.
 - buy triggered
 - TP hit
 - failed/rejected/canceled
+
+---
+
+## Non-UI Requirement Alignment Notes
+The client refinement docs also define UI behavior in detail; those requirements are intentionally excluded from this architecture document by scope.
+
+Non-UI alignment captured here includes:
+- pending-only buy execution (`BUY_LIMIT` / `BUY_STOP`)
+- no-market-buy enforcement
+- pending-before-level legality checks
+- configurable minimum grams (no forced 100g floor)
+- micro live-experience mode behavior and phased rollout
+- PRETABLE + pattern hard-gate interaction
+- free-cash-only capital utilization basis for new buys
+- unified timeline/logging fields used by execution + study flows
 
 ---
 

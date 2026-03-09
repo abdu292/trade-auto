@@ -38,6 +38,19 @@ class _CycleView {
     this.impulseExhaustionLevel,
     this.dynamicSessionModifier,
     this.waterfallRisk,
+    this.candidateRegime,
+    this.candidateStructureValid,
+    this.candidateRiskLevel,
+    this.candidateExecutionMode,
+    this.freeAed,
+    this.existingGoldGrams,
+    this.maxBuyableGrams,
+    this.openExposureGrams,
+    this.pendingExposureGrams,
+    this.microModeActive,
+    this.latestSlipSummary,
+    this.realizedProfitTodayAed,
+    this.openOrdersCount,
     this.finalDecision,
     this.finalDecisionReason,
     this.capturedAt,
@@ -68,6 +81,25 @@ class _CycleView {
   final String? impulseExhaustionLevel;
   final double? dynamicSessionModifier;
   final String? waterfallRisk;
+
+  /// Candidate panel fields
+  final String? candidateRegime;
+  final bool? candidateStructureValid;
+  final String? candidateRiskLevel;
+  final String? candidateExecutionMode;
+
+  /// Capital panel fields
+  final double? freeAed;
+  final double? existingGoldGrams;
+  final double? maxBuyableGrams;
+  final double? openExposureGrams;
+  final double? pendingExposureGrams;
+  final bool? microModeActive;
+
+  /// Ledger/slips panel fields
+  final String? latestSlipSummary;
+  final double? realizedProfitTodayAed;
+  final int? openOrdersCount;
 
   final String? finalDecision;
   final String? finalDecisionReason;
@@ -115,30 +147,43 @@ class _OrderView {
 _CycleView _buildCycleView(
   List<RuntimeTimelineItem> events,
   List<TradeItem> trades,
+  RuntimeStatus? runtime,
+  RuntimeSettings? runtimeSettings,
+  LedgerState? ledger,
+  KpiStats? kpi,
+  List<NotificationFeedItem> notifications,
 ) {
   // Find the most recent PRETABLE result
-  final pretableEvent = events.lastWhereOrNull(
-      (e) => e.eventType == 'CR11_PRETABLE_RESULT');
+  final pretableEvent =
+      events.lastWhereOrNull((e) => e.eventType == 'CR11_PRETABLE_RESULT');
 
   // Find the most recent pattern detector results
-  final patternEvent = events.lastWhereOrNull(
-      (e) => e.eventType == 'PATTERN_DETECTOR_RESULTS');
+  final patternEvent =
+      events.lastWhereOrNull((e) => e.eventType == 'PATTERN_DETECTOR_RESULTS');
 
   // Find the most recent market snapshot for price
-  final snapshotEvent = events.lastWhereOrNull(
-      (e) => e.eventType == 'MT5_MARKET_SNAPSHOT_RECEIVED');
+  final snapshotEvent = events
+      .lastWhereOrNull((e) => e.eventType == 'MT5_MARKET_SNAPSHOT_RECEIVED');
 
   // Find the most recent decision evaluation
-  final decisionEvent = events.lastWhereOrNull(
-      (e) => e.eventType == 'DECISION_EVALUATED');
+  final decisionEvent =
+      events.lastWhereOrNull((e) => e.eventType == 'DECISION_EVALUATED');
 
   // Find the most recent final decision
-  final finalDecisionEvent = events.lastWhereOrNull(
-      (e) => e.eventType == 'FINAL_DECISION');
+  final finalDecisionEvent =
+      events.lastWhereOrNull((e) => e.eventType == 'FINAL_DECISION');
+
+  // Find the most recent candidate context from CR11 study logging
+  final candidateEvent =
+      events.lastWhereOrNull((e) => e.eventType == 'CR11_STUDY_CANDIDATE_LOG');
+
+  // Find the most recent capital utilization check
+  final capitalEvent =
+      events.lastWhereOrNull((e) => e.eventType == 'CAPITAL_UTILIZATION_CHECK');
 
   // Find the most recent rotation optimizer result
-  final rotationEvent = events.lastWhereOrNull(
-      (e) => e.eventType == 'CR11_ROTATION_OPTIMIZER');
+  final rotationEvent =
+      events.lastWhereOrNull((e) => e.eventType == 'CR11_ROTATION_OPTIMIZER');
 
   String? pretableLevel;
   double? pretableRiskScore;
@@ -189,15 +234,16 @@ _CycleView _buildCycleView(
   double? entry;
   double? tp;
   double? grams;
+  DateTime? expiry;
   String? waterfallRisk;
   if (decisionEvent != null) {
     final p = decisionEvent.payload;
-    if (_s(p, 'isTradeAllowed') == 'true' ||
-        p['isTradeAllowed'] == true) {
+    if (_s(p, 'isTradeAllowed') == 'true' || p['isTradeAllowed'] == true) {
       rail = _s(p, 'rail');
       entry = _d(p, 'entry');
       tp = _d(p, 'tp');
       grams = _d(p, 'grams');
+      expiry = _dt(p, 'expiryUtc');
     }
     waterfallRisk = _s(p, 'waterfallRisk');
   }
@@ -207,8 +253,9 @@ _CycleView _buildCycleView(
   if (finalDecisionEvent != null) {
     final p = finalDecisionEvent.payload;
     finalDecision = _s(p, 'finalDecision');
-    finalDecisionReason =
-        _s(p, 'primaryReason').isNotEmpty ? _s(p, 'primaryReason') : _s(p, 'reason');
+    finalDecisionReason = _s(p, 'primaryReason').isNotEmpty
+        ? _s(p, 'primaryReason')
+        : _s(p, 'reason');
   }
 
   String? rotationMode;
@@ -216,17 +263,61 @@ _CycleView _buildCycleView(
     rotationMode = _s(rotationEvent.payload, 'mode');
   }
 
-  // Pending orders from active trades
-  final orders = trades
-      .where((t) => t.status == 'Pending' || t.status == 'PENDING')
-      .map((t) => _OrderView(
-            type: t.rail,
-            price: t.entry,
-            tp: t.tp,
-            expiry: t.expiryUtc,
-            gramsEquivalent: 0,
+  String? regime;
+  bool? structureValid;
+  String? candidateRiskLevel;
+  String? candidateExecutionMode;
+  if (candidateEvent != null) {
+    final p = candidateEvent.payload;
+    regime = _s(p, 'crRegime');
+    structureValid = p['structureValid'] == true;
+    candidateRiskLevel = _s(p, 'pretableRiskLevel');
+    candidateExecutionMode = _s(p, 'rotationMode');
+  }
+
+  double? maxBuyableGrams;
+  if (capitalEvent != null) {
+    maxBuyableGrams = _d(capitalEvent.payload, 'maxLegalGrams');
+  }
+
+  final runtimePending =
+      runtime?.pendingOrders ?? const <PendingOrderSnapshot>[];
+  final runtimeOpen = runtime?.openPositions ?? const <OpenPositionSnapshot>[];
+  final openExposureGrams = runtimeOpen.fold<double>(
+    0,
+    (sum, p) => sum + p.volumeGramsEquivalent,
+  );
+  final pendingExposureGrams = runtimePending.fold<double>(
+    0,
+    (sum, p) => sum + p.volumeGramsEquivalent,
+  );
+
+  final latestSlip = notifications
+      .firstWhereOrNull((n) => n.title.toUpperCase().contains('SLIP'));
+
+  // Prefer runtime pending orders because they include grams-equivalent.
+  var orders = runtimePending
+      .map((o) => _OrderView(
+            type: o.type,
+            price: o.price,
+            tp: o.tp,
+            expiry: o.expiry,
+            gramsEquivalent: o.volumeGramsEquivalent,
           ))
       .toList();
+
+  if (orders.isEmpty) {
+    orders = trades
+        .where((t) => t.status == 'Pending' || t.status == 'PENDING')
+        .map((t) => _OrderView(
+              type: t.rail,
+              price: t.entry,
+              tp: t.tp,
+              expiry: t.expiryUtc,
+              gramsEquivalent: 0,
+            ))
+        .toList();
+  }
 
   final capturedAt = pretableEvent?.createdAtUtc ??
       decisionEvent?.createdAtUtc ??
@@ -245,10 +336,24 @@ _CycleView _buildCycleView(
     decisionEntry: entry,
     decisionTp: tp,
     decisionGrams: grams,
+    decisionExpiry: expiry,
     rotationMode: rotationMode,
     impulseExhaustionLevel: impulseLevel,
     dynamicSessionModifier: dynamicModifier,
     waterfallRisk: waterfallRisk,
+    candidateRegime: regime,
+    candidateStructureValid: structureValid,
+    candidateRiskLevel: candidateRiskLevel,
+    candidateExecutionMode: candidateExecutionMode,
+    freeAed: ledger?.cashAed,
+    existingGoldGrams: ledger?.goldGrams,
+    maxBuyableGrams: maxBuyableGrams,
+    openExposureGrams: openExposureGrams,
+    pendingExposureGrams: pendingExposureGrams,
+    microModeActive: runtimeSettings?.microRotationEnabled,
+    latestSlipSummary: latestSlip?.message,
+    realizedProfitTodayAed: kpi?.todayProfitAed,
+    openOrdersCount: runtimePending.length,
     finalDecision: finalDecision,
     finalDecisionReason: finalDecisionReason,
     capturedAt: capturedAt,
@@ -266,6 +371,11 @@ class TradeMapScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final timelineAsync = ref.watch(tradeMapTimelineProvider);
     final tradesAsync = ref.watch(activeTradesProvider);
+    final runtimeAsync = ref.watch(runtimeStatusProvider);
+    final runtimeSettingsAsync = ref.watch(runtimeSettingsProvider);
+    final ledgerAsync = ref.watch(ledgerProvider);
+    final kpiAsync = ref.watch(kpiProvider);
+    final notificationsAsync = ref.watch(notificationsProvider);
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -280,7 +390,35 @@ class TradeMapScreen extends ConsumerWidget {
             data: (t) => t,
             orElse: () => <TradeItem>[],
           );
-          final cycle = _buildCycleView(events, trades);
+          final runtime = runtimeAsync.maybeWhen(
+            data: (v) => v,
+            orElse: () => null,
+          );
+          final runtimeSettings = runtimeSettingsAsync.maybeWhen(
+            data: (v) => v,
+            orElse: () => null,
+          );
+          final ledger = ledgerAsync.maybeWhen(
+            data: (v) => v,
+            orElse: () => null,
+          );
+          final kpi = kpiAsync.maybeWhen(
+            data: (v) => v,
+            orElse: () => null,
+          );
+          final notifications = notificationsAsync.maybeWhen(
+            data: (v) => v,
+            orElse: () => <NotificationFeedItem>[],
+          );
+          final cycle = _buildCycleView(
+            events,
+            trades,
+            runtime,
+            runtimeSettings,
+            ledger,
+            kpi,
+            notifications,
+          );
           return _TradeMapBody(cycle: cycle);
         },
       ),
@@ -302,6 +440,8 @@ class _TradeMapBody extends StatelessWidget {
       children: [
         _PriceHeader(cycle: cycle),
         const SizedBox(height: 12),
+        _LiveCandidateCard(cycle: cycle),
+        const SizedBox(height: 12),
         _PretableCard(cycle: cycle),
         const SizedBox(height: 12),
         if (cycle.patterns.isNotEmpty) ...[
@@ -315,6 +455,10 @@ class _TradeMapBody extends StatelessWidget {
           const SizedBox(height: 12),
         ],
         _RiskFlagsCard(cycle: cycle),
+        const SizedBox(height: 12),
+        _CapitalPanelCard(cycle: cycle),
+        const SizedBox(height: 12),
+        _LedgerSlipsCard(cycle: cycle),
         const SizedBox(height: 12),
         _DecisionCard(cycle: cycle),
         const SizedBox(height: 24),
@@ -364,10 +508,64 @@ class _PriceHeader extends StatelessWidget {
         if (cycle.capturedAt != null)
           Text(
             _timeAgo(cycle.capturedAt!),
-            style:
-                Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.outline),
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: cs.outline),
           ),
       ],
+    );
+  }
+}
+
+// ─── Live candidate panel ───────────────────────────────────────────────────
+
+class _LiveCandidateCard extends StatelessWidget {
+  const _LiveCandidateCard({required this.cycle});
+
+  final _CycleView cycle;
+
+  @override
+  Widget build(BuildContext context) {
+    final regime = cycle.candidateRegime ?? 'UNKNOWN';
+    final structure = cycle.candidateStructureValid;
+    final risk = cycle.candidateRiskLevel ?? cycle.pretableLevel ?? 'UNKNOWN';
+    final mode =
+        cycle.candidateExecutionMode ?? cycle.rotationMode ?? 'UNKNOWN';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.hub_outlined, size: 18),
+                const SizedBox(width: 8),
+                Text('Live Candidate',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _kv(context, 'structureValid',
+                structure == null ? '—' : (structure ? 'true' : 'false')),
+            _kv(context, 'regime', regime),
+            _kv(context, 'PRETABLE riskLevel', risk),
+            _kv(context, 'executionMode', mode),
+            _kv(context, 'orderType', cycle.decisionRail ?? '—'),
+            _kv(context, 'entryPrice',
+                cycle.decisionEntry == null ? '—' : _usd(cycle.decisionEntry!)),
+            _kv(context, 'tpPrice',
+                cycle.decisionTp == null ? '—' : _usd(cycle.decisionTp!)),
+            _kv(context, 'expiry',
+                cycle.decisionExpiry?.toLocal().toString() ?? '—'),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -658,8 +856,9 @@ class _PriceLevelMap extends StatelessWidget {
                     label: Text(rail,
                         style: const TextStyle(
                             fontSize: 11, fontWeight: FontWeight.bold)),
-                    backgroundColor:
-                        rail == 'BUY_STOP' ? Colors.blue.shade50 : Colors.green.shade50,
+                    backgroundColor: rail == 'BUY_STOP'
+                        ? Colors.blue.shade50
+                        : Colors.green.shade50,
                     side: BorderSide(
                       color: rail == 'BUY_STOP'
                           ? Colors.blue.shade300
@@ -738,8 +937,9 @@ class _PriceLevelRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final diff = price - current;
-    final diffStr =
-        diff >= 0 ? '+\$${diff.toStringAsFixed(2)}' : '-\$${diff.abs().toStringAsFixed(2)}';
+    final diffStr = diff >= 0
+        ? '+\$${diff.toStringAsFixed(2)}'
+        : '-\$${diff.abs().toStringAsFixed(2)}';
 
     return Row(
       children: [
@@ -758,7 +958,8 @@ class _PriceLevelRow extends StatelessWidget {
         Text(
           '\$${price.toStringAsFixed(2)}',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: isCurrentPrice ? FontWeight.bold : FontWeight.normal,
+                fontWeight:
+                    isCurrentPrice ? FontWeight.bold : FontWeight.normal,
               ),
         ),
         const SizedBox(width: 6),
@@ -766,7 +967,8 @@ class _PriceLevelRow extends StatelessWidget {
           Text(
             diffStr,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: diff >= 0 ? Colors.green.shade600 : Colors.red.shade600,
+                  color:
+                      diff >= 0 ? Colors.green.shade600 : Colors.red.shade600,
                 ),
           ),
       ],
@@ -943,17 +1145,27 @@ class _OrderTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Tooltip(
+                  message:
+                      'orderType=${order.type}\nentryPrice=${order.price.toStringAsFixed(2)}\ntpPrice=${order.tp.toStringAsFixed(2)}\nexpiry=${order.expiry?.toLocal() ?? 'N/A'}\ngrams=${order.gramsEquivalent.toStringAsFixed(2)}',
+                  child: Text(
+                    'Entry: \$${order.price.toStringAsFixed(2)}  TP: \$${order.tp.toStringAsFixed(2)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                const SizedBox(height: 2),
                 Text(
-                  'Entry: \$${order.price.toStringAsFixed(2)}  TP: \$${order.tp.toStringAsFixed(2)}',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  'Size: ${order.gramsEquivalent.toStringAsFixed(2)} g',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                 ),
               ],
             ),
           ),
           if (expiryLabel.isNotEmpty)
             Chip(
-              label: Text(expiryLabel,
-                  style: const TextStyle(fontSize: 11)),
+              label: Text(expiryLabel, style: const TextStyle(fontSize: 11)),
               padding: EdgeInsets.zero,
               backgroundColor:
                   expiryLabel == 'Expired' ? Colors.red.shade50 : null,
@@ -1024,10 +1236,117 @@ class _RiskFlagsCard extends StatelessWidget {
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: allFlags
-                    .map((f) => _RiskFlagChip(flag: f))
-                    .toList(),
+                children: allFlags.map((f) => _RiskFlagChip(flag: f)).toList(),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Capital panel ──────────────────────────────────────────────────────────
+
+class _CapitalPanelCard extends StatelessWidget {
+  const _CapitalPanelCard({required this.cycle});
+
+  final _CycleView cycle;
+
+  @override
+  Widget build(BuildContext context) {
+    final exposure =
+        (cycle.openExposureGrams ?? 0) + (cycle.pendingExposureGrams ?? 0);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.account_balance_wallet_outlined, size: 18),
+                const SizedBox(width: 8),
+                Text('Capital Panel',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _kv(context, 'free AED available',
+                cycle.freeAed == null ? '—' : _aed(cycle.freeAed!)),
+            _kv(
+                context,
+                'existing gold held',
+                cycle.existingGoldGrams == null
+                    ? '—'
+                    : '${cycle.existingGoldGrams!.toStringAsFixed(2)} g'),
+            _kv(
+                context,
+                'max grams currently buyable',
+                cycle.maxBuyableGrams == null
+                    ? '—'
+                    : '${cycle.maxBuyableGrams!.toStringAsFixed(2)} g'),
+            _kv(context, 'current exposure grams',
+                '${exposure.toStringAsFixed(2)} g'),
+            _kv(
+                context,
+                'micro mode active',
+                cycle.microModeActive == null
+                    ? '—'
+                    : (cycle.microModeActive! ? 'true' : 'false')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Ledger/slips panel ─────────────────────────────────────────────────────
+
+class _LedgerSlipsCard extends StatelessWidget {
+  const _LedgerSlipsCard({required this.cycle});
+
+  final _CycleView cycle;
+
+  @override
+  Widget build(BuildContext context) {
+    final openExposure = cycle.openExposureGrams ?? 0;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.receipt_long_outlined, size: 18),
+                const SizedBox(width: 8),
+                Text('Ledger / SLIPS',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _kv(
+                context,
+                'latest slip summary',
+                cycle.latestSlipSummary?.trim().isNotEmpty == true
+                    ? cycle.latestSlipSummary!
+                    : 'No recent slip'),
+            _kv(
+                context,
+                'realized AED profit today',
+                cycle.realizedProfitTodayAed == null
+                    ? '—'
+                    : _aed(cycle.realizedProfitTodayAed!)),
+            _kv(context, 'open orders count',
+                (cycle.openOrdersCount ?? 0).toString()),
+            _kv(context, 'open exposure grams',
+                '${openExposure.toStringAsFixed(2)} g'),
           ],
         ),
       ),
@@ -1192,10 +1511,46 @@ double _d(Map<String, dynamic> map, String key) {
   return 0;
 }
 
-String _s(Map<String, dynamic> map, String key) =>
-    map[key]?.toString() ?? '';
+String _s(Map<String, dynamic> map, String key) => map[key]?.toString() ?? '';
+
+DateTime? _dt(Map<String, dynamic> map, String key) {
+  final raw = map[key];
+  if (raw == null) return null;
+  if (raw is DateTime) return raw;
+  if (raw is String && raw.isNotEmpty) {
+    return DateTime.tryParse(raw);
+  }
+  return null;
+}
+
+Widget _kv(BuildContext context, String key, String value) => Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: RichText(
+        text: TextSpan(
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
+          children: [
+            TextSpan(
+              text: '$key: ',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            TextSpan(text: value),
+          ],
+        ),
+      ),
+    );
+
+String _aed(double value) => '${value.toStringAsFixed(2)} AED';
+
+String _usd(double value) => '\$${value.toStringAsFixed(2)}';
 
 extension _ListExt<T> on List<T> {
+  T? firstWhereOrNull(bool Function(T) test) {
+    for (final e in this) {
+      if (test(e)) return e;
+    }
+    return null;
+  }
+
   T? lastWhereOrNull(bool Function(T) test) {
     T? result;
     for (final e in this) {
