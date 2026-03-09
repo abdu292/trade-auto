@@ -62,4 +62,11 @@ public sealed class LedgerAccount : BaseEntity<Guid>
         CashAed += adjustmentAed;
         UpdatedAtUtc = DateTimeOffset.UtcNow;
     }
+
+    public void SyncRuntimeState(decimal cashAed, decimal goldGrams, DateTimeOffset timestamp)
+    {
+        CashAed = Math.Max(0m, cashAed);
+        GoldGrams = Math.Max(0m, goldGrams);
+        UpdatedAtUtc = timestamp;
+    }
 }

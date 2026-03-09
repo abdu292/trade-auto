@@ -311,6 +311,18 @@ public sealed class DurableTradeLedgerService(IServiceScopeFactory scopeFactory)
         }
     }
 
+    public void SyncRuntimeState(decimal cashAed, decimal goldGrams, DateTimeOffset timestamp)
+    {
+        lock (_gate)
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var account = EnsureAccount(db);
+            account.SyncRuntimeState(cashAed, goldGrams, timestamp);
+            db.SaveChanges();
+        }
+    }
+
     private static Domain.Entities.LedgerAccount EnsureAccount(ApplicationDbContext db)
     {
         var account = db.Set<Domain.Entities.LedgerAccount>().FirstOrDefault();

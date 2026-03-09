@@ -145,6 +145,7 @@ public static class Mt5Endpoints
             async Task<IResult> (
                 Mt5MarketSnapshotRequest request,
                 ILatestMarketSnapshotStore snapshotStore,
+                ITradeLedgerService ledger,
                 IRuntimeTimelineWriter timeline,
                 ILogger<object> logger,
                 IHttpClientFactory httpClientFactory,
@@ -334,6 +335,15 @@ public static class Mt5Endpoints
                     OrderExecutionEvents: executionEvents);
 
                 snapshotStore.Upsert(snapshot);
+
+                // Keep ledger cash/holdings aligned with live runtime account state.
+                // Gold holdings are derived from currently open position grams-equivalent.
+                if (request.Balance.HasValue)
+                {
+                    var syncedCashAed = request.Balance.Value;
+                    var syncedGoldGrams = openPositions.Sum(x => x.VolumeGramsEquivalent);
+                    ledger.SyncRuntimeState(syncedCashAed, syncedGoldGrams, mt5ServerTime);
+                }
 
                 await timeline.WriteAsync(
                     eventType: "MT5_MARKET_SNAPSHOT_RECEIVED",

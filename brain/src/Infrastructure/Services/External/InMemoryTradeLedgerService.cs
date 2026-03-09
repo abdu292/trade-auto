@@ -230,6 +230,15 @@ public sealed class InMemoryTradeLedgerService : ITradeLedgerService
         }
     }
 
+    public void SyncRuntimeState(decimal cashAed, decimal goldGrams, DateTimeOffset timestamp)
+    {
+        lock (_gate)
+        {
+            _cashAed = Math.Max(0m, cashAed);
+            _goldGrams = Math.Max(0m, goldGrams);
+        }
+    }
+
     private decimal GetExposurePercentUnsafe()
     {
         var totalOpenCost = _openPositions.Values.Sum(x => x.DebitAed);

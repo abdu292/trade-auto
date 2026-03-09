@@ -15,4 +15,9 @@ public interface ITradeLedgerService
     TradeSlipContract WithdrawCapital(decimal amountAed, string note, DateTimeOffset timestamp);
     /// <summary>Apply a shop price adjustment (revalue gold grams without cash flow).</summary>
     TradeSlipContract ShopAdjustment(decimal adjustmentAed, string note, DateTimeOffset timestamp);
+    /// <summary>
+    /// Synchronize ledger balances from authoritative runtime source (for example MT5 account snapshot).
+    /// This updates cash and gold holdings without creating a trade slip.
+    /// </summary>
+    void SyncRuntimeState(decimal cashAed, decimal goldGrams, DateTimeOffset timestamp);
 }
