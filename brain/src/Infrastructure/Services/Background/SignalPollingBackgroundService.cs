@@ -750,7 +750,8 @@ public sealed class SignalPollingBackgroundService(
                     DeployableCashAed: Math.Max(0m, rawState.DeployableCashAed - reservedPendingAed),
                     OpenBuyCount: rawState.OpenBuyCount);
 
-                var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, state, activeStrategy);
+                var minTradeGrams = runtimeSettings.GetMinTradeGrams();
+                var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, state, activeStrategy, minTradeGrams);
                 var snapshotHash = ComputeSnapshotHash(snapshot);
 
                 await timeline.WriteAsync(
@@ -987,6 +988,80 @@ public sealed class SignalPollingBackgroundService(
                     continue;
                 }
 
+                // ── CR10: Capital Utilization Gate ─────────────────────────────────────────
+                // Immutable execution gate: only orders approved by this check may proceed to MT5.
+                // Resizes orders that exceed available capital; rejects when cash is insufficient.
+                var mt5BuyPrice = snapshot.AuthoritativeRate > 0m
+                    ? snapshot.AuthoritativeRate
+                    : snapshot.Ask > 0m ? snapshot.Ask : decision.Entry;
+                var capitalCheck = CapitalUtilizationService.Check(rawState.CashAed, mt5BuyPrice, decision.Grams);
+
+                logger.LogInformation(
+                    "CAPITAL_GATE Cash={CashAed} Price={Price} Attempted={Attempted}g MaxLegal={MaxLegal}g Required={Required}AED Allowed={Allowed}AED Status={Status}",
+                    capitalCheck.CashAed, capitalCheck.Mt5BuyPriceUsd, capitalCheck.AttemptedGrams,
+                    capitalCheck.MaxLegalGrams, capitalCheck.RequiredAed, capitalCheck.AllowedCapitalAed,
+                    capitalCheck.OrderStatus);
+
+                await timeline.WriteAsync(
+                    eventType: "CAPITAL_UTILIZATION_CHECK",
+                    stage: "capital_gate",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        capitalCheck.OrderStatus,
+                        capitalCheck.ApprovedByCapacityGate,
+                        capitalCheck.AttemptedGrams,
+                        capitalCheck.ApprovedGrams,
+                        capitalCheck.MaxLegalGrams,
+                        capitalCheck.RequiredAed,
+                        capitalCheck.AllowedCapitalAed,
+                        capitalCheck.AedPerGram,
+                        capitalCheck.ShopBuyUsd,
+                        cashAed = capitalCheck.CashAed,
+                        mt5BuyPriceUsd = capitalCheck.Mt5BuyPriceUsd,
+                    },
+                    cancellationToken: stoppingToken);
+
+                if (!capitalCheck.ApprovedByCapacityGate)
+                {
+                    logger.LogWarning(
+                        "CAPITAL_GATE REJECTED — insufficient cash. Cash={CashAed} MaxLegal={MaxLegal}g Price={Price}",
+                        rawState.CashAed, capitalCheck.MaxLegalGrams, mt5BuyPrice);
+
+                    db.DecisionLogs.Add(DecisionLog.Create(
+                        symbol: snapshot.Symbol,
+                        status: "NO_TRADE",
+                        engineState: "CAPITAL_PROTECTED",
+                        mode: decision.Mode,
+                        cause: "CAPITAL_GATE_REJECTED",
+                        waterfallRisk: decision.WaterfallRisk,
+                        telegramState: decision.TelegramState,
+                        railPermissionA: decision.RailPermissionA,
+                        railPermissionB: decision.RailPermissionB,
+                        reason: $"CR10 capital gate rejected order. MaxLegalGrams={capitalCheck.MaxLegalGrams:0.00}, Cash={rawState.CashAed:0.00}AED",
+                        entry: 0m,
+                        tp: 0m,
+                        grams: 0m,
+                        rotationCapThisSession: 0,
+                        forceWhereToTrade: forceWhereToTrade,
+                        snapshotHash: snapshotHash));
+                    await db.SaveChangesAsync(stoppingToken);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
+                // Use the capital-gate approved gram quantity (may be resized down from decision.Grams)
+                var approvedGrams = capitalCheck.ApprovedGrams;
+                if (capitalCheck.OrderStatus == "RESIZE_REQUIRED")
+                {
+                    logger.LogInformation(
+                        "CAPITAL_GATE RESIZE — order resized from {Original}g to {Approved}g",
+                        decision.Grams, approvedGrams);
+                }
+
                 var pending = new PendingTradeContract(
                     Id: Guid.NewGuid(),
                     Symbol: snapshot.Symbol,
@@ -995,7 +1070,7 @@ public sealed class SignalPollingBackgroundService(
                     Tp: decision.Tp,
                     Expiry: decision.ExpiryUtc,
                     Ml: decision.MaxLifeSeconds,
-                    Grams: decision.Grams,
+                    Grams: approvedGrams,
                     AlignmentScore: decision.AlignmentScore,
                     Regime: regime.Regime,
                     RiskTag: regime.RiskTag,

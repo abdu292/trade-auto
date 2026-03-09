@@ -5,15 +5,18 @@ namespace Brain.Infrastructure.Services.External;
 public sealed class InMemoryTradingRuntimeSettingsStore : ITradingRuntimeSettingsStore
 {
     private const string DefaultSymbol = "XAUUSD.gram";
+    private const decimal DefaultMinTradeGrams = 100m;
 
     private readonly Lock _gate = new();
     private string _symbol;
     private bool _autoTradeEnabled;
+    private decimal _minTradeGrams;
 
-    public InMemoryTradingRuntimeSettingsStore(string initialSymbol, bool initialAutoTradeEnabled = false)
+    public InMemoryTradingRuntimeSettingsStore(string initialSymbol, bool initialAutoTradeEnabled = false, decimal initialMinTradeGrams = DefaultMinTradeGrams)
     {
         _symbol = Normalize(initialSymbol);
         _autoTradeEnabled = initialAutoTradeEnabled;
+        _minTradeGrams = initialMinTradeGrams > 0m ? initialMinTradeGrams : DefaultMinTradeGrams;
     }
 
     public string GetSymbol()
@@ -47,6 +50,24 @@ public sealed class InMemoryTradingRuntimeSettingsStore : ITradingRuntimeSetting
         lock (_gate)
         {
             _autoTradeEnabled = enabled;
+        }
+    }
+
+    /// <inheritdoc />
+    public decimal GetMinTradeGrams()
+    {
+        lock (_gate)
+        {
+            return _minTradeGrams;
+        }
+    }
+
+    /// <inheritdoc />
+    public void SetMinTradeGrams(decimal grams)
+    {
+        lock (_gate)
+        {
+            _minTradeGrams = grams > 0m ? grams : DefaultMinTradeGrams;
         }
     }
 

@@ -77,6 +77,12 @@ class BrainApi {
     });
   }
 
+  Future<void> setMinTradeGrams(double grams) async {
+    await _dio.put('/api/monitoring/runtime-settings/min-trade-grams', data: {
+      'minTradeGrams': grams,
+    });
+  }
+
   Future<Map<String, dynamic>> triggerPanicInterrupt() async {
     final response = await _dio.post('/api/monitoring/panic-interrupt');
     return _asMap(response.data);

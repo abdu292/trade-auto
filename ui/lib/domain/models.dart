@@ -461,16 +461,20 @@ class RuntimeStatus {
 }
 
 class RuntimeSettings {
-  const RuntimeSettings({required this.symbol, this.autoTradeEnabled = false});
+  const RuntimeSettings({required this.symbol, this.autoTradeEnabled = false, this.minTradeGrams = 100.0});
 
   final String symbol;
   final bool autoTradeEnabled;
+  final double minTradeGrams;
 
-  factory RuntimeSettings.fromJson(Map<String, dynamic> json) =>
-      RuntimeSettings(
-        symbol: _readString(json, 'symbol'),
-        autoTradeEnabled: _readBool(json, 'autoTradeEnabled'),
-      );
+  factory RuntimeSettings.fromJson(Map<String, dynamic> json) {
+    final minGrams = _readDouble(json, 'minTradeGrams');
+    return RuntimeSettings(
+      symbol: _readString(json, 'symbol'),
+      autoTradeEnabled: _readBool(json, 'autoTradeEnabled'),
+      minTradeGrams: minGrams > 0 ? minGrams : 100.0,
+    );
+  }
 }
 
 class ReplayStatus {
