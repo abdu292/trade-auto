@@ -9,7 +9,8 @@ public sealed class TradeApiSecurityOptions
 {
     public bool Enabled { get; set; } = true;
 
-    public bool EnforceIpAllowList { get; set; } = false;
+    // Temporary dynamic-IP safety switch. Keep true while MT5 client IP is unstable.
+    public bool RelaxIpAllowList { get; set; } = true;
 
     public string ApiKeyHeaderName { get; set; } = "X-API-Key";
 
@@ -38,7 +39,7 @@ public sealed class TradeApiSecurityFilter(
             return TypedResults.Unauthorized();
         }
 
-        if (_options.EnforceIpAllowList && !IsAllowedIp(httpContext.Connection.RemoteIpAddress))
+        if (!_options.RelaxIpAllowList && !IsAllowedIp(httpContext.Connection.RemoteIpAddress))
         {
             logger.LogWarning(
                 "Blocked request from disallowed IP {Ip}. Path: {Path}",
