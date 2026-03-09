@@ -9,6 +9,8 @@ public sealed class TradeApiSecurityOptions
 {
     public bool Enabled { get; set; } = true;
 
+    public bool EnforceIpAllowList { get; set; } = false;
+
     public string ApiKeyHeaderName { get; set; } = "X-API-Key";
 
     public string? ApiKey { get; set; }
@@ -36,7 +38,7 @@ public sealed class TradeApiSecurityFilter(
             return TypedResults.Unauthorized();
         }
 
-        if (!IsAllowedIp(httpContext.Connection.RemoteIpAddress))
+        if (_options.EnforceIpAllowList && !IsAllowedIp(httpContext.Connection.RemoteIpAddress))
         {
             logger.LogWarning(
                 "Blocked request from disallowed IP {Ip}. Path: {Path}",

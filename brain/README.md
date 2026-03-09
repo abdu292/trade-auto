@@ -79,9 +79,12 @@ Example payload:
 `src/Web/appsettings.Development.json` includes local defaults:
 
 - `Security:Enabled=true`
+- `Security:EnforceIpAllowList=false` (temporary for dynamic IP clients)
 - `Security:ApiKeyHeaderName=X-API-Key`
 - `Security:ApiKey=dev-local-change-me`
-- `Security:AllowedIps=[127.0.0.1, ::1]`
+- `Security:AllowedIps=[]`
+
+When using dynamic client IPs (for example MT5 on broker/VPS), keep `Security:ApiKey` strong and rotate it regularly while `EnforceIpAllowList=false`. Re-enable IP filtering later by setting `Security:EnforceIpAllowList=true` and filling `Security:AllowedIps`.
 
 For production, set `Security:ApiKey` via environment/secret store and avoid committing real keys.
 
