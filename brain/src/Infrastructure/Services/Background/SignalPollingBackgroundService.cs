@@ -28,11 +28,10 @@ public sealed class SignalPollingBackgroundService(
     private const decimal ShopSpreadUsdPerOz = 0.80m;
 
     /// <summary>
-    /// Maximum total open position grams allowed for a single symbol at any time.
-    /// Prevents position stacking even when individual orders pass the capital utilization gate.
-    /// New orders that would push total exposure beyond this threshold are rejected.
+    /// Fallback maximum total open position grams used when account equity or price data is unavailable.
+    /// The live gate uses a dynamic limit of 25% of account equity expressed in gold grams.
     /// </summary>
-    private const decimal MaxSymbolExposureGrams = 500m;
+    private const decimal FallbackMaxSymbolExposureGrams = 500m;
 
     // Waterfall failure tracking: after 2 consecutive failures the system enters study lock
     // (PRD point 4: "if two orders fail to either trigger or gets caught in the waterfall then
@@ -1071,15 +1070,25 @@ public sealed class SignalPollingBackgroundService(
 
                 // ── Portfolio Exposure Gate ────────────────────────────────────────────────
                 // Rejects new orders when total open position grams + proposed grams exceeds
-                // MAX_SYMBOL_EXPOSURE. Prevents position stacking even when individual orders
-                // pass the capital utilization gate (CR10).
+                // 25% of account equity expressed in gold grams. Prevents position stacking
+                // even when individual orders pass the capital utilization gate (CR10).
+                //
+                // maxSymbolExposureGrams = (accountEquityUsd * 0.25) / goldPricePerGram
+                // where goldPricePerGram = authoritativeRate / 31.1035
+                var goldPricePerGram = mt5BuyPrice / OunceToGram;
+                var maxSymbolExposureGrams = snapshot.Equity > 0m && goldPricePerGram > 0m
+                    ? (snapshot.Equity * 0.25m) / goldPricePerGram
+                    : FallbackMaxSymbolExposureGrams;
+
                 var openPositionGrams = snapshot.OpenPositions?.Sum(p => p.VolumeGramsEquivalent) ?? 0m;
                 var totalProjectedExposure = openPositionGrams + approvedGrams;
-                if (totalProjectedExposure > MaxSymbolExposureGrams)
+                if (totalProjectedExposure > maxSymbolExposureGrams)
                 {
+                    var rejectionReason = $"Exposure gate rejected order. OpenPositionGrams={openPositionGrams:0.00}g + ApprovedGrams={approvedGrams:0.00}g = {totalProjectedExposure:0.00}g exceeds MaxSymbolExposureGrams={maxSymbolExposureGrams:0.00}g (25% of equity {snapshot.Equity:0.00} USD at {goldPricePerGram:0.0000} USD/g)";
+
                     logger.LogWarning(
-                        "EXPOSURE_GATE REJECTED — total projected exposure {Total}g exceeds max {Max}g. Open={Open}g Proposed={Proposed}g",
-                        totalProjectedExposure, MaxSymbolExposureGrams, openPositionGrams, approvedGrams);
+                        "EXPOSURE_GATE REJECTED — total projected exposure {Total}g exceeds max {Max}g. Open={Open}g Proposed={Proposed}g AccountEquityUsd={EquityUsd} GoldPricePerGram={GoldPrice}",
+                        totalProjectedExposure, maxSymbolExposureGrams, openPositionGrams, approvedGrams, snapshot.Equity, goldPricePerGram);
 
                     await timeline.WriteAsync(
                         eventType: "SYMBOL_EXPOSURE_REJECTED",
@@ -1094,7 +1103,8 @@ public sealed class SignalPollingBackgroundService(
                             openPositionGrams,
                             proposedGrams = approvedGrams,
                             totalProjectedExposure,
-                            maxSymbolExposureGrams = MaxSymbolExposureGrams,
+                            maxSymbolExposureGrams,
+                            rejectionReason,
                         },
                         cancellationToken: stoppingToken);
 
@@ -1108,7 +1118,7 @@ public sealed class SignalPollingBackgroundService(
                         telegramState: decision.TelegramState,
                         railPermissionA: decision.RailPermissionA,
                         railPermissionB: decision.RailPermissionB,
-                        reason: $"Exposure gate rejected order. OpenPositionGrams={openPositionGrams:0.00}g + ProposedGrams={approvedGrams:0.00}g = {totalProjectedExposure:0.00}g exceeds MaxSymbolExposureGrams={MaxSymbolExposureGrams:0.00}g",
+                        reason: rejectionReason,
                         entry: 0m,
                         tp: 0m,
                         grams: 0m,
