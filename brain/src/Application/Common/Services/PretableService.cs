@@ -21,6 +21,33 @@ namespace Brain.Application.Common.Services;
 /// </summary>
 public static class PretableService
 {
+    // Risk score thresholds that determine SAFE / CAUTION / BLOCK classification
+    private const decimal BlockRiskScoreThreshold  = 0.65m;
+    private const decimal CautionRiskScoreThreshold = 0.30m;
+
+    // Risk score contributions per risk factor
+    private const decimal ImpulseExhaustionBlockContribution  = 0.40m;
+    private const decimal ImpulseExhaustionCautionContribution = 0.20m;
+    private const decimal SpreadInstabilityContribution        = 0.15m;
+    private const decimal AdrExhaustedContribution             = 0.15m;
+    private const decimal AdrHighUsageContribution             = 0.08m;
+    private const decimal PanicContribution                    = 0.25m;
+    private const decimal HighImpactNewsContribution           = 0.15m;
+    private const decimal FridayOverlapContribution            = 0.10m;
+    private const decimal AtrExpansionContribution             = 0.10m;
+
+    // ADR usage thresholds
+    private const decimal AdrExhaustedPct  = 85m;
+    private const decimal AdrHighUsagePct  = 70m;
+
+    // Spread instability: spread max ≥ this multiple of median = unstable
+    private const decimal SpreadInstabilityMultiplier = 2.0m;
+
+    // Size modifiers per risk level
+    private const decimal SafeSizeModifier    = 1.0m;
+    private const decimal CautionSizeModifier = 0.60m;
+    private const decimal BlockSizeModifier   = 0.0m;
+
     /// <summary>Evaluates PRETABLE risk given the current market context.</summary>
     public static PretableResult Evaluate(
         MarketSnapshotContract snapshot,
@@ -36,7 +63,7 @@ public static class PretableService
         if (regime.IsBlocked || regime.IsWaterfall)
         {
             flags.Add("REGIME_BLOCK");
-            return BuildResult("BLOCK", 1.0m, flags, session, 0m,
+            return BuildResult("BLOCK", 1.0m, flags, session, BlockSizeModifier,
                 $"Regime hard block: {regime.Reason}");
         }
 
@@ -44,72 +71,72 @@ public static class PretableService
         if (impulseExhaustion.Level == "BLOCK")
         {
             flags.Add("IMPULSE_EXHAUSTION_BLOCK");
-            riskScore += 0.4m;
+            riskScore += ImpulseExhaustionBlockContribution;
         }
         else if (impulseExhaustion.Level == "CAUTION")
         {
             flags.Add("IMPULSE_EXHAUSTION_CAUTION");
-            riskScore += 0.2m;
+            riskScore += ImpulseExhaustionCautionContribution;
         }
 
         // ── Volatility / spread risk ─────────────────────────────────────────
         var spreadInstability = snapshot.SpreadMedian60m > 0m
             && snapshot.SpreadMax60m > 0m
-            && snapshot.SpreadMax60m >= snapshot.SpreadMedian60m * 2.0m;
+            && snapshot.SpreadMax60m >= snapshot.SpreadMedian60m * SpreadInstabilityMultiplier;
         if (spreadInstability)
         {
             flags.Add("SPREAD_INSTABILITY");
-            riskScore += 0.15m;
+            riskScore += SpreadInstabilityContribution;
         }
 
         // ── ADR exhaustion ───────────────────────────────────────────────────
-        if (snapshot.AdrUsedPct >= 85m)
+        if (snapshot.AdrUsedPct >= AdrExhaustedPct)
         {
             flags.Add("ADR_EXHAUSTED");
-            riskScore += 0.15m;
+            riskScore += AdrExhaustedContribution;
         }
-        else if (snapshot.AdrUsedPct >= 70m)
+        else if (snapshot.AdrUsedPct >= AdrHighUsagePct)
         {
             flags.Add("ADR_HIGH_USAGE");
-            riskScore += 0.08m;
+            riskScore += AdrHighUsageContribution;
         }
 
         // ── Panic / news ────────────────────────────────────────────────────
         if (snapshot.HasPanicDropSequence || snapshot.PanicSuspected)
         {
             flags.Add("PANIC_SUSPECTED");
-            riskScore += 0.25m;
+            riskScore += PanicContribution;
         }
 
         if (string.Equals(snapshot.TelegramImpactTag, "HIGH", StringComparison.OrdinalIgnoreCase))
         {
             flags.Add("HIGH_IMPACT_NEWS");
-            riskScore += 0.15m;
+            riskScore += HighImpactNewsContribution;
         }
 
         // ── Friday overlap risk ──────────────────────────────────────────────
         if (snapshot.IsFriday && snapshot.IsLondonNyOverlap)
         {
             flags.Add("FRIDAY_OVERLAP");
-            riskScore += 0.10m;
+            riskScore += FridayOverlapContribution;
         }
 
         // ── ATR expansion ────────────────────────────────────────────────────
         if (snapshot.IsAtrExpanding && snapshot.IsExpansion)
         {
             flags.Add("ATR_EXPANSION");
-            riskScore += 0.10m;
+            riskScore += AtrExpansionContribution;
         }
 
         riskScore = Math.Clamp(riskScore, 0m, 1.0m);
 
         // ── Determine base risk level from score ─────────────────────────────
         string riskLevel;
-        if (riskScore >= 0.65m || impulseExhaustion.Level == "BLOCK")
+        if (riskScore >= BlockRiskScoreThreshold || impulseExhaustion.Level == "BLOCK")
         {
             riskLevel = "BLOCK";
         }
-        else if (riskScore >= 0.30m || impulseExhaustion.Level == "CAUTION")
+        else if (riskScore >= CautionRiskScoreThreshold || impulseExhaustion.Level == "CAUTION")
         {
             riskLevel = "CAUTION";
         }
@@ -131,10 +158,9 @@ public static class PretableService
         // ── Compute size modifier ────────────────────────────────────────────
         var sizeModifier = riskLevel switch
         {
-            "SAFE"    => 1.0m,
-            "CAUTION" => 0.60m,
-            "BLOCK"   => 0.0m,
-            _          => 0.0m,
+            "SAFE"    => SafeSizeModifier,
+            "CAUTION" => CautionSizeModifier,
+            _          => BlockSizeModifier,
         };
 
         var reason = $"PRETABLE {riskLevel}: score={riskScore:0.00}, flags=[{string.Join(",", flags)}], sweep={liquiditySweep.IsConfirmed}, impulse={impulseExhaustion.Level}";

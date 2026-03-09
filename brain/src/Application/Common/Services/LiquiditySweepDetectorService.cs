@@ -17,6 +17,12 @@ namespace Brain.Application.Common.Services;
 /// </summary>
 public static class LiquiditySweepDetectorService
 {
+    /// <summary>
+    /// Fraction of current price within which a level is considered "near structural liquidity".
+    /// 0.5% means price must be within half a percent of a session/structural level.
+    /// </summary>
+    private const decimal StructuralLiquidityProximityFraction = 0.005m;
+
     public static LiquiditySweepResult Detect(MarketSnapshotContract snapshot)
     {
         // Condition 1: Price swept a prior swing level (pre-computed by MT5 EA or market data provider)
@@ -60,10 +66,8 @@ public static class LiquiditySweepDetectorService
         if (close <= 0m)
             return true; // insufficient data — assume near structure
 
-        // Proximity buffer: within 0.5% of any session high/low counts as near structural liquidity
-        const decimal ProximityFraction = 0.005m;
-
-        bool Near(decimal level) => level > 0m && Math.Abs(close - level) / level <= ProximityFraction;
+        bool Near(decimal level) =>
+            level > 0m && Math.Abs(close - level) / level <= StructuralLiquidityProximityFraction;
 
         return Near(snapshot.SessionHigh)
             || Near(snapshot.SessionLow)

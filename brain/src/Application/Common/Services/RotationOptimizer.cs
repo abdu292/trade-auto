@@ -25,8 +25,26 @@ public static class RotationOptimizer
     // Balanced split: 30 / 30 / 40
     private static readonly decimal[] StaggeredFractionsBalanced = [0.30m, 0.30m, 0.40m];
 
-    // Minimum TP probability proxy: if probability of same-session TP is this low → STAND_DOWN
-    private const decimal MinSameSessionTpProbability = 0.40m;
+    // Stand-down threshold: ADR usage above this % means day is too consumed for new trades
+    private const decimal StandDownAdrUsedPctThreshold = 90m;
+
+    // Minimum PRETABLE size modifier for staggered mode (ensures capital can fill all levels)
+    private const decimal MinPretableSizeModifierForStagger = 0.30m;
+
+    // Spread instability multiplier for staggered mode gate
+    private const decimal StaggerSpreadInstabilityMultiplier = 2.5m;
+
+    // Minimum compression candles required for staggered ladder
+    private const int MinCompressionCandlesForStagger = 3;
+
+    // Minimum compression candles for buy-stop mode (compression before breakout)
+    private const int MinCompressionCandlesForBuyStop = 3;
+
+    // Weak breakout score threshold (below = fake/weak breakout)
+    private const decimal WeakBreakoutImpulseScore = 0.5m;
+
+    // Maximum expansion candles before blocking buy-stop
+    private const int MaxExpansionCandlesForBuyStop = 3;
 
     /// <summary>Decides the optimal rotation mode for the current market setup.</summary>
     public static RotationOptimizerResult Optimize(
@@ -96,7 +114,7 @@ public static class RotationOptimizer
         if (crRegime == "SHOCK") return true;
 
         // Expiry realism too poor (ADR fully consumed — no room for TP within session)
-        if (snapshot.AdrUsedPct >= 90m) return true;
+        if (snapshot.AdrUsedPct >= StandDownAdrUsedPctThreshold) return true;
 
         // Structure unclear: no compression, no base, no sweep, no breakout
         var noStructure = !snapshot.IsCompression
@@ -121,18 +139,18 @@ public static class RotationOptimizer
         if (!snapshot.IsBreakoutConfirmed) return false;
 
         // Compression before breakout — price squeezed then broke
-        if (snapshot.CompressionCountM15 < 3) return false;
+        if (snapshot.CompressionCountM15 < MinCompressionCandlesForBuyStop) return false;
 
         // Momentum expansion present (not a fake/weak breakout)
         if (!snapshot.IsExpansion && !snapshot.HasImpulseCandles) return false;
 
         // No impulse exhaustion (breakout not already overextended)
-        if (snapshot.ExpansionCountM15 >= 3 && snapshot.ImpulseStrengthScore < 0.5m) return false;
+        if (snapshot.ExpansionCountM15 >= MaxExpansionCandlesForBuyStop && snapshot.ImpulseStrengthScore < WeakBreakoutImpulseScore) return false;
 
         // No liquidity vacuum (excessive spread spike)
         var vacuumRisk = snapshot.SpreadMax60m > 0m
             && snapshot.SpreadMedian60m > 0m
-            && snapshot.SpreadMax60m >= snapshot.SpreadMedian60m * 2.5m;
+            && snapshot.SpreadMax60m >= snapshot.SpreadMedian60m * StaggerSpreadInstabilityMultiplier;
         if (vacuumRisk) return false;
 
         return true;
@@ -150,7 +168,7 @@ public static class RotationOptimizer
         // Liquidity vacuum = no staggering
         var vacuumRisk = snapshot.SpreadMax60m > 0m
             && snapshot.SpreadMedian60m > 0m
-            && snapshot.SpreadMax60m >= snapshot.SpreadMedian60m * 2.5m;
+            && snapshot.SpreadMax60m >= snapshot.SpreadMedian60m * StaggerSpreadInstabilityMultiplier;
         if (vacuumRisk) return false;
 
         // No hazard window (proxied by US risk window)
@@ -160,16 +178,15 @@ public static class RotationOptimizer
         if (snapshot.IsFriday && snapshot.IsLondonNyOverlap) return false;
 
         // Structure must support multiple real shelves:
-        // At least 3 compression candles (shelves accumulating) and a valid base
-        if (snapshot.CompressionCountM15 < 3) return false;
+        // At least MinCompressionCandlesForStagger compression candles and a valid base
+        if (snapshot.CompressionCountM15 < MinCompressionCandlesForStagger) return false;
         if (!snapshot.HasOverlapCandles) return false;
 
         // Sweep / reclaim / compression logic must still be valid
         if (!snapshot.HasLiquiditySweep && !snapshot.IsCompression) return false;
 
-        // Capital gate: require at least 3 minimum trade sizes available
-        // (proxy: if less than 20% CAUTION sizing available from PRETABLE, don't ladder)
-        if (pretable.SizeModifier < 0.3m) return false;
+        // Capital gate: require minimum PRETABLE size modifier for ladder deployment
+        if (pretable.SizeModifier < MinPretableSizeModifierForStagger) return false;
 
         return true;
     }

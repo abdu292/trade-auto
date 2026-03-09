@@ -34,10 +34,11 @@ public sealed class DynamicSessionRiskService
     private const int     WaterfallThreshold   = 3;
     private const int     LookbackTradeCount   = 50;
 
-    // In-memory session state (modifier + waterfall counter)
+    // In-memory session state: modifier + sliding window of last N trade outcomes (true = waterfall)
     private readonly Lock _lock = new();
     private readonly Dictionary<string, decimal> _modifiers;
-    private readonly Dictionary<string, int> _waterfallCounts;
+    // Sliding window queue per session: true = waterfall, false = success
+    private readonly Dictionary<string, Queue<bool>> _tradeHistories;
 
     public DynamicSessionRiskService()
     {
@@ -49,17 +50,18 @@ public sealed class DynamicSessionRiskService
             ["NY"]     = NyBootstrap,
         };
 
-        _waterfallCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        _tradeHistories = new Dictionary<string, Queue<bool>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["JAPAN"]  = 0,
-            ["INDIA"]  = 0,
-            ["LONDON"] = 0,
-            ["NY"]     = 0,
+            ["JAPAN"]  = new Queue<bool>(),
+            ["INDIA"]  = new Queue<bool>(),
+            ["LONDON"] = new Queue<bool>(),
+            ["NY"]     = new Queue<bool>(),
         };
     }
 
     /// <summary>
     /// Returns the current dynamic size modifier for the given session.
+    /// The waterfall count is derived from the last LookbackTradeCount trades in the sliding window.
     /// </summary>
     public DynamicSessionRiskResult GetModifier(string session)
     {
@@ -71,7 +73,7 @@ public sealed class DynamicSessionRiskService
                 ? m
                 : 0.60m; // default fallback
 
-            var waterfallCount = _waterfallCounts.TryGetValue(normalized, out var w) ? w : 0;
+            var waterfallCount = CountWaterfallsInWindow(normalized);
             var waterfallCapActive = waterfallCount >= WaterfallThreshold;
 
             if (waterfallCapActive && modifier > WaterfallCappedMax)
@@ -84,13 +86,13 @@ public sealed class DynamicSessionRiskService
                 Modifier: modifier,
                 WaterfallCapActive: waterfallCapActive,
                 Reason: waterfallCapActive
-                    ? $"Session {normalized}: modifier={modifier:0.00} (waterfall cap active, {waterfallCount}/{WaterfallThreshold} entries in last {LookbackTradeCount} trades)"
-                    : $"Session {normalized}: modifier={modifier:0.00} (normal)");
+                    ? $"Session {normalized}: modifier={modifier:0.00} (waterfall cap active, {waterfallCount}/{WaterfallThreshold} waterfalls in last {LookbackTradeCount} trades)"
+                    : $"Session {normalized}: modifier={modifier:0.00} (normal, {waterfallCount} waterfalls in last {LookbackTradeCount} trades)");
         }
     }
 
     /// <summary>
-    /// Records a waterfall entry for the session.
+    /// Records a waterfall entry for the session in the sliding window.
     /// Called when a trade results in a waterfall catch.
     /// </summary>
     public void RecordWaterfallEntry(string session)
@@ -99,14 +101,12 @@ public sealed class DynamicSessionRiskService
 
         lock (_lock)
         {
-            if (_waterfallCounts.ContainsKey(normalized))
-                _waterfallCounts[normalized] = Math.Min(_waterfallCounts[normalized] + 1, LookbackTradeCount);
+            EnqueueOutcome(normalized, isWaterfall: true);
         }
     }
 
     /// <summary>
-    /// Records a successful (non-waterfall) trade for the session.
-    /// Slightly decrements the waterfall counter to allow recovery over time.
+    /// Records a successful (non-waterfall) trade for the session in the sliding window.
     /// </summary>
     public void RecordSuccessfulTrade(string session)
     {
@@ -114,8 +114,7 @@ public sealed class DynamicSessionRiskService
 
         lock (_lock)
         {
-            if (_waterfallCounts.ContainsKey(normalized) && _waterfallCounts[normalized] > 0)
-                _waterfallCounts[normalized]--;
+            EnqueueOutcome(normalized, isWaterfall: false);
         }
     }
 
@@ -141,6 +140,31 @@ public sealed class DynamicSessionRiskService
         {
             return new Dictionary<string, decimal>(_modifiers, StringComparer.OrdinalIgnoreCase);
         }
+    }
+
+    // ── Private helpers ──────────────────────────────────────────────────────
+
+    private void EnqueueOutcome(string normalizedSession, bool isWaterfall)
+    {
+        if (!_tradeHistories.TryGetValue(normalizedSession, out var queue))
+        {
+            queue = new Queue<bool>();
+            _tradeHistories[normalizedSession] = queue;
+        }
+
+        queue.Enqueue(isWaterfall);
+
+        // Maintain sliding window size: discard oldest entry when full
+        while (queue.Count > LookbackTradeCount)
+            queue.Dequeue();
+    }
+
+    private int CountWaterfallsInWindow(string normalizedSession)
+    {
+        if (!_tradeHistories.TryGetValue(normalizedSession, out var queue))
+            return 0;
+
+        return queue.Count(isWaterfall => isWaterfall);
     }
 
     private static string NormalizeSession(string session)

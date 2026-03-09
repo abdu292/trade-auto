@@ -21,6 +21,17 @@ public static class ImpulseExhaustionGuard
     private const decimal CautionAtrMax         = 2.0m;
     private const int     ExpansionCandlesBlock = 3;
 
+    // Multipliers used to approximate impulse distance from available snapshot data.
+    // ImpulseStrength contributes 2× ATR; each expansion candle adds 0.5× ATR.
+    private const decimal ImpulseStrengthAtrMultiplier  = 2.0m;
+    private const decimal ExpansionCandleAtrContribution = 0.5m;
+
+    // Fallback scale when ATR data is unavailable (maps ImpulseStrengthScore 0–1 to ≈0–20 pts)
+    private const decimal FallbackScalePoints = 20m;
+
+    // Minimum impulse strength score for a breakout to be considered strong
+    private const decimal WeakBreakoutThreshold = 0.5m;
+
     /// <summary>
     /// Evaluates impulse exhaustion risk for the current market snapshot.
     /// </summary>
@@ -35,12 +46,12 @@ public static class ImpulseExhaustionGuard
         decimal impulseDistancePoints;
         if (atrM15 > 0m)
         {
-            impulseDistancePoints = snapshot.ImpulseStrengthScore * 2m * atrM15
-                + snapshot.ExpansionCountM15 * atrM15 * 0.5m;
+            impulseDistancePoints = snapshot.ImpulseStrengthScore * ImpulseStrengthAtrMultiplier * atrM15
+                + snapshot.ExpansionCountM15 * atrM15 * ExpansionCandleAtrContribution;
         }
         else
         {
-            impulseDistancePoints = snapshot.ImpulseStrengthScore * 20m; // fallback scale
+            impulseDistancePoints = snapshot.ImpulseStrengthScore * FallbackScalePoints;
         }
 
         // Impulse distance expressed as multiples of ATR_M15
@@ -52,7 +63,7 @@ public static class ImpulseExhaustionGuard
 
         // ── BLOCK conditions ─────────────────────────────────────────────────
         // ≥3 expansion candles with weak momentum confirmation
-        var weakMomentum = !snapshot.IsBreakoutConfirmed && snapshot.ImpulseStrengthScore < 0.5m;
+        var weakMomentum = !snapshot.IsBreakoutConfirmed && snapshot.ImpulseStrengthScore < WeakBreakoutThreshold;
         var blockByExpansion = expansionCandles >= ExpansionCandlesBlock && weakMomentum;
 
         if (impulseDistancePoints > CautionPointsMax || impulseDistanceAtr > CautionAtrMax || blockByExpansion)
