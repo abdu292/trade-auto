@@ -347,3 +347,85 @@ public sealed record StudyRefinementSuggestionContract(
     double Confidence,
     string Reasoning,
     IReadOnlyCollection<string> ProviderVotes);
+
+// ── CR11: Impulse Exhaustion Guard ──────────────────────────────────────────
+
+/// <summary>
+/// Result from the Impulse Exhaustion Guard.
+/// Prevents late breakout chasing after vertical impulse moves.
+/// Level: SAFE | CAUTION | BLOCK.
+/// Flags: IMPULSE_EXHAUSTION_CAUTION | IMPULSE_EXHAUSTION_BLOCK.
+/// </summary>
+public sealed record ImpulseExhaustionResult(
+    string Level,
+    decimal ImpulseDistancePoints,
+    decimal ImpulseDistanceAtr,
+    int ConsecutiveExpansionCandles,
+    IReadOnlyCollection<string> Flags,
+    string Reason);
+
+// ── CR11: Liquidity Sweep Detector ──────────────────────────────────────────
+
+/// <summary>
+/// Result from the Liquidity Sweep Detector.
+/// Detects stop-hunt sweeps that create safe reversal entries.
+/// When IsConfirmed=true the PRETABLE risk level may improve one tier (CAUTION → SAFE),
+/// but never overrides WATERFALL_RISK.
+/// </summary>
+public sealed record LiquiditySweepResult(
+    bool IsConfirmed,
+    bool PriceSweptPriorLevel,
+    bool CandleClosedBackInside,
+    bool VolumeOrRangeSpike,
+    bool NearStructuralLiquidity,
+    string Reason);
+
+// ── CR11: PRETABLE Risk Intelligence ────────────────────────────────────────
+
+/// <summary>
+/// Output from the PRETABLE Risk Intelligence layer (Layer B in CR11 architecture).
+/// Determines trade aggressiveness before execution.
+/// RiskLevel: SAFE | CAUTION | BLOCK.
+/// SizeModifier: multiplier applied to computed gram size (0.0 – 1.0).
+/// </summary>
+public sealed record PretableResult(
+    string RiskLevel,
+    decimal RiskScore,
+    IReadOnlyCollection<string> RiskFlags,
+    string Session,
+    decimal SizeModifier,
+    string Reason);
+
+// ── CR11: Rotation Optimizer ─────────────────────────────────────────────────
+
+/// <summary>
+/// Decides how capital should be deployed for the current setup.
+/// Mode: SINGLE_ENTRY | STAGGERED | BUY_STOP | STAND_DOWN.
+/// </summary>
+public sealed record RotationOptimizerResult(
+    string Mode,
+    string CrRegime,
+    IReadOnlyCollection<StaggeredLevelContract>? StaggeredLevels,
+    string Reason);
+
+/// <summary>
+/// One level of a staggered buy-limit ladder.
+/// </summary>
+public sealed record StaggeredLevelContract(
+    int LevelIndex,
+    decimal EntryOffset,
+    decimal SizeFraction,
+    string Label);
+
+// ── CR11: Dynamic Session Risk ───────────────────────────────────────────────
+
+/// <summary>
+/// Dynamic session size modifier produced by DynamicSessionRiskService.
+/// Adapts from real trade results; hard-bounded to [0.45, 0.80].
+/// When repeated waterfall entries are detected, maxModifier is capped at 0.60.
+/// </summary>
+public sealed record DynamicSessionRiskResult(
+    string Session,
+    decimal Modifier,
+    bool WaterfallCapActive,
+    string Reason);

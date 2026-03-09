@@ -33,7 +33,8 @@ public static class DecisionEngine
         TradeSignalContract aiSignal,
         LedgerStateContract ledgerState,
         string? strategyProfileName = null,
-        decimal minTradeGrams = 100m)
+        decimal minTradeGrams = 100m,
+        decimal pretableSizeModifier = 1.0m)
     {
         if (!IsSupportedGoldSymbol(snapshot.Symbol))
         {
@@ -88,7 +89,7 @@ public static class DecisionEngine
         return regimeTag switch
         {
             "WAR_PREMIUM" or "DEESCALATION_RISK" => EvaluateWarPremium(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState, minTradeGrams),
-            _ => EvaluateStandard(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState, minTradeGrams),
+            _ => EvaluateStandard(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState, minTradeGrams, pretableSizeModifier),
         };
     }
 
@@ -99,7 +100,8 @@ public static class DecisionEngine
         LedgerStateContract ledgerState,
         string regimeTag,
         string riskState,
-        decimal minTradeGrams)
+        decimal minTradeGrams,
+        decimal pretableSizeModifier = 1.0m)
     {
         var session = NormalizeSession(snapshot.Session);
         var waterfallRisk = ResolveWaterfallRiskStandard(snapshot, regime, aiSignal);
@@ -283,7 +285,10 @@ public static class DecisionEngine
 
         var maxGrams = ToMaxAffordableGrams(bucketCash, entry) - SafetyBufferGrams;
         var sizePct = ParseSizePercent(sizeClass);
-        var gramsFromSizeClass = ToMaxAffordableGrams(bucketCash * sizePct, entry);
+        // CR11 PRETABLE: apply sizeModifier from PRETABLE intelligence layer.
+        // CAUTION → 0.60 multiplier; SAFE → 1.0; BLOCK → 0.0 (already handled above).
+        var effectiveSizePct = sizePct * Math.Clamp(pretableSizeModifier, 0m, 1m);
+        var gramsFromSizeClass = ToMaxAffordableGrams(bucketCash * effectiveSizePct, entry);
         var grams = Math.Floor(Math.Min(maxGrams, gramsFromSizeClass));
 
         if (grams < minTradeGrams)
@@ -291,7 +296,7 @@ public static class DecisionEngine
             return NoTrade($"Capacity below {minTradeGrams:0.##}g minimum after spread/buffer.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
         }
 
-        // Section 12.1: Session expiry caps — Japan/India: 30m, London: 25m, NY: 20m, Friday: 15m
+        // CR11 §EXPIRY_RULE: Session expiry bands (Asia 45-60m, London 30-45m, NY 20-30m)
         var expiryDuration = GetSessionExpiryDurationStandard(session, snapshot.IsFriday);
         var expiryUtcOffset = new DateTimeOffset(snapshot.Timestamp.UtcDateTime.Add(expiryDuration), TimeSpan.Zero);
 
@@ -1139,34 +1144,39 @@ public static class DecisionEngine
         => isFriday && session is "LONDON" or "NY";
 
     /// <summary>
-    /// Section 11.1/11.2: Session TP cap (max USD distance from entry to TP) per spec_v6 §3/§5.
+    /// CR11 §TARGET_PROFIT_MODEL: Session TP cap (max USD distance from entry to TP).
+    /// Target range: +8 to +15 USD. Maximum adaptive TP: 18 USD (CR11 §ADAPTIVE_TP_ENGINE).
     /// </summary>
     private static decimal GetSessionTpCap(string session, bool isFriday)
     {
         if (IsFridayLondonOrNy(session, isFriday)) return 8m;
         return session switch
         {
-            "JAPAN" => 8m,
-            "INDIA" => 10m,
-            "LONDON" => 12m,
-            "NY" => 12m,
-            _ => 10m,
+            "JAPAN"  => 12m,   // Asia setups: slower moves, mid-range target
+            "INDIA"  => 12m,   // India session: moderate volatility
+            "LONDON" => 15m,   // London: strongest directional moves (up to 15 USD)
+            "NY"     => 15m,   // New York: spike capability but spike risk
+            _        => 12m,
         };
     }
 
     /// <summary>
-    /// Section 12.1: Session expiry caps — Japan/India: 30m, London: 25m, NY: 20m, Friday: 15m.
+    /// CR11 §EXPIRY_RULE: Session expiry bands.
+    /// Asia/India setups → 45–60 minutes (use midpoint 52 min).
+    /// London setups     → 30–45 minutes (use midpoint 37 min).
+    /// NY setups         → 20–30 minutes (use midpoint 25 min).
+    /// Friday tight windows: 15 min.
     /// </summary>
     private static TimeSpan GetSessionExpiryDurationStandard(string session, bool isFriday)
     {
         if (IsFridayLondonOrNy(session, isFriday)) return TimeSpan.FromMinutes(15);
         return session switch
         {
-            "JAPAN" => TimeSpan.FromMinutes(30),
-            "INDIA" => TimeSpan.FromMinutes(30),
-            "LONDON" => TimeSpan.FromMinutes(25),
-            "NY" => TimeSpan.FromMinutes(20),
-            _ => TimeSpan.FromMinutes(25),
+            "JAPAN"  => TimeSpan.FromMinutes(52),   // CR11: Asia 45–60 min
+            "INDIA"  => TimeSpan.FromMinutes(52),   // CR11: Asia 45–60 min
+            "LONDON" => TimeSpan.FromMinutes(37),   // CR11: London 30–45 min
+            "NY"     => TimeSpan.FromMinutes(25),   // CR11: NY 20–30 min
+            _        => TimeSpan.FromMinutes(37),
         };
     }
 
