@@ -17,7 +17,8 @@ namespace Brain.Infrastructure.Services.Background;
 public sealed class SignalPollingBackgroundService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
-    ILogger<SignalPollingBackgroundService> logger) : BackgroundService
+    ILogger<SignalPollingBackgroundService> logger,
+    DynamicSessionRiskService dynamicSessionRisk) : BackgroundService
 {
     private static DateTimeOffset _lastArmedAtUtc = DateTimeOffset.MinValue;
     private static readonly Lock _transitionGate = new();
@@ -750,8 +751,161 @@ public sealed class SignalPollingBackgroundService(
                     DeployableCashAed: Math.Max(0m, rawState.DeployableCashAed - reservedPendingAed),
                     OpenBuyCount: rawState.OpenBuyCount);
 
+                // ── CR11 Layer B: PRETABLE Risk Intelligence ─────────────────────────────
+                // Run Impulse Exhaustion Guard, Liquidity Sweep Detector, and PRETABLE before
+                // decision engine. PRETABLE BLOCK → no trade regardless of engine output.
+
+                var impulseExhaustion = ImpulseExhaustionGuard.Evaluate(snapshot);
+                var liquiditySweep = LiquiditySweepDetectorService.Detect(snapshot);
+                var sessionForPretable = NormalizeSessionForPretable(snapshot.Session);
+                var pretable = PretableService.Evaluate(snapshot, regime, impulseExhaustion, liquiditySweep, sessionForPretable);
+
+                // CR11 CR11: Regime → TREND / RANGE / SHOCK for Rotation Optimizer
+                var crRegime = MapToCr11Regime(setupCandidate.MarketRegime?.Regime ?? regime.Regime);
+
+                // Dynamic Session Risk: get current session size modifier
+                var dynamicSessionRiskResult = dynamicSessionRisk.GetModifier(snapshot.Session);
+
+                await timeline.WriteAsync(
+                    eventType: "CR11_PRETABLE_RESULT",
+                    stage: "pretable",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        pretable.RiskLevel,
+                        pretable.RiskScore,
+                        pretable.RiskFlags,
+                        pretable.SizeModifier,
+                        pretable.Session,
+                        pretableReason = pretable.Reason,
+                        impulseExhaustionLevel = impulseExhaustion.Level,
+                        impulseExhaustionFlags = impulseExhaustion.Flags,
+                        impulseExhaustion.ImpulseDistancePoints,
+                        impulseExhaustion.ImpulseDistanceAtr,
+                        liquiditySweepConfirmed = liquiditySweep.IsConfirmed,
+                        liquiditySweepReason = liquiditySweep.Reason,
+                        crRegime,
+                        dynamicSessionModifier = dynamicSessionRiskResult.Modifier,
+                        dynamicSessionWaterfallCap = dynamicSessionRiskResult.WaterfallCapActive,
+                    },
+                    cancellationToken: stoppingToken);
+
+                // PRETABLE BLOCK: stop pipeline — this is a Layer B hard block
+                if (pretable.RiskLevel == "BLOCK")
+                {
+                    logger.LogInformation(
+                        "CR11_PRETABLE_BLOCK — {Reason}",
+                        pretable.Reason);
+
+                    await timeline.WriteAsync(
+                        eventType: "FINAL_DECISION",
+                        stage: "decision",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            finalDecision = "NO_TRADE",
+                            primaryReason = "CR11_PRETABLE_BLOCK",
+                            reason = pretable.Reason,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
+                // Rotation Optimizer: decide execution mode
+                var rotationResult = RotationOptimizer.Optimize(snapshot, pretable, liquiditySweep, crRegime, state);
+
+                await timeline.WriteAsync(
+                    eventType: "CR11_ROTATION_OPTIMIZER",
+                    stage: "rotation",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        rotationResult.Mode,
+                        rotationResult.CrRegime,
+                        rotationResult.Reason,
+                        staggeredLevels = rotationResult.StaggeredLevels,
+                    },
+                    cancellationToken: stoppingToken);
+
+                // CR11 STUDY_CANDIDATE_LOG: log full candidate context for STUDY analysis.
+                // Every evaluated candidate (including blocked ones) must log all CR11 fields.
+                await timeline.WriteAsync(
+                    eventType: "CR11_STUDY_CANDIDATE_LOG",
+                    stage: "study",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        // CR11 §LOGGING_FOR_STUDY required fields:
+                        session = snapshot.Session,
+                        sessionPhase = snapshot.SessionPhase,
+                        crRegime,
+                        structureValid = setupCandidate.IsValid,
+                        pretableRiskLevel = pretable.RiskLevel,
+                        pretableRiskScore = pretable.RiskScore,
+                        pretableRiskFlags = pretable.RiskFlags,
+                        pretableSizeModifier = pretable.SizeModifier,
+                        liquiditySweepConfirmed = liquiditySweep.IsConfirmed,
+                        impulseExhaustionLevel = impulseExhaustion.Level,
+                        impulseExhaustionFlags = impulseExhaustion.Flags,
+                        rotationMode = rotationResult.Mode,
+                        dynamicSessionModifier = dynamicSessionRiskResult.Modifier,
+                        dynamicSessionWaterfallCap = dynamicSessionRiskResult.WaterfallCapActive,
+                        tradeScore = tradeScore.TotalScore,
+                        tradeScoreTier = tradeScore.DecisionTier,
+                        aiConfidence = aiSignal.Confidence,
+                        aiConsensus = aiSignal.ConsensusPassed,
+                        marketRegime = setupCandidate.MarketRegime?.Regime,
+                        waterfallRisk = regime.IsWaterfall ? "HIGH" : (regime.RiskTag == "BLOCK" ? "MEDIUM" : "LOW"),
+                        isFriday = snapshot.IsFriday,
+                        adrUsedPct = snapshot.AdrUsedPct,
+                    },
+                    cancellationToken: stoppingToken);
+
+                // STAND_DOWN from Rotation Optimizer (poor capital efficiency)
+                if (rotationResult.Mode == "STAND_DOWN")
+                {
+                    logger.LogInformation(
+                        "CR11_ROTATION_STANDDOWN — {Reason}",
+                        rotationResult.Reason);
+
+                    await timeline.WriteAsync(
+                        eventType: "FINAL_DECISION",
+                        stage: "decision",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            finalDecision = "NO_TRADE",
+                            primaryReason = "CR11_STAND_DOWN",
+                            reason = rotationResult.Reason,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
+                // Apply combined size modifier: PRETABLE × dynamic session risk
+                var effectiveSizeModifier = pretable.SizeModifier * dynamicSessionRiskResult.Modifier;
+
                 var minTradeGrams = runtimeSettings.GetMinTradeGrams();
-                var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, state, activeStrategy, minTradeGrams);
+                var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, state, activeStrategy, minTradeGrams, effectiveSizeModifier);
                 var snapshotHash = ComputeSnapshotHash(snapshot);
 
                 await timeline.WriteAsync(
@@ -1787,6 +1941,46 @@ public sealed class SignalPollingBackgroundService(
             Summary = string.IsNullOrWhiteSpace(aiSignal.Summary)
                 ? $"TV:{tradingView.Signal}/{tradingView.Bias}/{tradingView.RiskTag}"
                 : $"{aiSignal.Summary} | TV:{tradingView.Signal}/{tradingView.Bias}/{tradingView.RiskTag}",
+        };
+    }
+
+    /// <summary>
+    /// CR11: Normalizes session name for the PRETABLE service.
+    /// </summary>
+    private static string NormalizeSessionForPretable(string? session)
+    {
+        var s = (session ?? string.Empty).Trim().ToUpperInvariant();
+        return s switch
+        {
+            "ASIA"     => "JAPAN",
+            "EUROPE"   => "LONDON",
+            "NEW_YORK" => "NY",
+            _          => s,
+        };
+    }
+
+    /// <summary>
+    /// CR11: Maps the existing market regime taxonomy to the CR11 three-way regime:
+    ///   TREND (TRENDING_BULL)
+    ///   RANGE (RANGING, CHOPPY)
+    ///   SHOCK (any waterfall/news spike / DEAD)
+    /// </summary>
+    private static string MapToCr11Regime(string? regime)
+    {
+        var r = (regime ?? string.Empty).Trim().ToUpperInvariant();
+        return r switch
+        {
+            "TRENDING_BULL"   => "TREND",
+            "TRENDING_BEAR"   => "SHOCK",   // buy-only system: bear trend = shock-like for our purposes
+            "RANGING"         => "RANGE",
+            "CHOPPY"          => "RANGE",
+            "DEAD"            => "SHOCK",
+            "NEWS_SPIKE"      => "SHOCK",
+            "FRIDAY_HIGH_RISK"=> "SHOCK",
+            "COMPRESSION"     => "RANGE",
+            "EXPANSION"       => "TREND",
+            "POST_SPIKE_PULLBACK" => "RANGE",
+            _                 => "RANGE",
         };
     }
 }

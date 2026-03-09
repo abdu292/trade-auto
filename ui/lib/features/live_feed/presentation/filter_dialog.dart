@@ -70,14 +70,31 @@ class FilterDialog extends ConsumerWidget {
                       }
                     },
                   ),
-                  // note: the "only current session" checkbox was removed per UX feedback.
-                  // we now mark the current session in the list below instead.
+                  if (curr != null && curr.isNotEmpty)
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Only current session ($curr)'),
+                      value: settings.sessions.length == 1 &&
+                          settings.sessions.contains(curr),
+                      onChanged: (v) {
+                        if (v == true) {
+                          ref
+                              .read(liveFeedFilterProvider.notifier)
+                              .clearSessions();
+                          ref
+                              .read(liveFeedFilterProvider.notifier)
+                              .toggleSession(curr);
+                        } else {
+                          ref
+                              .read(liveFeedFilterProvider.notifier)
+                              .clearSessions();
+                        }
+                      },
+                    ),
                   for (final s in sorted)
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text((curr != null && curr.isNotEmpty && s == curr)
-                          ? '$s (current session)'
-                          : s),
+                      title: Text(s),
                       value: settings.sessions.contains(s),
                       onChanged: (v) {
                         ref

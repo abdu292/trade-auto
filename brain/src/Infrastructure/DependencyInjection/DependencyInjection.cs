@@ -1,4 +1,5 @@
 using Brain.Application.Common.Interfaces;
+using Brain.Application.Common.Services;
 using Brain.Infrastructure.Data;
 using Brain.Infrastructure.Services.Background;
 using Brain.Infrastructure.Services.External;
@@ -77,6 +78,9 @@ public static class DependencyInjection
         services.AddScoped<IWhatsAppService, MockWhatsAppService>();
         services.AddScoped<ICalendarService, MockCalendarService>();
         services.AddSingleton<IHistoricalReplayService, HistoricalReplayService>();
+
+        // CR11: Dynamic Session Risk Service (singleton — tracks session modifiers across cycles)
+        services.AddSingleton<DynamicSessionRiskService>();
 
         services.AddHostedService<SessionSchedulerBackgroundService>();
         services.AddHostedService<SignalPollingBackgroundService>();
