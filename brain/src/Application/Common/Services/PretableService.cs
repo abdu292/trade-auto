@@ -16,6 +16,11 @@ namespace Brain.Application.Common.Services;
 /// PRETABLE cannot override WATERFALL_RISK, FAIL laws, hazard windows,
 /// exposure limits, capital limits, or panic interrupts.
 ///
+/// Pattern Detector (CR8) feeds directly into PRETABLE (Section F of refinement spec):
+///   WATERFALL_RISK HIGH or FAIL_THREATENED → BLOCK (hard gate)
+///   CONTINUATION_BREAKOUT SAFE/LOW         → may upgrade CAUTION → SAFE
+///   SESSION_TRANSITION_TRAP                → adds SESSION_TRANSITION flag
+///
 /// If LiquiditySweepResult.IsConfirmed the risk level may improve one tier:
 ///   CAUTION → SAFE  (but never BLOCK → SAFE/CAUTION)
 /// </summary>
@@ -36,6 +41,9 @@ public static class PretableService
     private const decimal FridayOverlapContribution            = 0.10m;
     private const decimal AtrExpansionContribution             = 0.10m;
 
+    // Pattern Detector gate contributions (Section F — Pattern Detector as Active Gate)
+    private const decimal PatternSessionTransitionContribution = 0.12m;
+
     // ADR usage thresholds
     private const decimal AdrExhaustedPct  = 85m;
     private const decimal AdrHighUsagePct  = 70m;
@@ -49,12 +57,24 @@ public static class PretableService
     private const decimal BlockSizeModifier   = 0.0m;
 
     /// <summary>Evaluates PRETABLE risk given the current market context.</summary>
+    /// <param name="snapshot">Current market snapshot.</param>
+    /// <param name="regime">Regime classification from the regime classifier.</param>
+    /// <param name="impulseExhaustion">Impulse exhaustion guard result.</param>
+    /// <param name="liquiditySweep">Liquidity sweep detection result.</param>
+    /// <param name="session">Normalized session name.</param>
+    /// <param name="patterns">
+    /// Optional Pattern Detector results (CR8 Section F).
+    /// WATERFALL_RISK HIGH or FAIL_THREATENED → hard BLOCK.
+    /// CONTINUATION_BREAKOUT SAFE/LOW         → eligible for CAUTION → SAFE upgrade.
+    /// SESSION_TRANSITION_TRAP                → adds SESSION_TRANSITION risk flag.
+    /// </param>
     public static PretableResult Evaluate(
         MarketSnapshotContract snapshot,
         RegimeClassificationContract regime,
         ImpulseExhaustionResult impulseExhaustion,
         LiquiditySweepResult liquiditySweep,
-        string session)
+        string session,
+        IReadOnlyCollection<PatternDetectionResult>? patterns = null)
     {
         var flags = new List<string>();
         var riskScore = 0m;
@@ -65,6 +85,24 @@ public static class PretableService
             flags.Add("REGIME_BLOCK");
             return BuildResult("BLOCK", 1.0m, flags, session, BlockSizeModifier,
                 $"Regime hard block: {regime.Reason}");
+        }
+
+        // ── Section F: Pattern Detector hard gates ───────────────────────────
+        // WATERFALL_RISK pattern with HIGH risk or FAIL_THREATENED → PRETABLE = BLOCK
+        // This is a hard gate: Pattern Detector actively feeds into PRETABLE (CR8 refinement spec §F).
+        if (patterns is not null)
+        {
+            foreach (var pattern in patterns)
+            {
+                if (pattern.PatternType == PatternType.WaterfallRisk
+                    && (string.Equals(pattern.WaterfallRisk, "HIGH", StringComparison.OrdinalIgnoreCase)
+                        || pattern.FailThreatened))
+                {
+                    flags.Add("PATTERN_WATERFALL_HIGH");
+                    return BuildResult("BLOCK", 1.0m, flags, session, BlockSizeModifier,
+                        $"Pattern hard block: WATERFALL_RISK={pattern.WaterfallRisk}, FailThreatened={pattern.FailThreatened}, subtype={pattern.Subtype}");
+                }
+            }
         }
 
         // ── Impulse Exhaustion contributes to score ─────────────────────────
@@ -128,6 +166,31 @@ public static class PretableService
             riskScore += AtrExpansionContribution;
         }
 
+        // ── Section F: Pattern Detector soft contributions ───────────────────
+        // SESSION_TRANSITION_TRAP → adds SESSION_TRANSITION risk flag.
+        // CONTINUATION_BREAKOUT SAFE/LOW → tracked for potential CAUTION → SAFE upgrade.
+        var hasBreakoutSafePattern = false;
+        if (patterns is not null)
+        {
+            foreach (var pattern in patterns)
+            {
+                if (pattern.PatternType == PatternType.SessionTransitionTrap
+                    && !flags.Contains("SESSION_TRANSITION"))
+                {
+                    flags.Add("SESSION_TRANSITION");
+                    riskScore += PatternSessionTransitionContribution;
+                }
+
+                if (pattern.PatternType == PatternType.ContinuationBreakout
+                    && string.Equals(pattern.EntrySafety, "SAFE", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(pattern.WaterfallRisk, "LOW", StringComparison.OrdinalIgnoreCase)
+                    && !pattern.FailThreatened)
+                {
+                    hasBreakoutSafePattern = true;
+                }
+            }
+        }
+
         riskScore = Math.Clamp(riskScore, 0m, 1.0m);
 
         // ── Determine base risk level from score ─────────────────────────────
@@ -155,6 +218,16 @@ public static class PretableService
             riskLevel = "SAFE";
         }
 
+        // ── Section F: Continuation breakout upgrade: CAUTION → SAFE ─────────
+        // CONTINUATION_BREAKOUT with SAFE entry + LOW waterfall + no FAIL threat
+        // can upgrade CAUTION → SAFE (per refinement spec §F Breakout continuation).
+        // Never upgrades from BLOCK.
+        if (riskLevel == "CAUTION" && hasBreakoutSafePattern)
+        {
+            flags.Add("PATTERN_BREAKOUT_SAFE_UPGRADE");
+            riskLevel = "SAFE";
+        }
+
         // ── Compute size modifier ────────────────────────────────────────────
         var sizeModifier = riskLevel switch
         {
@@ -163,7 +236,7 @@ public static class PretableService
             _          => BlockSizeModifier,
         };
 
-        var reason = $"PRETABLE {riskLevel}: score={riskScore:0.00}, flags=[{string.Join(",", flags)}], sweep={liquiditySweep.IsConfirmed}, impulse={impulseExhaustion.Level}";
+        var reason = $"PRETABLE {riskLevel}: score={riskScore:0.00}, flags=[{string.Join(",", flags)}], sweep={liquiditySweep.IsConfirmed}, impulse={impulseExhaustion.Level}, breakoutSafe={hasBreakoutSafePattern}";
         return BuildResult(riskLevel, riskScore, flags, session, sizeModifier, reason);
     }
 

@@ -357,7 +357,8 @@ public static class MonitoringEndpoints
                 var symbol = runtimeSettings.GetSymbol();
                 var autoTradeEnabled = runtimeSettings.GetAutoTradeEnabled();
                 var minTradeGrams = runtimeSettings.GetMinTradeGrams();
-                return TypedResults.Ok(new { symbol, autoTradeEnabled, minTradeGrams });
+                var microRotationEnabled = runtimeSettings.GetMicroRotationEnabled();
+                return TypedResults.Ok(new { symbol, autoTradeEnabled, minTradeGrams, microRotationEnabled });
             })
             .WithName("GetRuntimeSettings")
             .WithDescription("Returns mutable runtime trading settings managed from app UI.");
@@ -423,6 +424,19 @@ public static class MonitoringEndpoints
             })
             .WithName("SetAutoTradeEnabled")
             .WithDescription("Toggles Auto Trade mode. When disabled (default), all ARMED trades go to approval queue. When enabled, ARMED trades are routed directly to MT5.");
+
+        monitoring.MapPut(
+            "/runtime-settings/micro-rotation",
+            IResult (MicroRotationToggleRequest request, ITradingRuntimeSettingsStore runtimeSettings) =>
+            {
+                runtimeSettings.SetMicroRotationEnabled(request.Enabled);
+                return TypedResults.Ok(new
+                {
+                    microRotationEnabled = runtimeSettings.GetMicroRotationEnabled(),
+                });
+            })
+            .WithName("SetMicroRotationEnabled")
+            .WithDescription("Toggles Micro Rotation Mode (refinement spec §D). When enabled: single pending trade at a time, no staggered ladder, BUY_LIMIT/BUY_STOP only with mandatory TP and expiry. Designed for safe live-experience testing with small free balance.");
 
         monitoring.MapPost(
             "/panic-interrupt",
@@ -915,4 +929,6 @@ public sealed record UpdateRuntimeSettingsRequest(string? Symbol, bool? AutoTrad
 public sealed record AutoTradeToggleRequest(bool Enabled);
 
 public sealed record MinTradeGramsRequest(decimal MinTradeGrams);
+
+public sealed record MicroRotationToggleRequest(bool Enabled);
 

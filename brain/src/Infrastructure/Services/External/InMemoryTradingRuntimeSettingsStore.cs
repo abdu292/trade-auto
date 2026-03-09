@@ -5,18 +5,22 @@ namespace Brain.Infrastructure.Services.External;
 public sealed class InMemoryTradingRuntimeSettingsStore : ITradingRuntimeSettingsStore
 {
     private const string DefaultSymbol = "XAUUSD.gram";
-    private const decimal DefaultMinTradeGrams = 100m;
+    // §C (refinement spec): Remove 100g minimum — default is now 0.1g so that
+    // MICRO_ROTATION_MODE and small live-experience trades are not artificially floored.
+    private const decimal DefaultMinTradeGrams = 0.1m;
 
     private readonly Lock _gate = new();
     private string _symbol;
     private bool _autoTradeEnabled;
     private decimal _minTradeGrams;
+    private bool _microRotationEnabled;
 
     public InMemoryTradingRuntimeSettingsStore(string initialSymbol, bool initialAutoTradeEnabled = false, decimal initialMinTradeGrams = DefaultMinTradeGrams)
     {
         _symbol = Normalize(initialSymbol);
         _autoTradeEnabled = initialAutoTradeEnabled;
         _minTradeGrams = initialMinTradeGrams > 0m ? initialMinTradeGrams : DefaultMinTradeGrams;
+        _microRotationEnabled = false;
     }
 
     public string GetSymbol()
@@ -68,6 +72,24 @@ public sealed class InMemoryTradingRuntimeSettingsStore : ITradingRuntimeSetting
         lock (_gate)
         {
             _minTradeGrams = grams > 0m ? grams : DefaultMinTradeGrams;
+        }
+    }
+
+    /// <inheritdoc />
+    public bool GetMicroRotationEnabled()
+    {
+        lock (_gate)
+        {
+            return _microRotationEnabled;
+        }
+    }
+
+    /// <inheritdoc />
+    public void SetMicroRotationEnabled(bool enabled)
+    {
+        lock (_gate)
+        {
+            _microRotationEnabled = enabled;
         }
     }
 

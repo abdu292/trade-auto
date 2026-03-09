@@ -17,6 +17,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isTogglingAutoTrade = false;
   bool _isUpdatingMinGrams = false;
+  bool _isTogglingMicroRotation = false;
   late final Future<PackageInfo> _packageInfoFuture;
 
   @override
@@ -167,7 +168,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Set the minimum trade size in grams. Orders below this threshold are rejected by the decision engine.\n\nDefault: 100 g.',
+              'Set the minimum trade size in grams. Orders below this threshold are rejected by the decision engine.\n\nDefault: 0.1 g.',
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -269,6 +270,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 12),
         // Min grams card
         _buildMinGramsCard(runtimeSettings),
+        const SizedBox(height: 12),
+        // Micro Rotation Mode card
+        _buildMicroRotationCard(runtimeSettings),
         const SizedBox(height: 12),
         _buildVersionTile(),
         const SizedBox(height: 12),
@@ -396,6 +400,124 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         onPressed: () => _updateMinTradeGrams(grams),
                         icon: const Icon(Icons.edit, size: 16),
                         label: const Text('Change'),
+                      ),
+                  ],
+                ),
+              ],
+            );
+          },
+          loading: () => const LinearProgressIndicator(),
+          error: (e, _) => Text('Error loading settings: $e',
+              style: TextStyle(color: cs.error)),
+        ),
+      ),
+    );
+  }
+  Future<void> _toggleMicroRotation(bool currentValue) async {
+    if (_isTogglingMicroRotation) return;
+    final newValue = !currentValue;
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (newValue) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Enable Micro Rotation Mode?'),
+          content: const Text(
+            'Micro Rotation Mode (§D) limits the engine to:\n\n'
+            '• One active pending trade at a time\n'
+            '• No staggered ladder\n'
+            '• BUY_LIMIT / BUY_STOP only\n'
+            '• Mandatory TP and expiry on every order\n\n'
+            'Designed for safe live testing with a small free balance. All safety rules still apply.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Enable Micro Rotation'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    setState(() => _isTogglingMicroRotation = true);
+    try {
+      await ref.read(brainApiProvider).setMicroRotationEnabled(newValue);
+      ref.invalidate(runtimeSettingsProvider);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(newValue
+              ? '🔬 Micro Rotation Mode ENABLED — single trade, no ladder.'
+              : '📊 Micro Rotation Mode DISABLED — full rotation restored.'),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to toggle Micro Rotation: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isTogglingMicroRotation = false);
+    }
+  }
+
+  Widget _buildMicroRotationCard(AsyncValue<RuntimeSettings> runtimeSettings) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: runtimeSettings.when(
+          data: (settings) {
+            final enabled = settings.microRotationEnabled;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Micro Rotation Mode (§D): limits the engine to one active pending trade at a time with no ladder. '
+                  'Designed for safe live testing with a small free balance (e.g. 2,237 AED) while keeping existing gold inventory separate.\n\n'
+                  'All safety rules, PRETABLE gates, and Pending-Before-Level Law still apply.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Micro Rotation Mode',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          Text(
+                            enabled
+                                ? '🔬 ON — single trade, no ladder'
+                                : '📊 OFF — full rotation active',
+                            style: TextStyle(
+                                color: enabled ? Colors.teal.shade700 : null),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_isTogglingMicroRotation)
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Switch(
+                        value: enabled,
+                        onChanged: (_) => _toggleMicroRotation(enabled),
+                        activeThumbColor: Colors.teal.shade600,
                       ),
                   ],
                 ),

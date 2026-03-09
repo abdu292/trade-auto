@@ -255,6 +255,35 @@ public static class DecisionEngine
             entry = primaryClose - entryOffset;
         }
 
+        // §G Pending-Before-Level Law (refinement spec §G):
+        // BUY_STOP: entry must be strictly above current Ask (pending order above market).
+        // BUY_LIMIT: entry must be strictly below current Bid (pending order below market).
+        // Market buys are absolutely forbidden (refinement spec §B). If the computed entry
+        // violates these rules → NO_TRADE rather than converting to a market order.
+        if (rail == "BUY_STOP" && snapshot.Ask > 0m && entry <= snapshot.Ask)
+        {
+            return NoTrade(
+                "violates_pending_before_level_law: BUY_STOP entry not above current Ask.",
+                score,
+                snapshot,
+                cause: "PENDING_BEFORE_LEVEL_LAW",
+                waterfallRisk: waterfallRisk,
+                railPermissionA: railPermissionA,
+                railPermissionB: railPermissionB);
+        }
+
+        if (rail == "BUY_LIMIT" && snapshot.Bid > 0m && entry >= snapshot.Bid)
+        {
+            return NoTrade(
+                "violates_pending_before_level_law: BUY_LIMIT entry not below current Bid.",
+                score,
+                snapshot,
+                cause: "PENDING_BEFORE_LEVEL_LAW",
+                waterfallRisk: waterfallRisk,
+                railPermissionA: railPermissionA,
+                railPermissionB: railPermissionB);
+        }
+
         // Section 11.1/11.2: TP caps per session (spec_v6 §3)
         var sessionTpCap = GetSessionTpCap(session, snapshot.IsFriday);
         decimal tpDistance;

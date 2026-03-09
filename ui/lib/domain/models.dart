@@ -461,18 +461,20 @@ class RuntimeStatus {
 }
 
 class RuntimeSettings {
-  const RuntimeSettings({required this.symbol, this.autoTradeEnabled = false, this.minTradeGrams = 100.0});
+  const RuntimeSettings({required this.symbol, this.autoTradeEnabled = false, this.minTradeGrams = 0.1, this.microRotationEnabled = false});
 
   final String symbol;
   final bool autoTradeEnabled;
   final double minTradeGrams;
+  final bool microRotationEnabled;
 
   factory RuntimeSettings.fromJson(Map<String, dynamic> json) {
     final minGrams = _readDouble(json, 'minTradeGrams');
     return RuntimeSettings(
       symbol: _readString(json, 'symbol'),
       autoTradeEnabled: _readBool(json, 'autoTradeEnabled'),
-      minTradeGrams: minGrams > 0 ? minGrams : 100.0,
+      minTradeGrams: minGrams > 0 ? minGrams : 0.1,
+      microRotationEnabled: _readBool(json, 'microRotationEnabled'),
     );
   }
 }

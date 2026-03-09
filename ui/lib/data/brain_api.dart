@@ -83,6 +83,12 @@ class BrainApi {
     });
   }
 
+  Future<void> setMicroRotationEnabled(bool enabled) async {
+    await _dio.put('/api/monitoring/runtime-settings/micro-rotation', data: {
+      'enabled': enabled,
+    });
+  }
+
   Future<Map<String, dynamic>> triggerPanicInterrupt() async {
     final response = await _dio.post('/api/monitoring/panic-interrupt');
     return _asMap(response.data);
