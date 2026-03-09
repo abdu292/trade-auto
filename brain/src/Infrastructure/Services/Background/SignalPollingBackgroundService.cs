@@ -27,12 +27,6 @@ public sealed class SignalPollingBackgroundService(
     private const decimal UsdToAed = 3.674m;
     private const decimal ShopSpreadUsdPerOz = 0.80m;
 
-    /// <summary>
-    /// Fallback maximum total open position grams used when account equity or price data is unavailable.
-    /// The live gate uses a dynamic limit of 25% of account equity expressed in gold grams.
-    /// </summary>
-    private const decimal FallbackMaxSymbolExposureGrams = 500m;
-
     // Waterfall failure tracking: after 2 consecutive failures the system enters study lock
     // (PRD point 4: "if two orders fail to either trigger or gets caught in the waterfall then
     //  the system should do study & self_cross check and hard lock only refinements")
@@ -1075,20 +1069,69 @@ public sealed class SignalPollingBackgroundService(
                 //
                 // maxSymbolExposureGrams = (accountEquityUsd * 0.25) / goldPricePerGram
                 // where goldPricePerGram = authoritativeRate / 31.1035
-                var goldPricePerGram = mt5BuyPrice / OunceToGram;
-                var maxSymbolExposureGrams = snapshot.Equity > 0m && goldPricePerGram > 0m
-                    ? (snapshot.Equity * 0.25m) / goldPricePerGram
-                    : FallbackMaxSymbolExposureGrams;
+                var accountEquityUsd = snapshot.Equity;
+                var authoritativeRate = snapshot.AuthoritativeRate;
+                if (accountEquityUsd <= 0m || authoritativeRate <= 0m)
+                {
+                    var rejectionReason =
+                        $"EXPOSURE_GATE_DATA_INVALID accountEquityUsd={accountEquityUsd:0.00} authoritativeRate={authoritativeRate:0.0000}";
+
+                    logger.LogWarning(
+                        "EXPOSURE_GATE_DATA_INVALID — rejecting trade because required exposure inputs are invalid. AccountEquityUsd={EquityUsd} AuthoritativeRate={AuthoritativeRate}",
+                        accountEquityUsd,
+                        authoritativeRate);
+
+                    await timeline.WriteAsync(
+                        eventType: "SYMBOL_EXPOSURE_REJECTED",
+                        stage: "exposure_gate",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            orderStatus = "REJECTED",
+                            code = "EXPOSURE_GATE_DATA_INVALID",
+                            accountEquityUsd,
+                            authoritativeRate,
+                            rejectionReason,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    db.DecisionLogs.Add(DecisionLog.Create(
+                        symbol: snapshot.Symbol,
+                        status: "NO_TRADE",
+                        engineState: "EXPOSURE_PROTECTED",
+                        mode: decision.Mode,
+                        cause: "SYMBOL_EXPOSURE_GATE_DATA_INVALID",
+                        waterfallRisk: decision.WaterfallRisk,
+                        telegramState: decision.TelegramState,
+                        railPermissionA: decision.RailPermissionA,
+                        railPermissionB: decision.RailPermissionB,
+                        reason: rejectionReason,
+                        entry: 0m,
+                        tp: 0m,
+                        grams: 0m,
+                        rotationCapThisSession: 0,
+                        forceWhereToTrade: forceWhereToTrade,
+                        snapshotHash: snapshotHash));
+                    await db.SaveChangesAsync(stoppingToken);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
+                var goldPricePerGram = authoritativeRate / OunceToGram;
+                var maxSymbolExposureGrams = (accountEquityUsd * 0.25m) / goldPricePerGram;
 
                 var openPositionGrams = snapshot.OpenPositions?.Sum(p => p.VolumeGramsEquivalent) ?? 0m;
                 var totalProjectedExposure = openPositionGrams + approvedGrams;
                 if (totalProjectedExposure > maxSymbolExposureGrams)
                 {
-                    var rejectionReason = $"Exposure gate rejected order. OpenPositionGrams={openPositionGrams:0.00}g + ApprovedGrams={approvedGrams:0.00}g = {totalProjectedExposure:0.00}g exceeds MaxSymbolExposureGrams={maxSymbolExposureGrams:0.00}g (25% of equity {snapshot.Equity:0.00} USD at {goldPricePerGram:0.0000} USD/g)";
+                    var rejectionReason = $"Exposure gate rejected order. OpenPositionGrams={openPositionGrams:0.00}g + ApprovedGrams={approvedGrams:0.00}g = {totalProjectedExposure:0.00}g exceeds MaxSymbolExposureGrams={maxSymbolExposureGrams:0.00}g (25% of equity {accountEquityUsd:0.00} USD at {goldPricePerGram:0.0000} USD/g)";
 
                     logger.LogWarning(
                         "EXPOSURE_GATE REJECTED — total projected exposure {Total}g exceeds max {Max}g. Open={Open}g Proposed={Proposed}g AccountEquityUsd={EquityUsd} GoldPricePerGram={GoldPrice}",
-                        totalProjectedExposure, maxSymbolExposureGrams, openPositionGrams, approvedGrams, snapshot.Equity, goldPricePerGram);
+                        totalProjectedExposure, maxSymbolExposureGrams, openPositionGrams, approvedGrams, accountEquityUsd, goldPricePerGram);
 
                     await timeline.WriteAsync(
                         eventType: "SYMBOL_EXPOSURE_REJECTED",
