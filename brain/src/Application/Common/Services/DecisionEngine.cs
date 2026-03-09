@@ -7,7 +7,6 @@ public static class DecisionEngine
     private const decimal OunceToGram = 31.1035m;
     private const decimal UsdToAed = 3.674m;
     private const decimal ShopSpreadUsdPerOz = 0.80m;
-    private const decimal MinTradeGrams = 100m;
     private const decimal SafetyBufferGrams = 10m;
 
     private static readonly Lock WarModeGate = new();
@@ -33,7 +32,8 @@ public static class DecisionEngine
         RegimeClassificationContract regime,
         TradeSignalContract aiSignal,
         LedgerStateContract ledgerState,
-        string? strategyProfileName = null)
+        string? strategyProfileName = null,
+        decimal minTradeGrams = 100m)
     {
         if (!IsSupportedGoldSymbol(snapshot.Symbol))
         {
@@ -87,8 +87,8 @@ public static class DecisionEngine
         var riskState = ResolveRiskState(aiSignal, regime);
         return regimeTag switch
         {
-            "WAR_PREMIUM" or "DEESCALATION_RISK" => EvaluateWarPremium(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState),
-            _ => EvaluateStandard(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState),
+            "WAR_PREMIUM" or "DEESCALATION_RISK" => EvaluateWarPremium(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState, minTradeGrams),
+            _ => EvaluateStandard(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState, minTradeGrams),
         };
     }
 
@@ -98,7 +98,8 @@ public static class DecisionEngine
         TradeSignalContract aiSignal,
         LedgerStateContract ledgerState,
         string regimeTag,
-        string riskState)
+        string riskState,
+        decimal minTradeGrams)
     {
         var session = NormalizeSession(snapshot.Session);
         var waterfallRisk = ResolveWaterfallRiskStandard(snapshot, regime, aiSignal);
@@ -285,9 +286,9 @@ public static class DecisionEngine
         var gramsFromSizeClass = ToMaxAffordableGrams(bucketCash * sizePct, entry);
         var grams = Math.Floor(Math.Min(maxGrams, gramsFromSizeClass));
 
-        if (grams < MinTradeGrams)
+        if (grams < minTradeGrams)
         {
-            return NoTrade("Capacity below 100g minimum after spread/buffer.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
+            return NoTrade($"Capacity below {minTradeGrams:0}g minimum after spread/buffer.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
         }
 
         // Section 12.1: Session expiry caps — Japan/India: 30m, London: 25m, NY: 20m, Friday: 15m
@@ -345,7 +346,8 @@ public static class DecisionEngine
         TradeSignalContract aiSignal,
         LedgerStateContract ledgerState,
         string regimeTag,
-        string riskState)
+        string riskState,
+        decimal minTradeGrams)
     {
         var session = NormalizeSession(snapshot.Session);
         var now = DateTimeOffset.UtcNow;
@@ -400,10 +402,10 @@ public static class DecisionEngine
             ?? snapshot.TimeframeData.First().Close;
 
         var gmax = Math.Floor(ToMaxAffordableGrams(ledgerState.DeployableCashAed, primaryClose) - SafetyBufferGrams);
-        if (gmax < MinTradeGrams)
+        if (gmax < minTradeGrams)
         {
             return NoTrade(
-                "WarPremium capacity below 100g after spread/buffer.",
+                $"WarPremium capacity below {minTradeGrams:0}g after spread/buffer.",
                 aiSignal.AlignmentScore,
                 snapshot,
                 cause: "CAPACITY",
@@ -459,10 +461,10 @@ public static class DecisionEngine
             }
 
             var stageGrams = Math.Floor(gmax * stageFractions[stage]);
-            if (stageGrams < MinTradeGrams)
+            if (stageGrams < minTradeGrams)
             {
                 return NoTrade(
-                    "Stage grams below 100g minimum.",
+                    $"Stage grams below {minTradeGrams:0}g minimum.",
                     aiSignal.AlignmentScore,
                     snapshot,
                     cause: "STAGE_CAPACITY",
@@ -524,10 +526,10 @@ public static class DecisionEngine
 
         var reloadFraction = mode == "UNKNOWN" ? 0.20m : 0.35m;
         var reloadGrams = Math.Floor(gmax * reloadFraction);
-        if (reloadGrams < MinTradeGrams)
+        if (reloadGrams < minTradeGrams)
         {
             return NoTrade(
-                "Reload grams below 100g minimum.",
+                $"Reload grams below {minTradeGrams:0}g minimum.",
                 aiSignal.AlignmentScore,
                 snapshot,
                 cause: "RELOAD_CAPACITY",

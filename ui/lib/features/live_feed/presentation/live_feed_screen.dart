@@ -1,28 +1,33 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models.dart';
 import '../../../presentation/app_providers.dart';
 
-// ─── Filter categories ────────────────────────────────────────────────────────
-enum _FeedFilter {
-  all,
-  tradeSignals,
-  noTrade,
-  market,
-  ai,
-}
+// ─── Date-range filter ────────────────────────────────────────────────────────
+enum _FeedFilter { today, lastWeek }
 
 extension _FeedFilterLabel on _FeedFilter {
-  String get label => switch (this) {
-        _FeedFilter.all => 'All',
-        _FeedFilter.tradeSignals => 'Trades',
-        _FeedFilter.noTrade => 'No-Trade',
-        _FeedFilter.market => 'Market',
-        _FeedFilter.ai => 'AI',
-      };
+  String label(DateTime nowUtc) {
+    final ksaNow = nowUtc.add(const Duration(hours: 3));
+    switch (this) {
+      case _FeedFilter.today:
+        final m = ksaNow.month.toString().padLeft(2, '0');
+        final d = ksaNow.day.toString().padLeft(2, '0');
+        return 'Today (${ksaNow.year}-$m-$d)';
+      case _FeedFilter.lastWeek:
+        final weekEnd = ksaNow.subtract(const Duration(days: 1));
+        final weekStart = ksaNow.subtract(const Duration(days: 7));
+        final sm = weekStart.month.toString().padLeft(2, '0');
+        final sd = weekStart.day.toString().padLeft(2, '0');
+        final em = weekEnd.month.toString().padLeft(2, '0');
+        final ed = weekEnd.day.toString().padLeft(2, '0');
+        return 'Last Week ($sm-$sd – $em-$ed)';
+    }
+  }
 }
 
 // ─── Event classifier ─────────────────────────────────────────────────────────
@@ -49,7 +54,8 @@ _EventCategory _classifyEvent(RuntimeTimelineItem item) {
       t == 'MARKET_REGIME_DETECTED' ||
       t == 'PATTERN_DETECTOR_RESULTS' ||
       t == 'MT5_PENDING_TRADE_DEQUEUED' ||
-      t == 'MT5_TRADE_STATUS_RECEIVED') {
+      t == 'MT5_TRADE_STATUS_RECEIVED' ||
+      t == 'CAPITAL_UTILIZATION_CHECK') {
     return _EventCategory.market;
   }
   if (t.startsWith('AI_') ||
@@ -66,16 +72,20 @@ _EventCategory _classifyEvent(RuntimeTimelineItem item) {
 }
 
 bool _matchesFilter(RuntimeTimelineItem item, _FeedFilter filter) {
-  if (filter == _FeedFilter.all) return true;
-  final cat = _classifyEvent(item);
-  return switch (filter) {
-    _FeedFilter.tradeSignals =>
-      cat == _EventCategory.trade || cat == _EventCategory.cycle,
-    _FeedFilter.noTrade => cat == _EventCategory.noTrade,
-    _FeedFilter.market => cat == _EventCategory.market,
-    _FeedFilter.ai => cat == _EventCategory.ai,
-    _FeedFilter.all => true,
-  };
+  final ksaItemTime = item.createdAtUtc.add(const Duration(hours: 3));
+  final ksaNow = DateTime.now().toUtc().add(const Duration(hours: 3));
+  switch (filter) {
+    case _FeedFilter.today:
+      return ksaItemTime.year == ksaNow.year &&
+          ksaItemTime.month == ksaNow.month &&
+          ksaItemTime.day == ksaNow.day;
+    case _FeedFilter.lastWeek:
+      final ksaYesterday = ksaNow.subtract(const Duration(days: 1));
+      final ksaWeekAgo = ksaNow.subtract(const Duration(days: 7));
+      // Last week = yesterday back to 7 days ago (excludes today)
+      return ksaItemTime.isBefore(DateTime(ksaYesterday.year, ksaYesterday.month, ksaYesterday.day, 23, 59, 59)) &&
+          ksaItemTime.isAfter(DateTime(ksaWeekAgo.year, ksaWeekAgo.month, ksaWeekAgo.day));
+  }
 }
 
 // ─── Human-readable descriptions ─────────────────────────────────────────────
@@ -299,6 +309,19 @@ String _describeEvent(RuntimeTimelineItem item) {
           ? 'MT5 execution status received: $status'
           : 'MT5 execution status received';
 
+    case 'CAPITAL_UTILIZATION_CHECK':
+      final status = s('orderStatus');
+      final attempted = n('attemptedGrams');
+      final approved = n('approvedGrams');
+      final maxLegal = n('maxLegalGrams');
+      if (status == 'REJECTED') {
+        return '🚫 Capital gate REJECTED — insufficient cash (max ${maxLegal}g allowed)';
+      }
+      if (status == 'RESIZE_REQUIRED') {
+        return '⚠️ Capital gate RESIZE — ${attempted}g → ${approved}g (max legal: ${maxLegal}g)';
+      }
+      return '✅ Capital gate APPROVED — ${approved}g within allowed capital';
+
     case 'REPLAY_TRADE_ARMED':
       return 'Replay: Trade armed for this cycle';
 
@@ -416,16 +439,21 @@ class LiveFeedScreen extends ConsumerStatefulWidget {
 }
 
 class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
-  _FeedFilter _filter = _FeedFilter.all;
+  _FeedFilter _filter = _FeedFilter.today;  // Default to Today
   Timer? _autoRefreshTimer;
+  DateTime? _lastRefreshedAt;
 
   @override
   void initState() {
     super.initState();
+    _lastRefreshedAt = DateTime.now().toUtc();
     // Auto-refresh every 15 seconds so new events appear without scrolling
     _autoRefreshTimer =
         Timer.periodic(const Duration(seconds: 15), (_) {
-      if (mounted) ref.invalidate(timelineProvider);
+      if (mounted) {
+        setState(() => _lastRefreshedAt = DateTime.now().toUtc());
+        ref.invalidate(timelineProvider);
+      }
     });
   }
 
@@ -436,78 +464,147 @@ class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
   }
 
   Future<void> _refresh() async {
+    setState(() => _lastRefreshedAt = DateTime.now().toUtc());
     ref.invalidate(timelineProvider);
+  }
+
+  /// Exports the full log text for a single event (for AI/support analysis).
+  String _exportEventLog(RuntimeTimelineItem item) {
+    final buf = StringBuffer();
+    buf.writeln('--- Event ---');
+    buf.writeln('Type: ${item.eventType}');
+    buf.writeln('Time (UTC): ${item.createdAtUtc.toIso8601String()}');
+    buf.writeln('Time (KSA): ${_ksaTime(item.createdAtUtc)}');
+    buf.writeln('Stage: ${item.stage}');
+    buf.writeln('Source: ${item.source}');
+    if (item.symbol.isNotEmpty) buf.writeln('Symbol: ${item.symbol}');
+    if (item.cycleId != null) buf.writeln('Cycle ID: ${item.cycleId}');
+    if (item.tradeId != null) buf.writeln('Trade ID: ${item.tradeId}');
+    buf.writeln('Payload:');
+    for (final entry in item.payload.entries) {
+      buf.writeln('  ${entry.key}: ${entry.value}');
+    }
+    buf.writeln('Summary: ${_describeEvent(item)}');
+    return buf.toString();
+  }
+
+  /// Exports all currently filtered events as a bulk log text.
+  String _exportBulkLog(List<RuntimeTimelineItem> events) {
+    final buf = StringBuffer();
+    buf.writeln('=== Live Feed Export ===');
+    buf.writeln('Filter: ${_filter.label(DateTime.now().toUtc())}');
+    buf.writeln('Exported at: ${DateTime.now().toUtc().toIso8601String()}');
+    buf.writeln('Event count: ${events.length}');
+    buf.writeln();
+    for (final event in events) {
+      buf.writeln(_exportEventLog(event));
+    }
+    return buf.toString();
+  }
+
+  Future<void> _copyEventToClipboard(RuntimeTimelineItem item) async {
+    final text = _exportEventLog(item);
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Event log copied to clipboard'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _copyBulkLog(List<RuntimeTimelineItem> events) async {
+    final text = _exportBulkLog(events);
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${events.length} events copied to clipboard'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final timelineAsync = ref.watch(timelineProvider);
+    final nowUtc = DateTime.now().toUtc();
+    final cs = Theme.of(context).colorScheme;
+
+    // Refreshed-at display time in KSA
+    final refreshedKsa = _lastRefreshedAt != null
+        ? _lastRefreshedAt!.add(const Duration(hours: 3))
+        : null;
+    final refreshedLabel = refreshedKsa != null
+        ? '${refreshedKsa.hour.toString().padLeft(2, '0')}:${refreshedKsa.minute.toString().padLeft(2, '0')}:${refreshedKsa.second.toString().padLeft(2, '0')} KSA'
+        : '';
 
     return RefreshIndicator(
       onRefresh: _refresh,
       child: CustomScrollView(
         slivers: [
-          // Filter chips
+          // Filter chips + bulk export row
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final filter in _FeedFilter.values)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: FilterChip(
-                          label: Text(filter.label),
-                          selected: _filter == filter,
-                          onSelected: (_) =>
-                              setState(() => _filter = filter),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Legend
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 4,
+              child: Row(
                 children: [
-                  _LegendChip(
-                    color: Colors.green.shade700,
-                    icon: Icons.trending_up,
-                    label: 'Trade',
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final filter in _FeedFilter.values)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: FilterChip(
+                                label: Text(filter.label(nowUtc)),
+                                selected: _filter == filter,
+                                onSelected: (_) =>
+                                    setState(() => _filter = filter),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-                  _LegendChip(
-                    color: Theme.of(context).colorScheme.error,
-                    icon: Icons.block,
-                    label: 'No-Trade',
-                  ),
-                  _LegendChip(
-                    color: Theme.of(context).colorScheme.primary,
-                    icon: Icons.show_chart,
-                    label: 'Market',
-                  ),
-                  _LegendChip(
-                    color: Colors.purple.shade600,
-                    icon: Icons.psychology,
-                    label: 'AI',
-                  ),
-                  _LegendChip(
-                    color: Theme.of(context).colorScheme.secondary,
-                    icon: Icons.refresh,
-                    label: 'Cycle',
-                  ),
+                  // Bulk export button (copies all filtered events)
+                  timelineAsync.whenOrNull(
+                    data: (events) {
+                      final filtered = events
+                          .where((e) => _matchesFilter(e, _filter))
+                          .toList();
+                      if (filtered.isEmpty) return null;
+                      return IconButton(
+                        onPressed: () => _copyBulkLog(filtered),
+                        icon: const Icon(Icons.copy_all),
+                        tooltip: 'Copy all ${filtered.length} events to clipboard',
+                        visualDensity: VisualDensity.compact,
+                      );
+                    },
+                  ) ?? const SizedBox.shrink(),
                 ],
               ),
             ),
           ),
+
+          // Refreshed-at timestamp
+          if (refreshedLabel.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 12, 2),
+                child: Text(
+                  'Refreshed at $refreshedLabel · auto-refreshes every 15s',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontSize: 10,
+                      ),
+                ),
+              ),
+            ),
 
           // Event list
           timelineAsync.when(
@@ -590,7 +687,11 @@ class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
                   itemCount: filtered.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 6),
                   itemBuilder: (context, index) {
-                    return _EventCard(item: filtered[index]);
+                    final eventItem = filtered[index];
+                    return _EventCard(
+                      item: eventItem,
+                      onCopy: () => _copyEventToClipboard(eventItem),
+                    );
                   },
                 ),
               );
@@ -604,9 +705,10 @@ class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
 
 // ─── Event card ───────────────────────────────────────────────────────────────
 class _EventCard extends StatelessWidget {
-  const _EventCard({required this.item});
+  const _EventCard({required this.item, required this.onCopy});
 
   final RuntimeTimelineItem item;
+  final VoidCallback onCopy;
 
   @override
   Widget build(BuildContext context) {
@@ -629,11 +731,11 @@ class _EventCard extends StatelessWidget {
             // Content
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header row: icon + description + time
+                    // Header row: icon + description + time + copy button
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -648,28 +750,51 @@ class _EventCard extends StatelessWidget {
                                 ?.copyWith(fontWeight: FontWeight.w500),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 4),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text(
-                              _ksaTime(item.createdAtUtc),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelSmall
-                                  ?.copyWith(
-                                    color: cs.onSurfaceVariant,
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      _ksaTime(item.createdAtUtc),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: cs.onSurfaceVariant,
+                                          ),
+                                    ),
+                                    Text(
+                                      _relativeTime(item.createdAtUtc),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelSmall
+                                          ?.copyWith(
+                                            color: cs.onSurfaceVariant,
+                                            fontSize: 10,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                                // Per-item copy button
+                                IconButton(
+                                  onPressed: onCopy,
+                                  icon: Icon(Icons.copy_outlined,
+                                      size: 14, color: cs.onSurfaceVariant),
+                                  tooltip: 'Copy event log',
+                                  padding: const EdgeInsets.all(4),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 28,
+                                    minHeight: 28,
                                   ),
-                            ),
-                            Text(
-                              _relativeTime(item.createdAtUtc),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelSmall
-                                  ?.copyWith(
-                                    color: cs.onSurfaceVariant,
-                                    fontSize: 10,
-                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -777,37 +902,6 @@ class _DetailBadge extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
       ),
-    );
-  }
-}
-
-// ─── Legend chip ─────────────────────────────────────────────────────────────
-class _LegendChip extends StatelessWidget {
-  const _LegendChip({
-    required this.color,
-    required this.icon,
-    required this.label,
-  });
-
-  final Color color;
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 12, color: color),
-        const SizedBox(width: 3),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w500,
-              ),
-        ),
-      ],
     );
   }
 }

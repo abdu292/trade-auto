@@ -20,6 +20,7 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
   bool _isCreatingHazard = false;
   bool _isTogglingAutoTrade = false;
   bool _isTriggeringPanic = false;
+  bool _isUpdatingMinGrams = false;
   final Set<String> _disablingHazardIds = <String>{};
 
   static const List<String> _categories = <String>[
@@ -164,6 +165,78 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
     }
   }
 
+  Future<void> _updateMinTradeGrams(double currentValue) async {
+    if (_isUpdatingMinGrams) return;
+
+    final controller = TextEditingController(
+      text: currentValue.toStringAsFixed(0),
+    );
+    final messenger = ScaffoldMessenger.of(context);
+
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Set Min Trade Grams'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Set the minimum trade size in grams. Orders below this threshold '
+              'are rejected by the decision engine.\n\nDefault: 100 g.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: const TextInputType.numberWithOptions(decimal: false),
+              decoration: const InputDecoration(
+                labelText: 'Min Grams',
+                hintText: 'e.g. 100',
+                border: OutlineInputBorder(),
+                suffixText: 'g',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final v = double.tryParse(controller.text.trim());
+              if (v != null && v > 0) {
+                Navigator.pop(ctx, v);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    controller.dispose();
+
+    if (result == null || !mounted) return;
+
+    setState(() => _isUpdatingMinGrams = true);
+    try {
+      await ref.read(brainApiProvider).setMinTradeGrams(result);
+      ref.invalidate(runtimeSettingsProvider);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Min trade grams updated to ${result.toStringAsFixed(0)} g.')),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to update min trade grams: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isUpdatingMinGrams = false);
+    }
+  }
+
   Future<void> _triggerPanicInterrupt() async {
     if (_isTriggeringPanic) return;
 
@@ -264,6 +337,14 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
             runtimeSettings: runtimeSettings,
             isToggling: _isTogglingAutoTrade,
             onToggle: _toggleAutoTrade,
+          ),
+          const SizedBox(height: 12),
+
+          // ── Min Trade Grams Configuration ────────────────────────────────────
+          _MinTradeGramsCard(
+            runtimeSettings: runtimeSettings,
+            isUpdating: _isUpdatingMinGrams,
+            onEdit: _updateMinTradeGrams,
           ),
           const SizedBox(height: 12),
 
@@ -578,6 +659,91 @@ class _AutoTradeToggleCard extends StatelessWidget {
               loading: () => const LinearProgressIndicator(),
               error: (error, _) => Text(
                 'Could not load Auto Trade status: $error',
+                style: TextStyle(color: cs.error),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Min Trade Grams Card ───────────────────────────────────────────────────────
+
+class _MinTradeGramsCard extends StatelessWidget {
+  const _MinTradeGramsCard({
+    required this.runtimeSettings,
+    required this.isUpdating,
+    required this.onEdit,
+  });
+
+  final AsyncValue<RuntimeSettings> runtimeSettings;
+  final bool isUpdating;
+  final void Function(double currentValue) onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.scale, color: cs.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Min Trade Grams',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Minimum gram quantity for any trade. Orders calculated below this threshold '
+              'are rejected automatically.\n\nDefault: 100 g. Lower to test small trades.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            runtimeSettings.when(
+              data: (settings) {
+                final grams = settings.minTradeGrams;
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${grams.toStringAsFixed(0)} g',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: cs.primary,
+                            ),
+                      ),
+                    ),
+                    if (isUpdating)
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      OutlinedButton.icon(
+                        onPressed: () => onEdit(grams),
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: const Text('Change'),
+                      ),
+                  ],
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (error, _) => Text(
+                'Could not load min trade grams: $error',
                 style: TextStyle(color: cs.error),
               ),
             ),

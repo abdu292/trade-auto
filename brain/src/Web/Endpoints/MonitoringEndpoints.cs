@@ -355,7 +355,8 @@ public static class MonitoringEndpoints
             {
                 var symbol = runtimeSettings.GetSymbol();
                 var autoTradeEnabled = runtimeSettings.GetAutoTradeEnabled();
-                return TypedResults.Ok(new { symbol, autoTradeEnabled });
+                var minTradeGrams = runtimeSettings.GetMinTradeGrams();
+                return TypedResults.Ok(new { symbol, autoTradeEnabled, minTradeGrams });
             })
             .WithName("GetRuntimeSettings")
             .WithDescription("Returns mutable runtime trading settings managed from app UI.");
@@ -377,14 +378,37 @@ public static class MonitoringEndpoints
                     runtimeSettings.SetAutoTradeEnabled(request.AutoTradeEnabled.Value);
                 }
 
+                if (request.MinTradeGrams.HasValue && request.MinTradeGrams.Value > 0m)
+                {
+                    runtimeSettings.SetMinTradeGrams(request.MinTradeGrams.Value);
+                }
+
                 return TypedResults.Ok(new
                 {
                     symbol = runtimeSettings.GetSymbol(),
                     autoTradeEnabled = runtimeSettings.GetAutoTradeEnabled(),
+                    minTradeGrams = runtimeSettings.GetMinTradeGrams(),
                 });
             })
             .WithName("UpdateRuntimeSettings")
             .WithDescription("Updates mutable runtime trading settings without server restart.");
+
+        monitoring.MapPut(
+            "/runtime-settings/min-trade-grams",
+            IResult (MinTradeGramsRequest request, ITradingRuntimeSettingsStore runtimeSettings) =>
+            {
+                if (request.MinTradeGrams <= 0m)
+                {
+                    return TypedResults.BadRequest(new { error = "minTradeGrams must be greater than zero." });
+                }
+                runtimeSettings.SetMinTradeGrams(request.MinTradeGrams);
+                return TypedResults.Ok(new
+                {
+                    minTradeGrams = runtimeSettings.GetMinTradeGrams(),
+                });
+            })
+            .WithName("SetMinTradeGrams")
+            .WithDescription("Updates the minimum trade size in grams. Default is 100 g. Lowering this allows smaller test trades.");
 
         monitoring.MapPut(
             "/runtime-settings/auto-trade",
@@ -885,7 +909,9 @@ public sealed record CreateHazardWindowRequest(
 public sealed record LedgerActionRequest(decimal AmountAed, string? Note);
 public sealed record LedgerAdjustmentRequest(decimal AdjustmentAed, string? Note);
 
-public sealed record UpdateRuntimeSettingsRequest(string? Symbol, bool? AutoTradeEnabled = null);
+public sealed record UpdateRuntimeSettingsRequest(string? Symbol, bool? AutoTradeEnabled = null, decimal? MinTradeGrams = null);
 
 public sealed record AutoTradeToggleRequest(bool Enabled);
+
+public sealed record MinTradeGramsRequest(decimal MinTradeGrams);
 

@@ -13,4 +13,13 @@ public interface ITradingRuntimeSettingsStore
     bool GetAutoTradeEnabled();
 
     void SetAutoTradeEnabled(bool enabled);
+
+    /// <summary>
+    /// Returns the minimum trade size in grams. Defaults to 100 g.
+    /// Orders computed below this threshold are rejected by the decision engine.
+    /// Configurable via the UI so different gram weights can be tested during analysis.
+    /// </summary>
+    decimal GetMinTradeGrams();
+
+    void SetMinTradeGrams(decimal grams);
 }
