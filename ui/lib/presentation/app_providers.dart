@@ -68,6 +68,9 @@ final replayStatusProvider = FutureProvider<ReplayStatusResponse>((ref) {
   return ref.watch(brainApiProvider).getReplayStatus();
 });
 
+// UI-only flag for emergency pause.  Not persisted or sent to backend.
+final emergencyPauseProvider = StateProvider<bool>((ref) => false);
+
 final timelineProvider = FutureProvider<List<RuntimeTimelineItem>>((ref) {
   return ref.watch(brainApiProvider).getTimelineEvents(take: 200);
 });

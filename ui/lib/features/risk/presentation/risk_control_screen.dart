@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../domain/models.dart';
 import '../../../presentation/app_providers.dart';
 
 class RiskControlScreen extends ConsumerStatefulWidget {
@@ -18,9 +17,7 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
   String _selectedCategory = 'EVENT';
   int _selectedDurationMinutes = 60;
   bool _isCreatingHazard = false;
-  bool _isTogglingAutoTrade = false;
   bool _isTriggeringPanic = false;
-  bool _isUpdatingMinGrams = false;
   final Set<String> _disablingHazardIds = <String>{};
 
   static const List<String> _categories = <String>[
@@ -68,8 +65,8 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
         ..invalidate(runtimeStatusProvider);
       messenger.showSnackBar(
         SnackBar(
-          content:
-              Text('Hazard block created for $_selectedDurationMinutes minutes.'),
+          content: Text(
+              'Hazard block created for $_selectedDurationMinutes minutes.'),
         ),
       );
     } catch (error) {
@@ -106,134 +103,6 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
       if (mounted) {
         setState(() => _disablingHazardIds.remove(id));
       }
-    }
-  }
-
-  Future<void> _toggleAutoTrade(bool currentValue) async {
-    if (_isTogglingAutoTrade) return;
-
-    final newValue = !currentValue;
-    final messenger = ScaffoldMessenger.of(context);
-
-    // Require confirmation when enabling Auto Trade
-    if (newValue) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Enable Auto Trade?'),
-          content: const Text(
-            'When Auto Trade is ON, the system will automatically route ARMED trades '
-            'directly to MT5 for execution without manual approval — as long as all '
-            'core laws pass.\n\n'
-            'Make sure you are comfortable with the current risk settings before enabling this.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Enable Auto Trade'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-    }
-
-    setState(() => _isTogglingAutoTrade = true);
-    try {
-      await ref.read(brainApiProvider).setAutoTradeEnabled(newValue);
-      ref.invalidate(runtimeSettingsProvider);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(newValue
-              ? '✅ Auto Trade ENABLED — trades will be sent to MT5 automatically.'
-              : '⏸ Auto Trade DISABLED — trades will go to approval queue.'),
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    } catch (error) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed to toggle Auto Trade: $error')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isTogglingAutoTrade = false);
-      }
-    }
-  }
-
-  Future<void> _updateMinTradeGrams(double currentValue) async {
-    if (_isUpdatingMinGrams) return;
-
-    final controller = TextEditingController(
-      text: currentValue % 1 == 0 ? currentValue.toStringAsFixed(0) : currentValue.toStringAsFixed(2),
-    );
-    final messenger = ScaffoldMessenger.of(context);
-
-    final result = await showDialog<double>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Set Min Trade Grams'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Set the minimum trade size in grams. Orders below this threshold '
-              'are rejected by the decision engine.\n\nDefault: 100 g.',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Min Grams',
-                hintText: 'e.g. 50 or 0.5',
-                border: OutlineInputBorder(),
-                suffixText: 'g',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final v = double.tryParse(controller.text.trim());
-              if (v != null && v > 0) {
-                Navigator.pop(ctx, v);
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    controller.dispose();
-
-    if (result == null || !mounted) return;
-
-    setState(() => _isUpdatingMinGrams = true);
-    try {
-      await ref.read(brainApiProvider).setMinTradeGrams(result);
-      ref.invalidate(runtimeSettingsProvider);
-      messenger.showSnackBar(
-        SnackBar(content: Text('Min trade grams updated to ${result % 1 == 0 ? result.toStringAsFixed(0) : result.toStringAsFixed(2)} g.')),
-      );
-    } catch (error) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed to update min trade grams: $error')),
-      );
-    } finally {
-      if (mounted) setState(() => _isUpdatingMinGrams = false);
     }
   }
 
@@ -285,7 +154,8 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
       ref
         ..invalidate(runtimeStatusProvider)
         ..invalidate(activeTradesProvider);
-      final message = result['message']?.toString() ?? 'Panic interrupt executed.';
+      final message =
+          result['message']?.toString() ?? 'Panic interrupt executed.';
       messenger.showSnackBar(
         SnackBar(
           content: Text('🚨 $message'),
@@ -308,7 +178,6 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
   Widget build(BuildContext context) {
     final riskProfiles = ref.watch(riskProfilesProvider);
     final hazardWindows = ref.watch(hazardWindowsProvider);
-    final runtimeSettings = ref.watch(runtimeSettingsProvider);
 
     Future<void> activate(String id) async {
       final messenger = ScaffoldMessenger.of(context);
@@ -332,22 +201,6 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ── Auto Trade Toggle ───────────────────────────────────────────────
-          _AutoTradeToggleCard(
-            runtimeSettings: runtimeSettings,
-            isToggling: _isTogglingAutoTrade,
-            onToggle: _toggleAutoTrade,
-          ),
-          const SizedBox(height: 12),
-
-          // ── Min Trade Grams Configuration ────────────────────────────────────
-          _MinTradeGramsCard(
-            runtimeSettings: runtimeSettings,
-            isUpdating: _isUpdatingMinGrams,
-            onEdit: _updateMinTradeGrams,
-          ),
-          const SizedBox(height: 12),
-
           // ── Global Panic Interrupt ──────────────────────────────────────────
           _PanicInterruptCard(
             isTriggeringPanic: _isTriggeringPanic,
@@ -534,17 +387,19 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
                                       const Chip(label: Text('Active')),
                                       const SizedBox(width: 8),
                                       FilledButton.tonal(
-                                        onPressed:
-                                            _disablingHazardIds.contains(item.id)
-                                                ? null
-                                                : () =>
-                                                    _disableHazardWindow(item.id),
-                                        child: _disablingHazardIds.contains(item.id)
+                                        onPressed: _disablingHazardIds
+                                                .contains(item.id)
+                                            ? null
+                                            : () =>
+                                                _disableHazardWindow(item.id),
+                                        child: _disablingHazardIds
+                                                .contains(item.id)
                                             ? const SizedBox(
                                                 width: 14,
                                                 height: 14,
-                                                child: CircularProgressIndicator(
-                                                    strokeWidth: 2),
+                                                child:
+                                                    CircularProgressIndicator(
+                                                        strokeWidth: 2),
                                               )
                                             : const Text('Remove'),
                                       ),
@@ -570,191 +425,6 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ── Auto Trade Toggle Card ─────────────────────────────────────────────────────
-
-class _AutoTradeToggleCard extends StatelessWidget {
-  const _AutoTradeToggleCard({
-    required this.runtimeSettings,
-    required this.isToggling,
-    required this.onToggle,
-  });
-
-  final AsyncValue<RuntimeSettings> runtimeSettings;
-  final bool isToggling;
-  final void Function(bool currentValue) onToggle;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.smart_toy, color: cs.primary),
-                const SizedBox(width: 8),
-                Text(
-                  'Auto Trade',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'When ON, ARMED trades are routed directly to MT5 for automatic execution '
-              'without manual approval — as long as all core laws pass.\n\n'
-              'Default: OFF. Enable only when you are comfortable with the current settings.',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            runtimeSettings.when(
-              data: (settings) {
-                final enabled = settings.autoTradeEnabled;
-                return Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            enabled ? '✅ Auto Trade is ON' : '⏸ Auto Trade is OFF',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: enabled ? Colors.green.shade700 : cs.onSurfaceVariant,
-                            ),
-                          ),
-                          Text(
-                            enabled
-                                ? 'Trades go directly to MT5 queue'
-                                : 'Trades go to approval queue',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: cs.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (isToggling)
-                      const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      Switch(
-                        value: enabled,
-                        onChanged: (_) => onToggle(enabled),
-                        activeColor: Colors.green.shade600,
-                      ),
-                  ],
-                );
-              },
-              loading: () => const LinearProgressIndicator(),
-              error: (error, _) => Text(
-                'Could not load Auto Trade status: $error',
-                style: TextStyle(color: cs.error),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Min Trade Grams Card ───────────────────────────────────────────────────────
-
-class _MinTradeGramsCard extends StatelessWidget {
-  const _MinTradeGramsCard({
-    required this.runtimeSettings,
-    required this.isUpdating,
-    required this.onEdit,
-  });
-
-  final AsyncValue<RuntimeSettings> runtimeSettings;
-  final bool isUpdating;
-  final void Function(double currentValue) onEdit;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.scale, color: cs.primary),
-                const SizedBox(width: 8),
-                Text(
-                  'Min Trade Grams',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Minimum gram quantity for any trade. Orders calculated below this threshold '
-              'are rejected automatically.\n\nDefault: 100 g. Lower to test small trades.',
-              style: TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            runtimeSettings.when(
-              data: (settings) {
-                final grams = settings.minTradeGrams;
-                return Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${grams % 1 == 0 ? grams.toStringAsFixed(0) : grams.toStringAsFixed(2)} g',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: cs.primary,
-                            ),
-                      ),
-                    ),
-                    if (isUpdating)
-                      const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      OutlinedButton.icon(
-                        onPressed: () => onEdit(grams),
-                        icon: const Icon(Icons.edit, size: 16),
-                        label: const Text('Change'),
-                      ),
-                  ],
-                );
-              },
-              loading: () => const LinearProgressIndicator(),
-              error: (error, _) => Text(
-                'Could not load min trade grams: $error',
-                style: TextStyle(color: cs.error),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -821,8 +491,9 @@ class _PanicInterruptCard extends StatelessWidget {
                         ),
                       )
                     : const Icon(Icons.dangerous),
-                label: Text(
-                    isTriggeringPanic ? 'Triggering...' : 'Trigger Panic Interrupt'),
+                label: Text(isTriggeringPanic
+                    ? 'Triggering...'
+                    : 'Trigger Panic Interrupt'),
               ),
             ),
           ],
@@ -886,8 +557,7 @@ class _AnomalyAlertsCard extends ConsumerWidget {
                 if (rt.macroCacheAgeMinutes > 120) {
                   alerts.add(_Alert(
                     icon: Icons.cloud_off,
-                    label:
-                        'Macro cache stale: ${rt.macroCacheAgeMinutes}m ago',
+                    label: 'Macro cache stale: ${rt.macroCacheAgeMinutes}m ago',
                     color: cs.tertiary,
                   ));
                 }

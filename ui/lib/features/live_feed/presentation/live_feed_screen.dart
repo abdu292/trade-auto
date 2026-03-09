@@ -521,32 +521,41 @@ class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
       onRefresh: _refresh,
       child: CustomScrollView(
         slivers: [
-          // Active filters summary chips
+          // Filters summary and export on a single row
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-              child: Consumer(builder: (context, ref, _) {
-                final settings = ref.watch(liveFeedFilterProvider);
-                final chips = <Widget>[];
-                chips.add(Chip(
-                  label:
-                      Text(settings.dateFilter.label(DateTime.now().toUtc())),
-                ));
-                if (settings.sessions.isNotEmpty) {
-                  chips.addAll(
-                      settings.sessions.map((s) => Chip(label: Text(s))));
-                }
-                return Wrap(spacing: 6, runSpacing: 6, children: chips);
-              }),
-            ),
-          ),
-          // Bulk export row only (filter button moved to app bar)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(child: const SizedBox.shrink()),
+                  Expanded(
+                    child: Consumer(builder: (context, ref, _) {
+                      final settings = ref.watch(liveFeedFilterProvider);
+                      final chips = <Widget>[];
+                      chips.add(Chip(
+                        label: Text(
+                            settings.dateFilter.label(DateTime.now().toUtc())),
+                        visualDensity: VisualDensity.compact,
+                      ));
+                      // spacing to separate date from session indicator
+                      chips.add(const SizedBox(width: 8));
+                      if (settings.sessions.isEmpty) {
+                        chips.add(Chip(
+                          label: const Text('All sessions'),
+                          visualDensity: VisualDensity.compact,
+                        ));
+                      } else {
+                        chips.addAll(settings.sessions.map((s) => Chip(
+                              label: Text(s),
+                              visualDensity: VisualDensity.compact,
+                            )));
+                      }
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(children: chips),
+                      );
+                    }),
+                  ),
                   timelineAsync.whenOrNull(
                         data: (events) {
                           final settings = ref.watch(liveFeedFilterProvider);

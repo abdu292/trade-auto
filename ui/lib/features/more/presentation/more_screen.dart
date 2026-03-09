@@ -5,6 +5,7 @@ import '../../replay/presentation/replay_screen.dart';
 import '../../risk/presentation/risk_control_screen.dart';
 import '../../sessions/presentation/session_overview_screen.dart';
 import '../../strategies/presentation/strategy_control_screen.dart';
+import 'settings_screen.dart';
 
 /// Secondary navigation hub — shows cards that lead to less-frequently-accessed
 /// features.  Tapping a card pushes the target screen as a full-page route.
@@ -48,6 +49,13 @@ class MoreScreen extends StatelessWidget {
         subtitle: 'Activate and manage strategy profiles',
         color: Colors.purple.shade600,
         builder: (_) => const StrategyControlScreen(),
+      ),
+      _MoreItem(
+        icon: Icons.settings,
+        label: 'Settings',
+        subtitle: 'Change environment & trading options',
+        color: Colors.blueGrey.shade600,
+        builder: (_) => const SettingsScreen(),
       ),
     ];
 

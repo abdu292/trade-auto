@@ -14,6 +14,7 @@ class FilterDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(liveFeedFilterProvider);
     final timeline = ref.watch(timelineProvider);
+    final runtime = ref.watch(runtimeStatusProvider);
 
     return AlertDialog(
       title: const Text('Filters'),
@@ -49,6 +50,11 @@ class FilterDialog extends ConsumerWidget {
                 return const Text('No session data available');
               }
               final sorted = sess.toList()..sort();
+
+              // determine current session from runtime status
+              final curr = runtime.maybeWhen(
+                  data: (rs) => rs.session.toUpperCase(), orElse: () => null);
+
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -64,6 +70,27 @@ class FilterDialog extends ConsumerWidget {
                       }
                     },
                   ),
+                  if (curr != null && curr.isNotEmpty)
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Only current session ($curr)'),
+                      value: settings.sessions.length == 1 &&
+                          settings.sessions.contains(curr),
+                      onChanged: (v) {
+                        if (v == true) {
+                          ref
+                              .read(liveFeedFilterProvider.notifier)
+                              .clearSessions();
+                          ref
+                              .read(liveFeedFilterProvider.notifier)
+                              .toggleSession(curr);
+                        } else {
+                          ref
+                              .read(liveFeedFilterProvider.notifier)
+                              .clearSessions();
+                        }
+                      },
+                    ),
                   for (final s in sorted)
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
