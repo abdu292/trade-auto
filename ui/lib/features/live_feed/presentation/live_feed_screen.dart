@@ -46,6 +46,7 @@ _EventCategory _classifyEvent(RuntimeTimelineItem item) {
       t == 'AI_SKIPPED_RULE_ENGINE_ABORT' ||
       t == 'CYCLE_ABORTED' ||
       t == 'BLOCKED_VALID_SETUP_CANDIDATE' ||
+      t == 'SYMBOL_EXPOSURE_REJECTED' ||
       (t == 'FINAL_DECISION' && item.payload['finalDecision'] == 'NO_TRADE') ||
       t == 'REPLAY_CYCLE_NO_TRADE') {
     return _EventCategory.noTrade;
@@ -321,6 +322,13 @@ String _describeEvent(RuntimeTimelineItem item) {
         return '⚠️ Capital gate RESIZE — ${attempted}g → ${approved}g (max legal: ${maxLegal}g)';
       }
       return '✅ Capital gate APPROVED — ${approved}g within allowed capital';
+
+    case 'SYMBOL_EXPOSURE_REJECTED':
+      final open = n('openPositionGrams');
+      final proposed = n('proposedGrams');
+      final total = n('totalProjectedExposure');
+      final maxExp = n('maxSymbolExposureGrams');
+      return '🚫 Exposure gate REJECTED — ${open}g open + ${proposed}g proposed = ${total}g exceeds max ${maxExp}g';
 
     case 'REPLAY_TRADE_ARMED':
       return 'Replay: Trade armed for this cycle';

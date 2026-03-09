@@ -375,17 +375,20 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
               return Column(
                 children: items
                     .map(
-                      (item) => Card(
-                        child: ListTile(
-                          title: Text(item.name),
-                          subtitle: Text(
-                              'Level ${item.level} • Max DD ${item.maxDrawdownPercent.toStringAsFixed(2)}%'),
-                          trailing: item.isActive
-                              ? const Chip(label: Text('Active'))
-                              : FilledButton(
-                                  onPressed: () => activate(item.id),
-                                  child: const Text('Activate'),
-                                ),
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Card(
+                          child: ListTile(
+                            title: Text(item.name),
+                            subtitle: Text(
+                                'Level ${item.level} • Max DD ${item.maxDrawdownPercent.toStringAsFixed(2)}%'),
+                            trailing: item.isActive
+                                ? const Chip(label: Text('Active'))
+                                : FilledButton(
+                                    onPressed: () => activate(item.id),
+                                    child: const Text('Activate'),
+                                  ),
+                          ),
                         ),
                       ),
                     )
@@ -516,36 +519,39 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
                 children: items
                     .take(20)
                     .map(
-                      (item) => Card(
-                        child: ListTile(
-                          title: Text(item.title),
-                          subtitle: Text(
-                            '${item.category} • ${item.startUtc.toLocal()} → ${item.endUtc.toLocal()}',
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Card(
+                          child: ListTile(
+                            title: Text(item.title),
+                            subtitle: Text(
+                              '${item.category} • ${item.startUtc.toLocal()} → ${item.endUtc.toLocal()}',
+                            ),
+                            trailing: item.isActive
+                                ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Chip(label: Text('Active')),
+                                      const SizedBox(width: 8),
+                                      FilledButton.tonal(
+                                        onPressed:
+                                            _disablingHazardIds.contains(item.id)
+                                                ? null
+                                                : () =>
+                                                    _disableHazardWindow(item.id),
+                                        child: _disablingHazardIds.contains(item.id)
+                                            ? const SizedBox(
+                                                width: 14,
+                                                height: 14,
+                                                child: CircularProgressIndicator(
+                                                    strokeWidth: 2),
+                                              )
+                                            : const Text('Remove'),
+                                      ),
+                                    ],
+                                  )
+                                : const Chip(label: Text('Scheduled')),
                           ),
-                          trailing: item.isActive
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Chip(label: Text('Active')),
-                                    const SizedBox(width: 8),
-                                    FilledButton.tonal(
-                                      onPressed:
-                                          _disablingHazardIds.contains(item.id)
-                                              ? null
-                                              : () =>
-                                                  _disableHazardWindow(item.id),
-                                      child: _disablingHazardIds.contains(item.id)
-                                          ? const SizedBox(
-                                              width: 14,
-                                              height: 14,
-                                              child: CircularProgressIndicator(
-                                                  strokeWidth: 2),
-                                            )
-                                          : const Text('Remove'),
-                                    ),
-                                  ],
-                                )
-                              : const Chip(label: Text('Scheduled')),
                         ),
                       ),
                     )

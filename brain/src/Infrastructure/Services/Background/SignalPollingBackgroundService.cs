@@ -27,6 +27,13 @@ public sealed class SignalPollingBackgroundService(
     private const decimal UsdToAed = 3.674m;
     private const decimal ShopSpreadUsdPerOz = 0.80m;
 
+    /// <summary>
+    /// Maximum total open position grams allowed for a single symbol at any time.
+    /// Prevents position stacking even when individual orders pass the capital utilization gate.
+    /// New orders that would push total exposure beyond this threshold are rejected.
+    /// </summary>
+    private const decimal MaxSymbolExposureGrams = 500m;
+
     // Waterfall failure tracking: after 2 consecutive failures the system enters study lock
     // (PRD point 4: "if two orders fail to either trigger or gets caught in the waterfall then
     //  the system should do study & self_cross check and hard lock only refinements")
@@ -1060,6 +1067,57 @@ public sealed class SignalPollingBackgroundService(
                     logger.LogInformation(
                         "CAPITAL_GATE RESIZE — order resized from {Original}g to {Approved}g",
                         decision.Grams, approvedGrams);
+                }
+
+                // ── Portfolio Exposure Gate ────────────────────────────────────────────────
+                // Rejects new orders when total open position grams + proposed grams exceeds
+                // MAX_SYMBOL_EXPOSURE. Prevents position stacking even when individual orders
+                // pass the capital utilization gate (CR10).
+                var openPositionGrams = snapshot.OpenPositions?.Sum(p => p.VolumeGramsEquivalent) ?? 0m;
+                var totalProjectedExposure = openPositionGrams + approvedGrams;
+                if (totalProjectedExposure > MaxSymbolExposureGrams)
+                {
+                    logger.LogWarning(
+                        "EXPOSURE_GATE REJECTED — total projected exposure {Total}g exceeds max {Max}g. Open={Open}g Proposed={Proposed}g",
+                        totalProjectedExposure, MaxSymbolExposureGrams, openPositionGrams, approvedGrams);
+
+                    await timeline.WriteAsync(
+                        eventType: "SYMBOL_EXPOSURE_REJECTED",
+                        stage: "exposure_gate",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            orderStatus = "REJECTED",
+                            openPositionGrams,
+                            proposedGrams = approvedGrams,
+                            totalProjectedExposure,
+                            maxSymbolExposureGrams = MaxSymbolExposureGrams,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    db.DecisionLogs.Add(DecisionLog.Create(
+                        symbol: snapshot.Symbol,
+                        status: "NO_TRADE",
+                        engineState: "EXPOSURE_PROTECTED",
+                        mode: decision.Mode,
+                        cause: "SYMBOL_EXPOSURE_GATE_REJECTED",
+                        waterfallRisk: decision.WaterfallRisk,
+                        telegramState: decision.TelegramState,
+                        railPermissionA: decision.RailPermissionA,
+                        railPermissionB: decision.RailPermissionB,
+                        reason: $"Exposure gate rejected order. OpenPositionGrams={openPositionGrams:0.00}g + ProposedGrams={approvedGrams:0.00}g = {totalProjectedExposure:0.00}g exceeds MaxSymbolExposureGrams={MaxSymbolExposureGrams:0.00}g",
+                        entry: 0m,
+                        tp: 0m,
+                        grams: 0m,
+                        rotationCapThisSession: 0,
+                        forceWhereToTrade: forceWhereToTrade,
+                        snapshotHash: snapshotHash));
+                    await db.SaveChangesAsync(stoppingToken);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
                 }
 
                 var pending = new PendingTradeContract(
