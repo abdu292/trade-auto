@@ -754,11 +754,12 @@ public sealed class SignalPollingBackgroundService(
                 // ── CR11 Layer B: PRETABLE Risk Intelligence ─────────────────────────────
                 // Run Impulse Exhaustion Guard, Liquidity Sweep Detector, and PRETABLE before
                 // decision engine. PRETABLE BLOCK → no trade regardless of engine output.
+                // Pattern Detector results are passed to PRETABLE as active gate (Section F).
 
                 var impulseExhaustion = ImpulseExhaustionGuard.Evaluate(snapshot);
                 var liquiditySweep = LiquiditySweepDetectorService.Detect(snapshot);
                 var sessionForPretable = NormalizeSessionForPretable(snapshot.Session);
-                var pretable = PretableService.Evaluate(snapshot, regime, impulseExhaustion, liquiditySweep, sessionForPretable);
+                var pretable = PretableService.Evaluate(snapshot, regime, impulseExhaustion, liquiditySweep, sessionForPretable, patterns);
 
                 // CR11 CR11: Regime → TREND / RANGE / SHOCK for Rotation Optimizer
                 var crRegime = MapToCr11Regime(setupCandidate.MarketRegime?.Regime ?? regime.Regime);
@@ -790,6 +791,8 @@ public sealed class SignalPollingBackgroundService(
                         crRegime,
                         dynamicSessionModifier = dynamicSessionRiskResult.Modifier,
                         dynamicSessionWaterfallCap = dynamicSessionRiskResult.WaterfallCapActive,
+                        patternCount = patterns.Count,
+                        patternTypes = patterns.Select(p => p.PatternType.ToString()).ToList(),
                     },
                     cancellationToken: stoppingToken);
 
@@ -820,7 +823,8 @@ public sealed class SignalPollingBackgroundService(
                 }
 
                 // Rotation Optimizer: decide execution mode
-                var rotationResult = RotationOptimizer.Optimize(snapshot, pretable, liquiditySweep, crRegime, state);
+                var microRotationMode = runtimeSettings.GetMicroRotationEnabled();
+                var rotationResult = RotationOptimizer.Optimize(snapshot, pretable, liquiditySweep, crRegime, state, microRotationMode);
 
                 await timeline.WriteAsync(
                     eventType: "CR11_ROTATION_OPTIMIZER",
@@ -872,6 +876,12 @@ public sealed class SignalPollingBackgroundService(
                         waterfallRisk = regime.IsWaterfall ? "HIGH" : (regime.RiskTag == "BLOCK" ? "MEDIUM" : "LOW"),
                         isFriday = snapshot.IsFriday,
                         adrUsedPct = snapshot.AdrUsedPct,
+                        // §K Pattern Detector fields for STUDY + UI
+                        patternCount = patterns.Count,
+                        patternTypes = patterns.Select(p => p.PatternType.ToString()).ToList(),
+                        patternWaterfallRisks = patterns.Select(p => p.WaterfallRisk).ToList(),
+                        patternEntrySafeties = patterns.Select(p => p.EntrySafety).ToList(),
+                        patternRecommendedActions = patterns.Select(p => p.RecommendedAction.ToString()).ToList(),
                     },
                     cancellationToken: stoppingToken);
 
@@ -1127,6 +1137,32 @@ public sealed class SignalPollingBackgroundService(
                     && pendingTrades.Count() > 0)
                 {
                     logger.LogInformation("WarPremium Rail-B skipped: one pending BUY_STOP already exists.");
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
+                // §D MICRO_ROTATION_MODE: enforce single active pending trade cap.
+                // While micro rotation is active only one pending trade is allowed at a time.
+                if (microRotationMode && pendingTrades.Count() > 0)
+                {
+                    logger.LogInformation(
+                        "MICRO_ROTATION_MODE — single pending trade cap reached, skipping new order.");
+
+                    await timeline.WriteAsync(
+                        eventType: "FINAL_DECISION",
+                        stage: "decision",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            finalDecision = "NO_TRADE",
+                            primaryReason = "MICRO_ROTATION_MODE_SINGLE_TRADE_CAP",
+                            reason = "Micro rotation mode: one pending trade already active.",
+                        },
+                        cancellationToken: stoppingToken);
+
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }

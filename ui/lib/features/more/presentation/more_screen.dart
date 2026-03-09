@@ -5,6 +5,7 @@ import '../../replay/presentation/replay_screen.dart';
 import '../../risk/presentation/risk_control_screen.dart';
 import '../../sessions/presentation/session_overview_screen.dart';
 import '../../strategies/presentation/strategy_control_screen.dart';
+import '../../trade_map/presentation/trade_map_screen.dart';
 import 'settings_screen.dart';
 
 /// Secondary navigation hub — shows cards that lead to less-frequently-accessed
@@ -15,6 +16,13 @@ class MoreScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
+      _MoreItem(
+        icon: Icons.map_outlined,
+        label: 'Trade Map',
+        subtitle: 'Live graphical display of engine state and orders',
+        color: Colors.teal.shade700,
+        builder: (_) => const TradeMapScreen(),
+      ),
       _MoreItem(
         icon: Icons.schedule,
         label: 'Sessions',

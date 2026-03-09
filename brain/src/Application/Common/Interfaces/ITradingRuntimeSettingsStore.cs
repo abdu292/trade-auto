@@ -15,11 +15,23 @@ public interface ITradingRuntimeSettingsStore
     void SetAutoTradeEnabled(bool enabled);
 
     /// <summary>
-    /// Returns the minimum trade size in grams. Defaults to 100 g.
+    /// Returns the minimum trade size in grams. Defaults to 0.1 g (configurable).
     /// Orders computed below this threshold are rejected by the decision engine.
-    /// Configurable via the UI so different gram weights can be tested during analysis.
+    /// The default is intentionally small to support MICRO_ROTATION_MODE live testing
+    /// without a minimum gram floor. Set higher to enforce a hard minimum for normal trading.
     /// </summary>
     decimal GetMinTradeGrams();
 
     void SetMinTradeGrams(decimal grams);
+
+    /// <summary>
+    /// Returns whether Micro Rotation Mode is enabled (refinement spec §D).
+    /// When enabled: single pending trade at a time, no staggered ladder, uses free cash only,
+    /// BUY_LIMIT / BUY_STOP only with mandatory TP and expiry.
+    /// Designed for safe live experience testing with small free balance.
+    /// Defaults to false.
+    /// </summary>
+    bool GetMicroRotationEnabled();
+
+    void SetMicroRotationEnabled(bool enabled);
 }

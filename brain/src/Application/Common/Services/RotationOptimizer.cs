@@ -47,12 +47,23 @@ public static class RotationOptimizer
     private const int MaxExpansionCandlesForBuyStop = 3;
 
     /// <summary>Decides the optimal rotation mode for the current market setup.</summary>
+    /// <param name="snapshot">Current market snapshot.</param>
+    /// <param name="pretable">PRETABLE risk result.</param>
+    /// <param name="liquiditySweep">Liquidity sweep detection result.</param>
+    /// <param name="crRegime">CR11 regime string: TREND | RANGE | SHOCK.</param>
+    /// <param name="ledger">Current ledger state.</param>
+    /// <param name="microRotationMode">
+    /// When true, activates MICRO_ROTATION_MODE (refinement spec §D):
+    /// single pending trade, no staggered ladder, BUY_LIMIT / BUY_STOP only.
+    /// Designed for safe live testing with small free balance.
+    /// </param>
     public static RotationOptimizerResult Optimize(
         MarketSnapshotContract snapshot,
         PretableResult pretable,
         LiquiditySweepResult liquiditySweep,
         string crRegime,
-        LedgerStateContract ledger)
+        LedgerStateContract ledger,
+        bool microRotationMode = false)
     {
         // BLOCK from PRETABLE → NO order regardless of optimizer
         if (pretable.RiskLevel == "BLOCK")
@@ -62,6 +73,28 @@ public static class RotationOptimizer
                 CrRegime: crRegime,
                 StaggeredLevels: null,
                 Reason: $"PRETABLE={pretable.RiskLevel}: stand-down enforced. {pretable.Reason}");
+        }
+
+        // ── §D MICRO_ROTATION_MODE: single pending trade, no ladder ──────────
+        // Phase 1: single entry only, no staggered ladder, no stand-down from ADR.
+        // All safety rules still apply; only ladder and breakout modes are restricted.
+        if (microRotationMode)
+        {
+            // BUY_STOP still allowed in micro mode if breakout is justified and TREND regime
+            if (crRegime == "TREND" && IsBuyStopJustified(snapshot))
+            {
+                return new RotationOptimizerResult(
+                    Mode: "MICRO_ROTATION_MODE",
+                    CrRegime: crRegime,
+                    StaggeredLevels: null,
+                    Reason: "MICRO_ROTATION_MODE(BUY_STOP): TREND regime with justified breakout. Single entry only, no ladder.");
+            }
+
+            return new RotationOptimizerResult(
+                Mode: "MICRO_ROTATION_MODE",
+                CrRegime: crRegime,
+                StaggeredLevels: null,
+                Reason: "MICRO_ROTATION_MODE(SINGLE_ENTRY): single pending trade, ladder disabled.");
         }
 
         // ── STAND_DOWN: poor capital efficiency conditions ───────────────────
