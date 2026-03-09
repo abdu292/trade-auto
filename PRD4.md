@@ -16,7 +16,7 @@
 
 ### Sampling Gram Configuration
 
-- Allow the user to adjust the gram parameter. The current minimum is 100 g; make this value configurable so different weights can be tested during analysis.
+- Allow the user to adjust the gram parameter. The current minimum is 100 g; make this value configurable so different weights can be tested during analysis. Add this feature near to auto trade toggle switch so that both can be changed at the same place.
 
 ### UI Layout and Spacing
 
@@ -30,3 +30,4 @@
 
 - Wherever live or near‑real‑time data is displayed, implement an automatic refresh mechanism and show a "refreshed at" timestamp. Users should always know how fresh the information is.
 
+Make the UI more simpler and useful overall, exactly with regards to what clients currently want.
