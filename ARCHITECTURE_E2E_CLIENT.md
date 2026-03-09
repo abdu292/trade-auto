@@ -23,12 +23,13 @@ The system works like a guarded decision factory:
 2. Brain runs strict structural and risk filters first.
 3. Pattern Detector identifies live structural patterns (sweep, waterfall, breakout, trap, etc.).
 4. Only valid opportunities are sent to the AI worker.
-5. AI is run with committee + validation steps and prompt stages.
-6. Brain applies final capital/risk/order rules.
-7. Trade is either rejected, queued for client approval, or sent to MT5 queue (based on Auto Trade toggle and execution mode).
-8. Client can approve or reject queued trades.
-9. MT5 executes only after final release and sends status back.
-10. Brain records outcomes, updates ledger/slips for fill events, and tags study candidates for later analysis.
+5. AI is run in a single-lead live path (with deterministic gate + failover protections).
+6. Brain applies trade score + pre-execution risk intelligence (impulse/sweep/session sizing), then final decision-engine rules.
+7. Post-decision execution legality gates run (capital utilization + portfolio exposure).
+8. Trade is either rejected, queued for client approval, or sent to MT5 queue (based on Auto Trade toggle and execution mode).
+9. Client can approve or reject queued trades.
+10. MT5 executes only after final release and sends status back.
+11. Brain records outcomes, updates ledger/slips for fill events, and tags study candidates for later analysis.
 
 The result: AI can propose, but cannot bypass the system rules or the client decision handoff path.
 
@@ -66,10 +67,12 @@ What it does:
 ### 3) AI Worker (`aiworker`)
 What it does:
 - builds AI context from market + telegram + macro context
-- runs multi-provider AI committee
-- applies extra validation stages
+- enforces an AI pre-flight gate before any LLM call (freshness/risk-state/session-budget)
+- runs a single lead model for live decisions (required agreement = 1)
+- can fail over once to the full analyzer set if lead path returns no usable signal
+- keeps validation/study/self-crosscheck prompt stages outside the live path (reserved for async STUDY flows)
 - returns structured signal + safety and trace metadata
-- returns `NO_TRADE` when confidence/consensus/validation conditions fail
+- returns `NO_TRADE` when AI gate, model consensus, or safety conditions fail
 
 
 ### 4) Prompt Library (`prompts`)
@@ -146,7 +149,7 @@ If rule engine fails:
 This prevents AI from inventing trades without structure.
 
 
-## Step 4b: Pattern Detector (CR8 — New)
+## Step 4b: Pattern Detector
 After the rule engine, the Pattern Detector runs to identify live structural patterns.
 
 **Purpose (current code):** non-executing intelligence module that produces structured pattern signals for timeline/logging and downstream decision visibility.
@@ -181,7 +184,7 @@ If news gate blocks:
 - no AI order candidate is released
 
 
-## Step 6: AI Analysis Is Requested (CR9 — Single Lead Model)
+## Step 6: AI Analysis Is Requested
 Only after rule + news gate pass.
 
 Brain sends full market payload to AI worker and logs this event.
@@ -194,11 +197,11 @@ AI worker then runs this pipeline:
 - macro context
 - risk/regime hints
 
-### 6.2 Pre-table hard block
-If pre-classification marks risk as blocked:
+### 6.2 Pre-AI hard block
+If deterministic pre-classification marks risk as blocked:
 - immediate `NO_TRADE`
 
-### 6.3 CR9 AI Gate (hard pre-flight check)
+### 6.3 AI Gate (hard pre-flight check)
 Before any LLM call, a hard gate enforces:
 
 1. **Data freshness** — snapshot must not be older than `AI_GATE_MAX_DATA_AGE_SECONDS` (default 180 s).
@@ -210,8 +213,8 @@ Before any LLM call, a hard gate enforces:
 
 If any condition fails: returns `NO_TRADE` without invoking any LLM.
 
-### 6.4 Single lead model decision (CR9)
-CR9 simplified the live path to use one lead reasoning model only.
+### 6.4 Single lead model decision
+The live path uses one lead reasoning model.
 
 - Pre-stage AI passes (`short_prompt_news.md`, `short_prompt_analyze.md`) have been removed from the live path. The market context already carries telegram/macro/news data.
 - Validation stages (`short_prompt_validate.md`, `short_prompt_study.md`, `short_prompt_self_crosscheck.md`, `short_prompt_captial_utilization.md`) have been moved out of the live path. They are preserved for the async STUDY / SELF CROSSCHECK module.
@@ -233,14 +236,35 @@ Returns structured payload including:
 - full trace json for auditability
 
 
-## Step 7: Brain Applies Final Trade Scoring and Decision Engine
+## Step 7: Brain Applies Final Trade Scoring, Risk Intelligence, and Decision Engine
 Even with AI approval, Brain still applies final business and risk logic.
 
 ### 7.1 Trade score gate
 If total score below threshold:
 - `NO_TRADE`
 
-### 7.2 Decision engine (final authority)
+### 7.2 Pre-Execution Risk Intelligence (new live gate)
+After score passes, Brain runs a risk-intelligence layer before the final decision engine:
+
+- Impulse Exhaustion Guard (`SAFE` / `CAUTION` / `BLOCK`)
+- Liquidity Sweep Detector
+- Risk classifier (`SAFE` / `CAUTION` / `BLOCK`) with `riskScore`, `riskFlags`, `sizeModifier`
+- Dynamic Session Risk modifier lookup (session-specific multiplier with safety bounds)
+- Execution mode selector (`SINGLE_ENTRY`, `STAGGERED`, `BUY_STOP`, `STAND_DOWN`)
+
+Timeline observability (live):
+- risk-intelligence decision events are emitted for auditability
+
+Hard behavior:
+- `BLOCK` risk level -> immediate `NO_TRADE`
+- `rotation mode = STAND_DOWN` -> immediate `NO_TRADE`
+- effective sizing passed to decision engine uses: `pretableSizeModifier * dynamicSessionModifier`
+
+Implementation note from current code:
+- Dynamic Session Risk currently provides bootstrap/bounded modifiers in live flow via `GetModifier(...)`.
+- Methods for recording waterfall/success outcomes and updating modifiers exist in service code, but those feedback writes are not yet wired in the live polling path.
+
+### 7.3 Decision engine (final authority)
 Decision engine applies many hard protections including:
 - capital-protected blocking
 - waterfall and panic veto
@@ -259,7 +283,7 @@ Output is either:
 
 Important: AI does not override this layer.
 
-### 7.3 Bottom Permission — Dual Path (CR8 — New)
+### 7.3 Bottom Permission — Dual Path
 The bottom-permission gate now supports two legal paths instead of one:
 
 **Path A — Reversal (existing):**
@@ -279,15 +303,15 @@ The bottom-permission gate now supports two legal paths instead of one:
 
 This allows clean pullback continuations to trade without requiring a dramatic H1 sweep, while keeping all anti-waterfall protections intact.
 
-### 7.4 BLOCKED_VALID_SETUP_CANDIDATE Tagging (CR8 — New)
+### 7.4 Blocked Valid Setup Tagging
 When a setup passes scoring but is blocked by the bottom-permission gate, the system:
-- emits a `BLOCKED_VALID_SETUP_CANDIDATE` timeline event with full context
+- emits a blocked-valid-setup timeline event with full context
 - tags the cause, score, session, waterfall risk, and bottom-permission reason
 - marks it as a study candidate in timeline/log data
 
 This creates a clean handoff for later STUDY analysis workflows.
 
-### 7.5 Session-Adaptive Risk (CR7 — New)
+### 7.5 Session-Adaptive Risk
 The decision engine applies adaptive risk by session rather than binary block/allow:
 
 **Japan / India:** highest automation freedom, standard thresholds
@@ -295,11 +319,35 @@ The decision engine applies adaptive risk by session rather than binary block/al
 **New York:** strictest spike/liquidity checks (additional spread guard at bottom permission)
 **Friday:** reduced size, tighter expiry, higher caution (existing behavior)
 
+### 7.6 Decision Parameterization (session TP/expiry)
+Decision engine applies session-aware targets:
 
-## Step 8: Routing Decision (Auto Trade Toggle + Execution Mode)
-If final decision is allowed (`ARMED`), Brain routes based on two factors:
+- TP model remains session-capped (adaptive cap, max 18 USD distance)
+- expiry bands are session-specific in live path:
+   - Japan/India: 45-60m band (default implementation point around 52m)
+   - London: 30-45m band (default implementation point around 37m)
+   - New York: 20-30m band (default implementation point around 25m)
 
-### 8.1 Auto Trade Toggle (CR7 — New)
+
+## Step 8: Post-Decision Execution Legality Gates
+Before routing, live flow runs final execution legality gates:
+
+### 8.1 Capital Utilization Gate
+- validates affordability against cash and authoritative/MT5 buy price
+- can resize grams downward (`RESIZE_REQUIRED`) or reject (`NO_TRADE`) when cash is insufficient
+- emits a capital-utilization timeline event
+
+### 8.2 Portfolio Exposure Gate
+- rejects when projected open exposure exceeds symbol cap (25% of equity, converted to grams)
+- emits an exposure-rejection timeline event when blocked
+
+Only orders that pass both gates can proceed to routing.
+
+
+## Step 9: Routing Decision (Auto Trade Toggle + Execution Mode)
+If final decision is allowed (`ARMED`) and post-decision gates pass, Brain routes based on two factors:
+
+### 9.1 Auto Trade Toggle
 The system has a client-controlled **Auto Trade toggle** (default: **OFF**):
 
 - **OFF (default):** ALL ARMED trades go to the approval queue, requiring manual client approval. This is the safe default until the client is comfortable.
@@ -307,7 +355,7 @@ The system has a client-controlled **Auto Trade toggle** (default: **OFF**):
 
 The toggle can be controlled from the Risk screen in the app.
 
-### 8.2 Execution Mode
+### 9.2 Execution Mode
 Even when Auto Trade is ON, the execution mode controls routing:
 - `AUTO`: direct MT5 pending queue
 - `HYBRID`: direct MT5 for configured sessions (default: Japan + India), approval queue for others
@@ -318,7 +366,7 @@ In manual path:
 - nothing executes until explicit approval
 
 
-## Step 9: Client Final Control (Approve or Reject)
+## Step 10: Client Final Control (Approve or Reject)
 Brain exposes approval actions:
 - `approve`: moves trade from approval queue into MT5 pending queue
 - `reject`: removes trade from approval queue
@@ -328,7 +376,7 @@ So client has final say before execution when Auto Trade is OFF or manual/hybrid
 This is the explicit handover checkpoint you requested.
 
 
-## Step 10: MT5 Pulls and Executes Released Trades
+## Step 11: MT5 Pulls and Executes Released Trades
 EA polls `/mt5/pending-trades`.
 
 If trade exists:
@@ -339,14 +387,14 @@ If trade exists:
 Brain receives status callbacks and updates ledger/notifications/timeline.
 
 
-## Step 11: Protection Loops During Runtime
+## Step 12: Protection Loops During Runtime
 System keeps protective controls active continuously:
 - cancel-pending control can be consumed by EA and applied immediately
 - high-risk waterfalls can clear pending queue and trigger cancel signals
 - repeated waterfall failures trigger temporary study lock
 - stale/no snapshot conditions stop cycle execution
 
-### 11.1 Global Panic Interrupt (CR7 — New)
+### 12.1 Global Panic Interrupt
 A client-triggered global panic interrupt is available from the Risk screen:
 
 Trigger conditions (use when any of these are detected):
@@ -383,13 +431,15 @@ Provider selection logic chooses role-specific master prompts where relevant.
 - `prompts/short_prompt_self_crosscheck.md`
 - `prompts/short_prompt_captial_utilization.md`
 
-These are used as staged policy layers in the AI worker flow, not just documentation.
+Current usage split:
+- Live decision path: single-lead model; pre-stage (`news/analyze`) and validation (`validate/study/self_crosscheck/capital_utilization`) AI rounds are removed from live execution.
+- Async study/governance path: these short prompts remain available for STUDY / SELF CROSSCHECK style flows.
 
 ---
 
-## 24-Module Engine Map (CR8)
+## 24-Module Engine Map
 
-CR8 defines a 24-module target architecture.
+The system roadmap defines a 24-module target architecture.
 Current code implements a core subset in the live path, while other modules remain planned.
 
 ### Current Code Status (Implemented)
@@ -400,15 +450,18 @@ Current code implements a core subset in the live path, while other modules rema
 5. SLIPS — implemented for BUY and TP sell fills, with ledger updates
 6. Core decision/routing spine — implemented (`NO_TRADE`/`ARMED`, Auto Trade toggle, execution modes, approvals, panic interrupt)
 7. BLOCKED_VALID_SETUP_CANDIDATE tagging — implemented in both live and replay paths; emits study-candidate timeline events when a setup passes scoring but is blocked by the bottom-permission gate
-8. CR9 AI Gate — implemented in AI worker (`aiworker/app/services/ai_gate.py`):
+8. AI Gate — implemented in AI worker (`aiworker/app/services/ai_gate.py`):
    - data freshness gate (strict in LIVE mode; skipped for replay cycles — cycle-relative freshness only)
    - risk-state block gate
    - per-session call budget with automatic session-change reset
-9. CR9 Single Lead Model — live path uses one lead reasoning model; others reserved for STUDY/SELF CROSSCHECK
-10. CR9 MARKET_REGIME_DETECTED logging — `ema50H1`, `ema200H1`, `rsiH1` are emitted as explicit fields in the timeline log payload for both live and replay cycles
+9. Single Lead Model — live path uses one lead reasoning model; others reserved for STUDY/SELF CROSSCHECK
+10. MARKET_REGIME_DETECTED logging — `ema50H1`, `ema200H1`, `rsiH1` are emitted as explicit fields in the timeline log payload for both live and replay cycles
+11. Capital Utilization Gate — live post-decision affordability gate (approve/resize/reject) with timeline logging
+12. Pre-execution risk-intelligence stack — Impulse Exhaustion Guard + Liquidity Sweep Detector + risk classifier + execution mode selector + dynamic session risk modifier lookup, with timeline events
+13. Portfolio Exposure Gate — live post-decision exposure cap check (25% equity in grams) with `SYMBOL_EXPOSURE_REJECTED` event on block
 
-### Planned / Partial (Target CR8 Scope)
-The following CR8 map items are target modules and not fully implemented as standalone production modules yet:
+### Planned / Partial
+The following map items are target modules and not fully implemented as standalone production modules yet:
 - VERIFY
 - ANALYZE (as separate module)
 - TABLE (as separate module)
@@ -431,7 +484,7 @@ The following CR8 map items are target modules and not fully implemented as stan
 1. CAPITAL UTILIZATION — compute usable capital, split C1/C2, enforce slot/bucket discipline
 2. VERIFY — verify Telegram/external items, classify credibility and pipeline impact
 3. NEWS — classify macro/geo/hazard regime, decide tradable vs protected environment
-4. PATTERN DETECTOR — live pattern recognition (new in CR8)
+4. PATTERN DETECTOR — live pattern recognition
 5. ANALYZE — build current/next-session structure map, define S1/S2/R1/R2/FAIL
 6. TABLE — compile legal executable order rows, size grams, TP, expiry, profit math
 7. VALIDATE — audit table legality, same-session realism, expiry, sizing
@@ -499,18 +552,20 @@ The implemented system is not a single AI auto-fire flow.
 It is a layered control stack:
 
 - deterministic structure rules first
-- pattern detection (new in CR8)
+- pattern detection
 - news and risk gates
-- multi-provider AI with consensus and validation
-- final non-AI decision engine with dual bottom-permission paths (new in CR8)
-- Auto Trade toggle — default OFF, client enables when ready (new in CR7)
+- single-lead AI live path (with deterministic AI Gate and one-shot failover)
+- final non-AI decision engine with dual bottom-permission paths
+- risk intelligence and rotation optimization before final decisioning
+- post-decision capital + exposure legality gates before routing
+- Auto Trade toggle — default OFF, client enables when ready
 - optional manual human approval checkpoint
 - local MT5 validation before execution
-- global panic interrupt for emergency protection (new in CR7)
+- global panic interrupt for emergency protection
 
 So operationally, it is designed to prioritize protection and controlled execution over uncontrolled AI autonomy.
 
-The key principle from CR7:
+The key operating principle:
 > **The system must automate the monitoring itself and automatically execute trades if the Auto Trade toggle is on and whenever all core laws pass, across all sessions, using adaptive safety rather than paranoia.**
 
 ---
@@ -519,7 +574,7 @@ The key principle from CR7:
 There is also a replay path where MT5 history is fetched/imported and run through the same decision pipeline.
 This is used for testing behavior consistency without live order execution.
 
-The replay cycle runs the same stages as the live path:
+Replay mirrors the core live decision path and key gates, with important scope notes:
 - Market regime detection — `MARKET_REGIME_DETECTED` timeline event includes `ema50H1`, `ema200H1`, `rsiH1`
 - Rule engine (structural validity)
 - **Pattern Detector** — runs after regime/rule-engine, emits `PATTERN_DETECTOR_RESULTS` timeline events
@@ -528,6 +583,10 @@ The replay cycle runs the same stages as the live path:
 - Trade scoring
 - Decision engine (dual-path bottom permission, all hard gates)
 - **BLOCKED_VALID_SETUP_CANDIDATE** tagging — emitted when a setup passes scoring but is blocked by the bottom-permission gate, same as the live path
+
+Current replay/live difference in code:
+- The full risk-intelligence timeline stack implemented in live polling is not currently mirrored as standalone events in replay.
+- Live-only post-decision queue routing gates (capital + exposure + approval/MT5 routing mechanics) are not executed for real order flow in replay.
 
 Real order execution is always disabled in replay mode. All timeline events are tagged with `replayMode: true`.
 
@@ -541,11 +600,13 @@ A trade must pass:
 1) structural validity,
 2) pattern safety check,
 3) risk/news gates,
-4) CR9 AI Gate (freshness, risk state, session budget),
+4) AI Gate (freshness, risk state, session budget),
 5) AI single-lead model decision,
-6) decision engine protections (including dual-path bottom permission),
-7) routing policy and Auto Trade toggle check,
-8) and (if Auto Trade OFF or manual path) your explicit approval.
+6) trade scoring + risk intelligence (risk class, rotation mode, session modifier),
+7) decision engine protections (including dual-path bottom permission),
+8) post-decision capital utilization + portfolio exposure legality gates,
+9) routing policy and Auto Trade toggle check,
+10) and (if Auto Trade OFF or manual path) your explicit approval.
 
 That is the real, code-backed end-to-end architecture currently running in this project.
 
