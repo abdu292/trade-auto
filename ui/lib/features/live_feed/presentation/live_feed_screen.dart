@@ -6,29 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models.dart';
 import '../../../presentation/app_providers.dart';
+import 'filter_settings.dart';
 
-// ─── Date-range filter ────────────────────────────────────────────────────────
-enum _FeedFilter { today, lastWeek }
-
-extension _FeedFilterLabel on _FeedFilter {
-  String label(DateTime nowUtc) {
-    final ksaNow = nowUtc.add(const Duration(hours: 3));
-    switch (this) {
-      case _FeedFilter.today:
-        final m = ksaNow.month.toString().padLeft(2, '0');
-        final d = ksaNow.day.toString().padLeft(2, '0');
-        return 'Today (${ksaNow.year}-$m-$d)';
-      case _FeedFilter.lastWeek:
-        final weekEnd = ksaNow.subtract(const Duration(days: 1));
-        final weekStart = ksaNow.subtract(const Duration(days: 7));
-        final sm = weekStart.month.toString().padLeft(2, '0');
-        final sd = weekStart.day.toString().padLeft(2, '0');
-        final em = weekEnd.month.toString().padLeft(2, '0');
-        final ed = weekEnd.day.toString().padLeft(2, '0');
-        return 'Last Week ($sm-$sd – $em-$ed)';
-    }
-  }
-}
+// date filtering logic and label have been moved to filter_settings.dart
 
 // ─── Event classifier ─────────────────────────────────────────────────────────
 enum _EventCategory { trade, noTrade, market, ai, cycle, info }
@@ -59,9 +39,7 @@ _EventCategory _classifyEvent(RuntimeTimelineItem item) {
       t == 'CAPITAL_UTILIZATION_CHECK') {
     return _EventCategory.market;
   }
-  if (t.startsWith('AI_') ||
-      t == 'TELEGRAM_INTERPRETED' ||
-      t == 'NEWS_CHECK') {
+  if (t.startsWith('AI_') || t == 'TELEGRAM_INTERPRETED' || t == 'NEWS_CHECK') {
     return _EventCategory.ai;
   }
   if (t == 'CYCLE_STARTED' ||
@@ -72,22 +50,7 @@ _EventCategory _classifyEvent(RuntimeTimelineItem item) {
   return _EventCategory.info;
 }
 
-bool _matchesFilter(RuntimeTimelineItem item, _FeedFilter filter) {
-  final ksaItemTime = item.createdAtUtc.add(const Duration(hours: 3));
-  final ksaNow = DateTime.now().toUtc().add(const Duration(hours: 3));
-  switch (filter) {
-    case _FeedFilter.today:
-      return ksaItemTime.year == ksaNow.year &&
-          ksaItemTime.month == ksaNow.month &&
-          ksaItemTime.day == ksaNow.day;
-    case _FeedFilter.lastWeek:
-      final ksaStartOfToday = DateTime(ksaNow.year, ksaNow.month, ksaNow.day);
-      final ksaStartOfWeekAgo = ksaStartOfToday.subtract(const Duration(days: 7));
-      // Last week = events from 7 days ago (inclusive) up to (but not including) today
-      return !ksaItemTime.isBefore(ksaStartOfWeekAgo) &&
-          ksaItemTime.isBefore(ksaStartOfToday);
-  }
-}
+// filtering logic is now handled by the filter settings provider
 
 // ─── Human-readable descriptions ─────────────────────────────────────────────
 String _describeEvent(RuntimeTimelineItem item) {
@@ -159,8 +122,7 @@ String _describeEvent(RuntimeTimelineItem item) {
       return desc;
 
     case 'RULE_ENGINE_ABORT':
-      return withReason(
-          'Rule engine 🚫 — No setup basis', s('abortReason'));
+      return withReason('Rule engine 🚫 — No setup basis', s('abortReason'));
 
     case 'AI_SKIPPED_RULE_ENGINE_ABORT':
       return 'AI analysis skipped — rule engine already blocked this cycle';
@@ -193,8 +155,10 @@ String _describeEvent(RuntimeTimelineItem item) {
       final agreementCount = n('agreementCount');
       final base2 = 'AI committee evaluated';
       if (committeeSource == 'lead') return '$base2 — lead model decision';
-      if (committeeSource == 'full_failover') return '$base2 — full failover succeeded ✅';
-      if (agreementCount.isNotEmpty) return '$base2 · agreement=$agreementCount';
+      if (committeeSource == 'full_failover')
+        return '$base2 — full failover succeeded ✅';
+      if (agreementCount.isNotEmpty)
+        return '$base2 · agreement=$agreementCount';
       return base2;
 
     case 'AI_COMMITTEE_FAILOVER_TRIGGERED':
@@ -252,9 +216,12 @@ String _describeEvent(RuntimeTimelineItem item) {
       final waterfallVerdict = s('waterfallVerdict');
       final adjustments = s('ruleAdjustments');
       var studyDesc = '🔬 Study complete';
-      if (bottomVerdict.isNotEmpty) studyDesc += ' · BottomPerm: $bottomVerdict';
-      if (waterfallVerdict.isNotEmpty) studyDesc += ' · Waterfall: $waterfallVerdict';
-      if (adjustments.isNotEmpty && adjustments != '[]') studyDesc += ' · Adjustments suggested';
+      if (bottomVerdict.isNotEmpty)
+        studyDesc += ' · BottomPerm: $bottomVerdict';
+      if (waterfallVerdict.isNotEmpty)
+        studyDesc += ' · Waterfall: $waterfallVerdict';
+      if (adjustments.isNotEmpty && adjustments != '[]')
+        studyDesc += ' · Adjustments suggested';
       return studyDesc;
 
     case 'TRADE_SCORE_CALCULATION':
@@ -348,9 +315,8 @@ String _describeEvent(RuntimeTimelineItem item) {
           .replaceAll('_', ' ')
           .toLowerCase()
           .split(' ')
-          .map((w) => w.isNotEmpty
-              ? '${w[0].toUpperCase()}${w.substring(1)}'
-              : w)
+          .map((w) =>
+              w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : w)
           .join(' ');
       return reason.isNotEmpty ? '$words — $reason' : words;
   }
@@ -447,7 +413,6 @@ class LiveFeedScreen extends ConsumerStatefulWidget {
 }
 
 class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
-  _FeedFilter _filter = _FeedFilter.today;  // Default to Today
   Timer? _autoRefreshTimer;
   DateTime? _lastRefreshedAt;
 
@@ -456,8 +421,7 @@ class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
     super.initState();
     _lastRefreshedAt = DateTime.now().toUtc();
     // Auto-refresh every 15 seconds so new events appear without scrolling
-    _autoRefreshTimer =
-        Timer.periodic(const Duration(seconds: 15), (_) {
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) {
         setState(() => _lastRefreshedAt = DateTime.now().toUtc());
         ref.invalidate(timelineProvider);
@@ -499,8 +463,12 @@ class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
   /// Exports all currently filtered events as a bulk log text.
   String _exportBulkLog(List<RuntimeTimelineItem> events) {
     final buf = StringBuffer();
+    final settings = ref.read(liveFeedFilterProvider);
     buf.writeln('=== Live Feed Export ===');
-    buf.writeln('Filter: ${_filter.label(DateTime.now().toUtc())}');
+    buf.writeln('Filter: ${settings.dateFilter.label(DateTime.now().toUtc())}');
+    if (settings.sessions.isNotEmpty) {
+      buf.writeln('Sessions: ${settings.sessions.join(", ")}');
+    }
     buf.writeln('Exported at: ${DateTime.now().toUtc().toIso8601String()}');
     buf.writeln('Event count: ${events.length}');
     buf.writeln();
@@ -539,7 +507,6 @@ class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
   @override
   Widget build(BuildContext context) {
     final timelineAsync = ref.watch(timelineProvider);
-    final nowUtc = DateTime.now().toUtc();
     final cs = Theme.of(context).colorScheme;
 
     // Refreshed-at display time in KSA
@@ -554,46 +521,48 @@ class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
       onRefresh: _refresh,
       child: CustomScrollView(
         slivers: [
-          // Filter chips + bulk export row
+          // Active filters summary chips
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: Consumer(builder: (context, ref, _) {
+                final settings = ref.watch(liveFeedFilterProvider);
+                final chips = <Widget>[];
+                chips.add(Chip(
+                  label:
+                      Text(settings.dateFilter.label(DateTime.now().toUtc())),
+                ));
+                if (settings.sessions.isNotEmpty) {
+                  chips.addAll(
+                      settings.sessions.map((s) => Chip(label: Text(s))));
+                }
+                return Wrap(spacing: 6, runSpacing: 6, children: chips);
+              }),
+            ),
+          ),
+          // Bulk export row only (filter button moved to app bar)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
               child: Row(
                 children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          for (final filter in _FeedFilter.values)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: FilterChip(
-                                label: Text(filter.label(nowUtc)),
-                                selected: _filter == filter,
-                                onSelected: (_) =>
-                                    setState(() => _filter = filter),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Bulk export button (copies all filtered events)
+                  Expanded(child: const SizedBox.shrink()),
                   timelineAsync.whenOrNull(
-                    data: (events) {
-                      final filtered = events
-                          .where((e) => _matchesFilter(e, _filter))
-                          .toList();
-                      if (filtered.isEmpty) return null;
-                      return IconButton(
-                        onPressed: () => _copyBulkLog(filtered),
-                        icon: const Icon(Icons.copy_all),
-                        tooltip: 'Copy all ${filtered.length} events to clipboard',
-                        visualDensity: VisualDensity.compact,
-                      );
-                    },
-                  ) ?? const SizedBox.shrink(),
+                        data: (events) {
+                          final settings = ref.watch(liveFeedFilterProvider);
+                          final filtered =
+                              events.where(settings.matches).toList();
+                          if (filtered.isEmpty) return null;
+                          return IconButton(
+                            onPressed: () => _copyBulkLog(filtered),
+                            icon: const Icon(Icons.copy_all),
+                            tooltip:
+                                'Copy all ${filtered.length} events to clipboard',
+                            visualDensity: VisualDensity.compact,
+                          );
+                        },
+                      ) ??
+                      const SizedBox.shrink(),
                 ],
               ),
             ),
@@ -647,9 +616,8 @@ class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
               ),
             ),
             data: (events) {
-              final filtered = events
-                  .where((e) => _matchesFilter(e, _filter))
-                  .toList();
+              final settings = ref.watch(liveFeedFilterProvider);
+              final filtered = events.where(settings.matches).toList();
 
               if (filtered.isEmpty) {
                 return SliverFillRemaining(
@@ -668,14 +636,12 @@ class _LiveFeedScreenState extends ConsumerState<LiveFeedScreen> {
                         const SizedBox(height: 12),
                         Text(
                           'No events yet',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -828,8 +794,7 @@ class _EventCard extends StatelessWidget {
                       children: [
                         if (item.symbol.isNotEmpty) ...[
                           Icon(Icons.currency_exchange,
-                              size: 12,
-                              color: cs.onSurfaceVariant),
+                              size: 12, color: cs.onSurfaceVariant),
                           const SizedBox(width: 3),
                           Text(
                             item.symbol,
@@ -842,8 +807,7 @@ class _EventCard extends StatelessWidget {
                         ],
                         if (item.source.isNotEmpty) ...[
                           Icon(Icons.source_outlined,
-                              size: 12,
-                              color: cs.onSurfaceVariant),
+                              size: 12, color: cs.onSurfaceVariant),
                           const SizedBox(width: 3),
                           Text(
                             item.source,
@@ -857,8 +821,7 @@ class _EventCard extends StatelessWidget {
                         if (item.cycleId case final cycleId?
                             when cycleId.isNotEmpty) ...[
                           Icon(Icons.loop,
-                              size: 12,
-                              color: cs.onSurfaceVariant),
+                              size: 12, color: cs.onSurfaceVariant),
                           const SizedBox(width: 3),
                           Flexible(
                             child: Text(

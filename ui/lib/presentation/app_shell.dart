@@ -6,6 +6,7 @@ import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/live_feed/presentation/live_feed_screen.dart';
 import '../features/more/presentation/more_screen.dart';
 import '../features/trades/presentation/trades_screen.dart';
+import '../features/live_feed/presentation/filter_dialog.dart';
 import 'app_providers.dart';
 
 class AppShell extends ConsumerStatefulWidget {
@@ -183,6 +184,17 @@ class _AppShellState extends ConsumerState<AppShell> {
             tooltip: 'Refresh all',
             icon: const Icon(Icons.refresh),
           ),
+          if (_index == 1) // "Monitor" tab
+            IconButton(
+              icon: const Icon(Icons.filter_list),
+              tooltip: 'Filter live feed',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => const FilterDialog(),
+                );
+              },
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: FilledButton(
