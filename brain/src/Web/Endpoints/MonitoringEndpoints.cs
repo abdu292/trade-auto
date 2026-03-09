@@ -292,7 +292,8 @@ public static class MonitoringEndpoints
                     .Take(Math.Clamp(take, 1, 1000))
                     .ToListAsync(cancellationToken);
 
-                var ordered = events.OrderBy(x => x.CreatedAtUtc).ToList();
+                // Return newest events first so the monitor feed shows the latest activity at the top.
+                var ordered = events.OrderByDescending(x => x.CreatedAtUtc).ToList();
 
                 return TypedResults.Ok(new
                 {

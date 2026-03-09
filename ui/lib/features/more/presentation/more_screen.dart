@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../dashboard/presentation/dashboard_screen.dart';
 import '../../ledger/presentation/ledger_screen.dart';
 import '../../replay/presentation/replay_screen.dart';
 import '../../risk/presentation/risk_control_screen.dart';
@@ -15,13 +14,6 @@ class MoreScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      _MoreItem(
-        icon: Icons.dashboard,
-        label: 'Dashboard',
-        subtitle: 'KPIs, P&L and system overview',
-        color: Colors.blue.shade600,
-        builder: (_) => const DashboardScreen(isEmergencyPaused: false),
-      ),
       _MoreItem(
         icon: Icons.schedule,
         label: 'Sessions',

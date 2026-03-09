@@ -98,16 +98,19 @@ class StrategyControlScreen extends ConsumerWidget {
 
               children.addAll(
                 items.map(
-                  (item) => Card(
-                    child: ListTile(
-                      title: Text(item.name),
-                      subtitle: Text(item.description),
-                      trailing: item.isActive
-                          ? const Chip(label: Text('Active'))
-                          : FilledButton(
-                              onPressed: () => activate(item.id),
-                              child: const Text('Activate'),
-                            ),
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Card(
+                      child: ListTile(
+                        title: Text(item.name),
+                        subtitle: Text(item.description),
+                        trailing: item.isActive
+                            ? const Chip(label: Text('Active'))
+                            : FilledButton(
+                                onPressed: () => activate(item.id),
+                                child: const Text('Activate'),
+                              ),
+                      ),
                     ),
                   ),
                 ),

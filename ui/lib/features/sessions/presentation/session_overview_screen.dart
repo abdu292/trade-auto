@@ -47,13 +47,16 @@ class SessionOverviewScreen extends ConsumerWidget {
               return Column(
                 children: items
                     .map(
-                      (item) => Card(
-                        child: SwitchListTile(
-                          value: item.isEnabled,
-                          title: Text(item.session),
-                          subtitle:
-                              Text('Updated: ${item.updatedAtUtc.toLocal()}'),
-                          onChanged: (value) => toggle(item.session, value),
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Card(
+                          child: SwitchListTile(
+                            value: item.isEnabled,
+                            title: Text(item.session),
+                            subtitle:
+                                Text('Updated: ${item.updatedAtUtc.toLocal()}'),
+                            onChanged: (value) => toggle(item.session, value),
+                          ),
                         ),
                       ),
                     )
