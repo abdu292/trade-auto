@@ -92,7 +92,7 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
           _SectionCard(
             title: 'Pending Trade Approvals',
             subtitle:
-                'Review each suggestion. Do nothing to leave pending, or press Place to execute.',
+                'Review each suggestion. Do nothing to leave pending, or press Place to execute. This section is only used when Auto Trade is OFF and will stay empty when Auto Trade is ON.',
             child: approvals.when(
               data: (items) {
                 if (items.isEmpty) {
