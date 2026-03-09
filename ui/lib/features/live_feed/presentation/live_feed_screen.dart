@@ -80,11 +80,11 @@ bool _matchesFilter(RuntimeTimelineItem item, _FeedFilter filter) {
           ksaItemTime.month == ksaNow.month &&
           ksaItemTime.day == ksaNow.day;
     case _FeedFilter.lastWeek:
-      final ksaYesterday = ksaNow.subtract(const Duration(days: 1));
-      final ksaWeekAgo = ksaNow.subtract(const Duration(days: 7));
-      // Last week = yesterday back to 7 days ago (excludes today)
-      return ksaItemTime.isBefore(DateTime(ksaYesterday.year, ksaYesterday.month, ksaYesterday.day, 23, 59, 59)) &&
-          ksaItemTime.isAfter(DateTime(ksaWeekAgo.year, ksaWeekAgo.month, ksaWeekAgo.day));
+      final ksaStartOfToday = DateTime(ksaNow.year, ksaNow.month, ksaNow.day);
+      final ksaStartOfWeekAgo = ksaStartOfToday.subtract(const Duration(days: 7));
+      // Last week = events from 7 days ago (inclusive) up to (but not including) today
+      return !ksaItemTime.isBefore(ksaStartOfWeekAgo) &&
+          ksaItemTime.isBefore(ksaStartOfToday);
   }
 }
 

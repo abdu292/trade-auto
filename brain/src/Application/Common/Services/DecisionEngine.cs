@@ -288,7 +288,7 @@ public static class DecisionEngine
 
         if (grams < minTradeGrams)
         {
-            return NoTrade($"Capacity below {minTradeGrams:0}g minimum after spread/buffer.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
+            return NoTrade($"Capacity below {minTradeGrams:0.##}g minimum after spread/buffer.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
         }
 
         // Section 12.1: Session expiry caps — Japan/India: 30m, London: 25m, NY: 20m, Friday: 15m
@@ -405,7 +405,7 @@ public static class DecisionEngine
         if (gmax < minTradeGrams)
         {
             return NoTrade(
-                $"WarPremium capacity below {minTradeGrams:0}g after spread/buffer.",
+                $"WarPremium capacity below {minTradeGrams:0.##}g after spread/buffer.",
                 aiSignal.AlignmentScore,
                 snapshot,
                 cause: "CAPACITY",
@@ -464,7 +464,7 @@ public static class DecisionEngine
             if (stageGrams < minTradeGrams)
             {
                 return NoTrade(
-                    $"Stage grams below {minTradeGrams:0}g minimum.",
+                    $"Stage grams below {minTradeGrams:0.##}g minimum.",
                     aiSignal.AlignmentScore,
                     snapshot,
                     cause: "STAGE_CAPACITY",
@@ -529,7 +529,7 @@ public static class DecisionEngine
         if (reloadGrams < minTradeGrams)
         {
             return NoTrade(
-                $"Reload grams below {minTradeGrams:0}g minimum.",
+                $"Reload grams below {minTradeGrams:0.##}g minimum.",
                 aiSignal.AlignmentScore,
                 snapshot,
                 cause: "RELOAD_CAPACITY",

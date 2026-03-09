@@ -169,7 +169,7 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
     if (_isUpdatingMinGrams) return;
 
     final controller = TextEditingController(
-      text: currentValue.toStringAsFixed(0),
+      text: currentValue % 1 == 0 ? currentValue.toStringAsFixed(0) : currentValue.toStringAsFixed(2),
     );
     final messenger = ScaffoldMessenger.of(context);
 
@@ -189,10 +189,10 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: controller,
-              keyboardType: const TextInputType.numberWithOptions(decimal: false),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'Min Grams',
-                hintText: 'e.g. 100',
+                hintText: 'e.g. 50 or 0.5',
                 border: OutlineInputBorder(),
                 suffixText: 'g',
               ),
@@ -226,7 +226,7 @@ class _RiskControlScreenState extends ConsumerState<RiskControlScreen> {
       await ref.read(brainApiProvider).setMinTradeGrams(result);
       ref.invalidate(runtimeSettingsProvider);
       messenger.showSnackBar(
-        SnackBar(content: Text('Min trade grams updated to ${result.toStringAsFixed(0)} g.')),
+        SnackBar(content: Text('Min trade grams updated to ${result % 1 == 0 ? result.toStringAsFixed(0) : result.toStringAsFixed(2)} g.')),
       );
     } catch (error) {
       messenger.showSnackBar(
@@ -719,7 +719,7 @@ class _MinTradeGramsCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        '${grams.toStringAsFixed(0)} g',
+                        '${grams % 1 == 0 ? grams.toStringAsFixed(0) : grams.toStringAsFixed(2)} g',
                         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                               fontWeight: FontWeight.w700,
                               color: cs.primary,
