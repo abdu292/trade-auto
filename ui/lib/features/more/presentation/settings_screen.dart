@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../presentation/app_providers.dart';
@@ -16,6 +17,13 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isTogglingAutoTrade = false;
   bool _isUpdatingMinGrams = false;
+  late final Future<PackageInfo> _packageInfoFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _packageInfoFuture = PackageInfo.fromPlatform();
+  }
 
   Future<void> _openEnvironmentDialog(BuildContext context) async {
     final selected = ref.read(selectedApiEnvironmentProvider);
@@ -262,7 +270,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         // Min grams card
         _buildMinGramsCard(runtimeSettings),
         const SizedBox(height: 12),
+        _buildVersionTile(),
+        const SizedBox(height: 12),
       ],
+    );
+  }
+
+  Widget _buildVersionTile() {
+    return FutureBuilder<PackageInfo>(
+      future: _packageInfoFuture,
+      builder: (context, snapshot) {
+        final subtitle = snapshot.hasData
+            ? 'Version ${snapshot.data!.version} (${snapshot.data!.buildNumber})'
+            : snapshot.hasError
+                ? 'Version unavailable'
+                : 'Loading app version...';
+        return ListTile(
+          leading: const Icon(Icons.info_outline),
+          title: const Text('App Version'),
+          subtitle: Text(subtitle),
+        );
+      },
     );
   }
 
@@ -315,7 +343,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       Switch(
                         value: enabled,
                         onChanged: (_) => _toggleAutoTrade(enabled),
-                        activeColor: Colors.green.shade600,
+                        activeThumbColor: Colors.green.shade600,
                       ),
                   ],
                 ),
