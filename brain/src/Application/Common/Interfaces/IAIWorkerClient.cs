@@ -17,4 +17,14 @@ public interface IAIWorkerClient
         MarketSnapshotContract snapshot,
         StudyContextContract context,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Calls the aiworker /table-review endpoint after a trade is armed.
+    /// AIs review the proposed TABLE and return advisory commentary (APPROVE / CAUTION / SKIP).
+    /// This is a non-blocking advisory layer — it does not block or auto-execute any trade.
+    /// Returns null if the review call fails or times out (non-fatal).
+    /// </summary>
+    Task<TradeTableReviewResultContract?> TableReviewAsync(
+        TradeTableReviewRequestContract request,
+        CancellationToken cancellationToken);
 }

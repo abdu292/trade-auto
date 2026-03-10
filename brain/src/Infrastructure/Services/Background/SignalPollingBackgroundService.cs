@@ -66,6 +66,7 @@ public sealed class SignalPollingBackgroundService(
             var runtimeSettings = scope.ServiceProvider.GetRequiredService<ITradingRuntimeSettingsStore>();
             var db = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
             var timeline = scope.ServiceProvider.GetRequiredService<IRuntimeTimelineWriter>();
+            var notification = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
             try
             {
@@ -1559,6 +1560,64 @@ public sealed class SignalPollingBackgroundService(
                     approvals.Enqueue(pending);
                 }
 
+                // spec_v9: send TABLE to Telegram so human can review before confirming.
+                // Also fire AI review (non-blocking) and forward commentary to Telegram.
+                var tableMessage = BuildTableNotificationMessage(pending, directToMt5);
+                await notification.NotifyAsync("🔔 TRADE ARMED", tableMessage, stoppingToken);
+
+                // Fire-and-forget AI TABLE review — advisory layer, never blocks execution.
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var reviewRequest = new TradeTableReviewRequestContract(
+                            TradeId: pending.Id.ToString(),
+                            Symbol: pending.Symbol,
+                            Rail: pending.Type,
+                            Entry: pending.Price,
+                            Tp: pending.Tp,
+                            Grams: pending.Grams,
+                            Session: pending.Session,
+                            SessionPhase: pending.SessionPhase,
+                            EngineState: pending.EngineState,
+                            Cause: pending.Cause,
+                            WaterfallRisk: pending.WaterfallRisk,
+                            RiskState: pending.RiskState,
+                            AlignmentScore: pending.AlignmentScore,
+                            EfficiencyScore: decision.EfficiencyScore,
+                            ShopBuy: pending.ShopBuy,
+                            ShopSell: pending.ShopSell,
+                            Regime: pending.Regime,
+                            RegimeTag: pending.RegimeTag,
+                            Bucket: pending.Bucket,
+                            SizeClass: pending.SizeClass,
+                            TelegramState: pending.TelegramState,
+                            AiSummary: pending.Summary,
+                            CycleId: pending.CycleId);
+
+                        // Link to stoppingToken so the task respects service shutdown
+                        using var reviewCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                        reviewCts.CancelAfter(TimeSpan.FromSeconds(60));
+                        var review = await aiWorker.TableReviewAsync(reviewRequest, reviewCts.Token);
+
+                        if (review is not null)
+                        {
+                            var reviewMessage = BuildTableReviewMessage(review);
+                            using var notifyCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                            notifyCts.CancelAfter(TimeSpan.FromSeconds(15));
+                            await notification.NotifyAsync("🤖 AI TABLE REVIEW", reviewMessage, notifyCts.Token);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Service shutting down or timeout — not an error
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "AI TABLE review fire-and-forget failed for trade {TradeId}", pending.Id);
+                    }
+                }, CancellationToken.None);
+
                 _lastArmedAtUtc = DateTimeOffset.UtcNow;
 
                 // Reset waterfall failure counter on successful trade arm (PRD point 4)
@@ -2167,6 +2226,66 @@ public sealed class SignalPollingBackgroundService(
             "POST_SPIKE_PULLBACK" => "RANGE",
             _                 => "RANGE",
         };
+    }
+
+    /// <summary>
+    /// Formats an armed trade TABLE as a human-readable Telegram notification message.
+    /// Sent immediately when a trade is routed so the operator can review before confirming.
+    /// </summary>
+    private static string BuildTableNotificationMessage(PendingTradeContract pending, bool directToMt5)
+    {
+        var route = directToMt5 ? "MT5_DIRECT" : "APPROVAL_QUEUE";
+        var ksaExpiry = pending.ExpiryKSA != default
+            ? pending.ExpiryKSA.ToString("HH:mm 'KSA'")
+            : pending.Expiry.ToOffset(TimeSpan.FromHours(3)).ToString("HH:mm 'KSA'");
+        var utcExpiry = pending.ExpiryServer != default
+            ? pending.ExpiryServer.ToString("HH:mm 'UTC'")
+            : pending.Expiry.UtcDateTime.ToString("HH:mm 'UTC'");
+
+        var lines = new System.Text.StringBuilder();
+        lines.AppendLine($"Symbol: {pending.Symbol}  |  Rail: {pending.Type}");
+        lines.AppendLine($"Entry: {pending.Price:0.00}  |  TP: {pending.Tp:0.00}");
+        lines.AppendLine($"Grams: {pending.Grams:0.#} g  |  Size: {pending.SizeClass}");
+        lines.AppendLine($"Session: {pending.Session} ({pending.SessionPhase})");
+        lines.AppendLine($"Expiry: {ksaExpiry}  |  {utcExpiry}");
+        if (pending.ShopBuy > 0 || pending.ShopSell > 0)
+        {
+            lines.AppendLine($"Shop Buy: {pending.ShopBuy:0.00}  |  Sell: {pending.ShopSell:0.00}");
+        }
+        lines.AppendLine($"Risk: {pending.RiskState}  |  Waterfall: {pending.WaterfallRisk}");
+        lines.AppendLine($"Engine: {pending.EngineState}  |  Cause: {pending.Cause}");
+        lines.AppendLine($"Alignment: {pending.AlignmentScore:0.00}  |  Regime: {pending.RegimeTag}");
+        if (!string.IsNullOrWhiteSpace(pending.Summary))
+        {
+            lines.AppendLine($"AI: {pending.Summary}");
+        }
+        lines.AppendLine($"Route: {route}");
+        lines.Append($"ID: {pending.Id}");
+        return lines.ToString();
+    }
+
+    /// <summary>
+    /// Formats an AI TABLE review result as a Telegram message.
+    /// Sent after the async AI review completes so the operator sees the commentary.
+    /// </summary>
+    private static string BuildTableReviewMessage(TradeTableReviewResultContract review)
+    {
+        var actionEmoji = review.Action switch
+        {
+            "APPROVE" => "✅",
+            "SKIP"    => "⛔",
+            _         => "⚠️",
+        };
+        var providers = review.ProviderVotes is { Count: > 0 }
+            ? string.Join(", ", review.ProviderVotes.Select(v => v.Split(':')[0]))
+            : "n/a";
+
+        var lines = new System.Text.StringBuilder();
+        lines.AppendLine($"{actionEmoji} Action: {review.Action}  |  Confidence: {review.Confidence:0.00}");
+        lines.AppendLine($"Providers: {providers}");
+        lines.AppendLine(review.Reasoning);
+        lines.Append($"Trade ID: {review.TradeId}");
+        return lines.ToString();
     }
 }
 

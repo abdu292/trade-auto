@@ -64,4 +64,19 @@ public sealed class MockAIWorkerClient : IAIWorkerClient
 
         return Task.FromResult<StudyRefinementSuggestionContract?>(result);
     }
+
+    public Task<TradeTableReviewResultContract?> TableReviewAsync(
+        TradeTableReviewRequestContract request,
+        CancellationToken cancellationToken)
+    {
+        // Mock: return a CAUTION advisory for dev/test environments
+        var result = new TradeTableReviewResultContract(
+            TradeId: request.TradeId,
+            Action: "CAUTION",
+            Confidence: 0.6,
+            Reasoning: $"Mock TABLE review: {request.Rail} @ {request.Entry} TP={request.Tp} session={request.Session}. No real AI review in mock mode — please confirm manually.",
+            ProviderVotes: ["mock-review:CAUTION@default"]);
+
+        return Task.FromResult<TradeTableReviewResultContract?>(result);
+    }
 }
