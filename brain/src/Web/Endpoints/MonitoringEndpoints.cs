@@ -33,6 +33,7 @@ public static class MonitoringEndpoints
                 ITradeLedgerService ledger,
                 ILatestMarketSnapshotStore snapshotStore,
                 ILastGoldEngineStateStore engineStateStore,
+                ISetupLifecycleStore setupLifecycleStore,
                 IPendingTradeStore pendingTrades,
                 IConfiguration configuration) =>
             {
@@ -46,6 +47,8 @@ public static class MonitoringEndpoints
                 var buyableGrams = pricePerGramAed > 0m && ledgerState.DeployableCashAed > 0m
                     ? Math.Round(ledgerState.DeployableCashAed / pricePerGramAed, 2)
                     : 0m;
+                var symbol = snapshot?.Symbol ?? (configuration["Execution:Symbol"] ?? "XAUUSD.gram");
+                var lifecycleStatus = setupLifecycleStore.GetStatus(symbol);
 
                 return TypedResults.Ok(new
                 {
@@ -81,6 +84,19 @@ public static class MonitoringEndpoints
                         activeHazardWindow = engineStates.HazardWindowActive,
                         efficiencyState = engineStates.EfficiencyState,
                     },
+                    // Spec v9/v10 §1–2 — Setup lifecycle panel
+                    setupLifecycle = new
+                    {
+                        lifecycleState = lifecycleStatus.LifecycleState,
+                        pathType = lifecycleStatus.PathType,
+                        baseLevel = lifecycleStatus.BaseLevel,
+                        lidLevel = lifecycleStatus.LidLevel,
+                        triggerCondition = lifecycleStatus.TriggerCondition,
+                        createdAt = lifecycleStatus.CreatedAt,
+                        expiryWindow = lifecycleStatus.ExpiryWindow,
+                        invalidationReason = lifecycleStatus.InvalidationReason,
+                        plantedAt = lifecycleStatus.PlantedAt,
+                    },
                     tradeMapChart = new
                     {
                         bases = pathRouting?.PendingLimitPath != null
@@ -114,7 +130,7 @@ public static class MonitoringEndpoints
                 });
             })
             .WithName("GetGoldEngineDashboard")
-            .WithDescription("Spec v7 §10 — Physical Ledger card, MT5 Execution card, factor state panel, trade-map chart, execution mode.");
+            .WithDescription("Spec v7 §10 + v9/v10 — Physical Ledger card, MT5 Execution card, factor state panel, setup lifecycle panel, trade-map chart, execution mode.");
 
         // Spec v7 §9 — Auto-Tune Phase 1: report only, no auto-apply
         monitoring.MapGet(

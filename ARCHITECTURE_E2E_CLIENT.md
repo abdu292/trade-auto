@@ -106,6 +106,11 @@ Brain receives the snapshot and:
 - stores latest snapshot in memory for decision cycles
 - writes timeline telemetry event
 
+**Spec v8 enrichments applied in Brain (not in EA):**
+- `Ma20M5` — MA20 from the M5 timeframe candle (enriched from `TimeframeData`)
+- `GeoRiskFlag` — derived from AI signal `GeoHeadline` / `EventRisk` (true when geopolitical or macro risk is elevated)
+- `NewsEventFlag` — true when ForexFactory reports high-impact USD/XAU news nearby
+
 At this point, no trade is placed yet.
 
 
@@ -205,6 +210,53 @@ Pattern Detector feeds PRETABLE directly:
 - Range/reload pathway:
    - `RANGE_RELOAD` / `LIQUIDITY_SWEEP` / reclaim-retest-compression actions
    - Result: biases legal pending pullback path (`BUY_LIMIT`) at structural reclaim/base zones
+
+
+## Step 4c: Setup Lifecycle / Candidate Memory (spec v9 / v10)
+After the decision stack and pattern detector, the engine tracks setup lifecycle state across cycles.
+
+**Problem addressed:** The engine previously evaluated only the *current* candle state. If structure became valid on cycle N but price expanded quickly before the order was placed, cycle N+1 would see `OVEREXTENDED_ABOVE_BASE` and block the trade — with no record that a valid setup had been detected earlier.
+
+**Solution:** A per-symbol `SetupLifecycleStore` (singleton) persists the ARMED candidate between cycles.
+
+### Lifecycle states
+| State | Meaning |
+|---|---|
+| `FORMING` | Structure starting to form, not yet fully valid |
+| `ARMED` | Structure fully valid; pending order should be planted |
+| `ORDER_PLANTED` | Pending order successfully queued (MT5 or approvals) |
+| `PASSED_OVEREXTENDED` | Setup was armed but window missed — entry level no longer reachable |
+| `INVALIDATED` | Candidate invalidated by safety condition change |
+
+### Transition rules
+- **ARMED**: stored when `GoldEngineDecisionStack.ProceedToAi == true` (structure valid, safety passes).
+- **Invalidation**: if next cycle detects waterfall HIGH, active hazard window, spread explosion, or entry level violated → `INVALIDATED`.
+- **BUY_STOP + overextended**: price expanded past lid → `PASSED_OVEREXTENDED` (entry would be a chase).
+- **BUY_LIMIT + overextended + entry still reachable**: candidate STAYS ARMED (price may pull back to base).
+- **BUY_LIMIT override**: when current cycle is `OVEREXTENDED` but an ARMED BUY_LIMIT candidate still satisfies pending-before-level law and safety, the engine proceeds to AI and decision engine using the candidate's structural context. The overextension filter blocks late chase entries, not valid BUY_LIMIT setups at structural base.
+- **ORDER_PLANTED**: set immediately after the pending trade is queued.
+
+### Diagnostic logging
+Every `GOLD_ENGINE_DECISION_STACK` timeline event now includes:
+- `candidateState` — current lifecycle state (NONE / FORMING / ARMED / ORDER_PLANTED / PASSED_OVEREXTENDED / INVALIDATED)
+- `candidateCreatedAt` — when the armed candidate was stored
+- `candidateBase` — structural base level in the candidate
+- `candidateLid` — structural lid level in the candidate
+- `candidatePath` — path type in the candidate (BUY_LIMIT / BUY_STOP)
+- `candidateExpiry` — expiry window for the candidate
+- `whyNotArmedEarlier` — diagnostic reason when no candidate exists and cycle is not valid
+
+A `SETUP_LIFECYCLE_OVERRIDE` timeline event is emitted whenever the armed candidate overrides an OVEREXTENDED cycle.
+
+### Candidate expiry (session-aligned)
+- Japan: 120 min
+- India: 150 min
+- London: 90 min
+- New York: 60 min
+
+### Dashboard exposure
+`GET /api/monitoring/dashboard` now includes a `setupLifecycle` panel with:
+`lifecycleState`, `pathType`, `baseLevel`, `lidLevel`, `triggerCondition`, `createdAt`, `expiryWindow`, `invalidationReason`, `plantedAt`
 
 
 ## Step 5: Economic News Gate
@@ -549,6 +601,7 @@ Current code implements a core subset in the live path, while other modules rema
 19. Confidence scoring — active before AI handoff; low-confidence trade paths are converted into explicit wait states
 20. Rotation Efficiency Engine — active in rotation optimizer and surfaced in monitoring state
 21. Gold-engine dashboard backend payload — monitoring endpoint exposes ledger truth, execution-account state, factor states, confidence, efficiency, and trade-map data
+22. Setup Lifecycle / Candidate Memory Layer (spec v9/v10) — per-symbol lifecycle tracker persists ARMED candidates across polling cycles; `GOLD_ENGINE_DECISION_STACK` timeline event now carries full diagnostic fields (`candidateState`, `candidateCreatedAt`, `candidateBase`, `candidateLid`, `candidatePath`, `candidateExpiry`, `whyNotArmedEarlier`); dashboard `/monitoring/dashboard` exposes `setupLifecycle` panel
 
 ### Planned / Partial
 The following map items are target modules and not fully implemented as standalone production modules yet:
@@ -708,15 +761,66 @@ No single layer can force a trade by itself.
 A trade must pass:
 1) ledger/capital truth,
 2) gold-engine structure + overextension + path routing,
-3) pattern safety check,
-4) news/hazard/waterfall gates,
-5) AI Gate (freshness, risk state, session budget),
-6) AI single-lead model decision,
-7) trade scoring + PRETABLE + rotation efficiency,
-8) decision engine protections (including dual-path bottom permission and pending-before-level legality),
-9) post-decision capital utilization + portfolio exposure legality gates,
-10) routing policy and Auto Trade toggle check,
-11) and (if Auto Trade OFF or manual path) your explicit approval.
+3) setup lifecycle check (ARMED candidate from prior cycle may override OVEREXTENDED for BUY_LIMIT setups),
+4) pattern safety check,
+5) news/hazard/waterfall gates,
+6) AI Gate (freshness, risk state, session budget),
+7) AI single-lead model decision,
+8) trade scoring + PRETABLE + rotation efficiency,
+9) decision engine protections (including dual-path bottom permission and pending-before-level legality),
+10) post-decision capital utilization + portfolio exposure legality gates,
+11) routing policy and Auto Trade toggle check,
+12) and (if Auto Trade OFF or manual path) your explicit approval.
 
 That is the real, code-backed end-to-end architecture currently running in this project.
+
+---
+
+## Spec Version Change Log
+
+### spec v7 (core gold engine constitution)
+- Replaced generic "no M5 trigger = abort" with path-aware decision stack
+- Explicit path model: `BUY_LIMIT` / `BUY_STOP` / `WAIT_PULLBACK` / `OVEREXTENDED` / `STAND_DOWN`
+- `BUY_LIMIT` can proceed without M5 trigger when base/reclaim structure is valid
+- `BUY_STOP` requires M5 + impulse confirmation; reason code `BUY_STOP_BREAKOUT_NOT_READY` when not ready
+- Overextension Detector added (MA20 distance, RSI, candle range, distance-from-base)
+- Sweep + Reclaim Detector added (`NONE` / `SWEEP_ONLY` / `SWEEP_RECLAIM` / `FAILED_RECLAIM`)
+- Confidence score (0–100): `<60` = WAIT, `60–74` = MICRO, `75–89` = normal, `≥90` = high
+- Session starter multipliers and expiry bands (Japan/India/London/NY)
+- Physical Ledger card + MT5 Execution Account card separation in dashboard
+- Factor state panel and trade-map chart in dashboard backend
+- Auto-Tune Phase 1 = report only, no auto-apply
+
+### spec v8 (efficiency + enrichment layer)
+- `MarketSnapshotContract` enriched with `Ma20M5`, `GeoRiskFlag`, `NewsEventFlag` (Brain-side, not EA)
+- Rotation Efficiency Engine: efficiency score 0–100, states `HIGH` / `MEDIUM` / `LOW` / `CAPITAL_SLEEP_RISK`
+- Efficiency metrics: same-session TP probability, expected AED return, hold time (ATR-based), AED/min, sleep risk
+- `CAPITAL_SLEEP_RISK` triggered at ≥180 min hold or ADR ≥85% or Friday overlap
+- `DecisionResultContract` includes `Limit1` / `Limit2` / `Stop1` entry levels and `EfficiencyScore`
+- `EngineStatesContract` includes `EfficiencyState`
+- `ITradingRuntimeSettingsStore` + `InMemoryTradingRuntimeSettingsStore` with configurable `MinTradeGrams` (default 0.1g) and `MicroRotationEnabled` toggle
+- `PUT /api/monitoring/runtime-settings/min-trade-grams` and `/micro-rotation` runtime API endpoints
+- `MICRO_ROTATION_MODE`: single pending trade cap, no stagger, mandatory TP/expiry
+- Capital Utilization Gate (CR10): `CapitalUtilizationService.Check()` approves/resizes/rejects orders; emits `CAPITAL_UTILIZATION_CHECK` timeline event
+- Portfolio Exposure Gate: rejects when projected grams exceeds 25% of account equity
+- Physical ledger initial balance settable from mobile app (separate from MT5 account state)
+
+### spec v9 (setup lifecycle — problem statement)
+- Identified that the engine evaluated only the current candle state
+- When structure was valid on cycle N but price expanded before order placement, cycle N+1 would produce only `OVEREXTENDED_ABOVE_BASE` with no record of the earlier valid setup
+- Defined the lifecycle model: `FORMING → ARMED → ORDER_PLANTED → PASSED_OVEREXTENDED → INVALIDATED`
+- Defined candidate memory fields: base level, lid level, path type, trigger condition, expiry window, invalidation condition
+- Required logging of: `candidateState`, `candidateCreatedAt`, `candidateBase`, `candidateLid`, `candidatePath`, `candidateExpiry`, `whyNotArmedEarlier`
+- Required behavior: `OVEREXTENDED` state must not erase an already-ARMED BUY_LIMIT candidate
+
+### spec v10 (setup lifecycle — full implementation)
+- Setup lifecycle tracking fully implemented as singleton `ISetupLifecycleStore` / `InMemorySetupLifecycleStore`
+- ARMED candidate stored when `GoldEngineDecisionStack.ProceedToAi == true`
+- BUY_LIMIT armed candidate overrides `OVEREXTENDED` when safety still passes and entry level < current bid (`SETUP_LIFECYCLE_OVERRIDE` event emitted)
+- BUY_STOP armed candidate marks `PASSED_OVEREXTENDED` when price expands past lid (chasing entry blocked)
+- Candidate invalidated when: expired, waterfall HIGH, active hazard window, spread ≥ 0.7
+- `GOLD_ENGINE_DECISION_STACK` timeline event extended with all six lifecycle diagnostic fields
+- `GET /api/monitoring/dashboard` response extended with `setupLifecycle` panel
+- Candidate expiry is session-aligned (Japan 120 min / India 150 min / London 90 min / NY 60 min)
+- All existing safety protections (waterfall, hazard, spread, pending-before-level, capital gates) remain intact and are checked BEFORE any lifecycle override is applied
 

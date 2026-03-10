@@ -18,7 +18,8 @@ public sealed class SignalPollingBackgroundService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
     ILogger<SignalPollingBackgroundService> logger,
-    DynamicSessionRiskService dynamicSessionRisk) : BackgroundService
+    DynamicSessionRiskService dynamicSessionRisk,
+    ISetupLifecycleStore setupLifecycleStore) : BackgroundService
 {
     private static DateTimeOffset _lastArmedAtUtc = DateTimeOffset.MinValue;
     private static readonly Lock _transitionGate = new();
@@ -322,6 +323,25 @@ public sealed class SignalPollingBackgroundService(
                     },
                     cancellationToken: stoppingToken);
 
+                // ── Spec v9/v10 §5: Setup lifecycle — read existing candidate for diagnostic logging ──
+                var existingCandidate = setupLifecycleStore.GetCandidate(snapshot.Symbol);
+                string? whyNotArmedEarlier = null;
+                if (!decisionStackResult.ProceedToAi)
+                {
+                    whyNotArmedEarlier = existingCandidate switch
+                    {
+                        { LifecycleState: SetupLifecycleState.PassedOverextended } c
+                            => $"Prior ARMED candidate window passed: {c.InvalidationReason ?? "overextended"}",
+                        { LifecycleState: SetupLifecycleState.Invalidated } c
+                            => $"Prior candidate invalidated: {c.InvalidationReason ?? "safety changed"}",
+                        { LifecycleState: SetupLifecycleState.Armed }
+                            => null,  // still armed — not a missed window yet
+                        null
+                            => $"No prior candidate — path: {decisionStackResult.PathState} reason: {decisionStackResult.ReasonCode ?? "none"}",
+                        _ => null,
+                    };
+                }
+
                 await timeline.WriteAsync(
                     eventType: "GOLD_ENGINE_DECISION_STACK",
                     stage: "rule_engine",
@@ -354,6 +374,14 @@ public sealed class SignalPollingBackgroundService(
                             decisionStackResult.EngineStates.ReasonCode,
                             decisionStackResult.EngineStates.HazardWindowActive,
                         },
+                        // Spec v9/v10 §5 — Lifecycle diagnostic fields
+                        candidateState = existingCandidate?.LifecycleState ?? "NONE",
+                        candidateCreatedAt = existingCandidate?.CreatedAt,
+                        candidateBase = existingCandidate?.BaseLevel,
+                        candidateLid = existingCandidate?.LidLevel,
+                        candidatePath = existingCandidate?.PathType,
+                        candidateExpiry = existingCandidate?.ExpiryWindow,
+                        whyNotArmedEarlier,
                     },
                     cancellationToken: stoppingToken);
 
@@ -369,6 +397,134 @@ public sealed class SignalPollingBackgroundService(
                         decisionStackResult.M15Setup,
                         decisionStackResult.ReasonCode ?? $"PATH_{decisionStackResult.PathState}",
                         decisionStackResult.MarketRegime);
+
+                // ── Spec v9/v10 §1–3: Setup Lifecycle tracking ──────────────────────────────
+                // ARM candidate when structure is valid; handle lifecycle transitions when not valid.
+                if (decisionStackResult.ProceedToAi)
+                {
+                    // Structure is valid: store ARMED candidate (§1 transition FORMING → ARMED).
+                    var (candidateSession, _) = TradingSessionClock.Resolve(snapshot.KsaTime);
+                    var candidateExpiryMinutes = candidateSession switch
+                    {
+                        "JAPAN" => 120,
+                        "INDIA" => 150,
+                        "LONDON" => 90,
+                        "NY" => 60,
+                        _ => 120,
+                    };
+                    var candidateBase = decisionStackResult.PathRouting?.PendingLimitPath?.S1BaseShelf
+                        ?? (snapshot.SessionLow > 0m ? snapshot.SessionLow
+                            : snapshot.PreviousSessionLow > 0m ? snapshot.PreviousSessionLow
+                            : snapshot.Bid);
+                    var candidateLid = snapshot.SessionHigh > 0m ? snapshot.SessionHigh : snapshot.PreviousSessionHigh;
+                    setupLifecycleStore.StoreArmedCandidate(snapshot.Symbol, new ArmedSetupCandidate(
+                        PathType: decisionStackResult.PathState,
+                        BaseLevel: candidateBase,
+                        LidLevel: candidateLid,
+                        TriggerCondition: decisionStackResult.ReasonCode
+                            ?? decisionStackResult.M15Setup?.Reason
+                            ?? "STRUCTURE_VALID",
+                        ExpiryWindow: DateTimeOffset.UtcNow.AddMinutes(candidateExpiryMinutes),
+                        InvalidationCondition: "WATERFALL_HIGH|HAZARD|SPREAD_BLOCK|STRUCTURE_BREAK",
+                        CreatedAt: DateTimeOffset.UtcNow,
+                        CycleId: cycleId,
+                        ConfidenceScore: decisionStackResult.ConfidenceScore.Score));
+                }
+                else if (existingCandidate != null && existingCandidate.LifecycleState == SetupLifecycleState.Armed)
+                {
+                    // Safety changes: invalidate candidate when conditions change.
+                    if (existingCandidate.IsExpired)
+                    {
+                        setupLifecycleStore.MarkInvalidated(snapshot.Symbol, "CANDIDATE_EXPIRED");
+                    }
+                    else if (waterfallRiskForStack == "HIGH" || activeHazardWindowBlockNow || snapshot.Spread >= 0.7m)
+                    {
+                        setupLifecycleStore.MarkInvalidated(snapshot.Symbol, "SAFETY_CONDITION_CHANGED");
+                    }
+                    else if (decisionStackResult.PathState == PathState.Overextended
+                        && string.Equals(existingCandidate.PathType, PathState.BuyStop, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // BUY_STOP + overextended: price expanded past lid → chase risk → mark passed.
+                        setupLifecycleStore.MarkPassedOverextended(snapshot.Symbol, "OVEREXTENDED_AFTER_BUY_STOP_ARM");
+                    }
+                    else if (decisionStackResult.PathState == PathState.Overextended
+                        && string.Equals(existingCandidate.PathType, PathState.BuyLimit, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // BUY_LIMIT + overextended: check if entry level is still valid under pending-before-level law.
+                        // BUY_LIMIT entry must be < current bid.  If bid ≤ 0, guards are skipped (same as DecisionEngine rule).
+                        var entryBelowBid = snapshot.Bid <= 0m || existingCandidate.BaseLevel < snapshot.Bid;
+                        if (!entryBelowBid)
+                        {
+                            setupLifecycleStore.MarkPassedOverextended(snapshot.Symbol, "ENTRY_LEVEL_EXCEEDED_BY_CURRENT_BID");
+                        }
+                        // else: candidate remains ARMED — the BUY_LIMIT entry is still reachable on pullback.
+                    }
+                }
+
+                // ── Spec v9/v10 §3: BUY_LIMIT armed candidate override ───────────────────────
+                // When current cycle is OVEREXTENDED but a BUY_LIMIT candidate is still ARMED and
+                // safety passes, allow the cycle to continue (overextension must not erase earlier
+                // valid BUY_LIMIT setups — the base level is still reachable on pullback).
+                var refreshedCandidate = setupLifecycleStore.GetCandidate(snapshot.Symbol);
+                if (!setupCandidate.IsValid
+                    && refreshedCandidate is { LifecycleState: SetupLifecycleState.Armed } armedOverride
+                    && string.Equals(armedOverride.PathType, PathState.BuyLimit, StringComparison.OrdinalIgnoreCase)
+                    && !armedOverride.IsExpired
+                    && decisionStackResult.PathState == PathState.Overextended
+                    && decisionStackResult.M15Setup != null
+                    && waterfallRiskForStack != "HIGH"
+                    && !activeHazardWindowBlockNow
+                    && snapshot.Spread < 0.7m
+                    && (snapshot.Bid <= 0m || armedOverride.BaseLevel < snapshot.Bid))
+                {
+                    logger.LogInformation(
+                        "SETUP_LIFECYCLE_OVERRIDE — BUY_LIMIT armed candidate overrides OVEREXTENDED. " +
+                        "Base={Base} ArmedAt={ArmedAt} ArmedCycleId={ArmedCycleId} Confidence={Score}",
+                        armedOverride.BaseLevel,
+                        armedOverride.CreatedAt,
+                        armedOverride.CycleId,
+                        armedOverride.ConfidenceScore);
+
+                    await timeline.WriteAsync(
+                        eventType: "SETUP_LIFECYCLE_OVERRIDE",
+                        stage: "rule_engine",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            overrideReason = "BUY_LIMIT_ARMED_CANDIDATE_OVERRIDES_OVEREXTENDED",
+                            armedCandidateCycleId = armedOverride.CycleId,
+                            armedCandidateCreatedAt = armedOverride.CreatedAt,
+                            candidateBase = armedOverride.BaseLevel,
+                            candidateLid = armedOverride.LidLevel,
+                            candidatePath = armedOverride.PathType,
+                            candidateExpiry = armedOverride.ExpiryWindow,
+                            candidateConfidence = armedOverride.ConfidenceScore,
+                            currentPathState = decisionStackResult.PathState,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    // Override setupCandidate to allow the cycle to proceed to AI and decision engine.
+                    setupCandidate = SetupCandidateResult.Valid(
+                        decisionStackResult.H1Context,
+                        decisionStackResult.M15Setup,
+                        decisionStackResult.M5Entry ?? new M5EntryResult(
+                            IsValid: true,
+                            IsBreakout: false,
+                            IsMomentumShift: false,
+                            IsRetest: false,
+                            Reason: $"Armed candidate override: {armedOverride.TriggerCondition}"),
+                        decisionStackResult.MarketRegime,
+                        decisionStackResult.ImpulseConfirmation ?? new ImpulseConfirmationResult(
+                            IsConfirmed: true,
+                            HasMomentumExpansion: false,
+                            HasRangeExpansion: false,
+                            HasBodyExpansion: false,
+                            ImpulseScore: 0m,
+                            Reason: "Armed candidate override"));
+                }
 
                 var lastEngineStore = scope.ServiceProvider.GetRequiredService<ILastGoldEngineStateStore>();
                 lastEngineStore.SetLast(decisionStackResult.EngineStates, decisionStackResult.PathRouting, snapshot);
@@ -1559,6 +1715,9 @@ public sealed class SignalPollingBackgroundService(
                 {
                     approvals.Enqueue(pending);
                 }
+
+                // Spec v9/v10 §1: transition armed candidate to ORDER_PLANTED.
+                setupLifecycleStore.MarkOrderPlanted(snapshot.Symbol, cycleId);
 
                 // spec_v9: send TABLE to Telegram so human can review before confirming.
                 // Also fire AI review (non-blocking) and forward commentary to Telegram.
