@@ -34,7 +34,9 @@ public static class DecisionEngine
         LedgerStateContract ledgerState,
         string? strategyProfileName = null,
         decimal minTradeGrams = 100m,
-        decimal pretableSizeModifier = 1.0m)
+        decimal pretableSizeModifier = 1.0m,
+        string? preferredPathState = null,
+        PendingLimitPathContract? pendingLimitPath = null)
     {
         if (!IsSupportedGoldSymbol(snapshot.Symbol))
         {
@@ -89,7 +91,7 @@ public static class DecisionEngine
         return regimeTag switch
         {
             "WAR_PREMIUM" or "DEESCALATION_RISK" => EvaluateWarPremium(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState, minTradeGrams),
-            _ => EvaluateStandard(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState, minTradeGrams, pretableSizeModifier),
+            _ => EvaluateStandard(snapshot, regime, aiSignal, ledgerState, regimeTag, riskState, minTradeGrams, pretableSizeModifier, preferredPathState, pendingLimitPath),
         };
     }
 
@@ -101,7 +103,9 @@ public static class DecisionEngine
         string regimeTag,
         string riskState,
         decimal minTradeGrams,
-        decimal pretableSizeModifier = 1.0m)
+        decimal pretableSizeModifier = 1.0m,
+        string? preferredPathState = null,
+        PendingLimitPathContract? pendingLimitPath = null)
     {
         var session = NormalizeSession(snapshot.Session);
         var waterfallRisk = ResolveWaterfallRiskStandard(snapshot, regime, aiSignal);
@@ -230,9 +234,34 @@ public static class DecisionEngine
 
         // Section 11.2: BuyStop — H1 above MA20, RSI 55-73, M15 compression ≥6, one at a time
         var buyStopAllowed = IsBuyStopAllowed(snapshot, cause, mode, waterfallRisk, telegramState, ledgerState);
-        var rail = buyStopAllowed && railPermissionB == "ALLOWED"
-            ? "BUY_STOP"
-            : "BUY_LIMIT";
+        string rail;
+        if (preferredPathState == PathState.BuyStop)
+        {
+            if (!buyStopAllowed || railPermissionB != "ALLOWED")
+            {
+                return NoTrade(
+                    WaitReasonCode.BuyStopBreakoutNotReady,
+                    score,
+                    snapshot,
+                    waterfallRisk: waterfallRisk,
+                    cause: WaitReasonCode.BuyStopBreakoutNotReady,
+                    mode: mode,
+                    railPermissionA: railPermissionA,
+                    railPermissionB: railPermissionB);
+            }
+
+            rail = "BUY_STOP";
+        }
+        else if (preferredPathState == PathState.BuyLimit)
+        {
+            rail = "BUY_LIMIT";
+        }
+        else
+        {
+            rail = buyStopAllowed && railPermissionB == "ALLOWED"
+                ? "BUY_STOP"
+                : "BUY_LIMIT";
+        }
 
         if (rail == "BUY_STOP" && railPermissionB == "BLOCKED")
         {
@@ -252,7 +281,9 @@ public static class DecisionEngine
         {
             // Section 11.1: Buffer = max(1.5 USD, 0.2 × ATR_M15); EntryMT5 = support − Buffer
             entryOffset = Math.Max(1.5m, 0.2m * atrM15);
-            entry = primaryClose - entryOffset;
+            entry = pendingLimitPath?.S1BaseShelf > 0m && (snapshot.Bid <= 0m || pendingLimitPath.S1BaseShelf < snapshot.Bid)
+                ? pendingLimitPath.S1BaseShelf
+                : primaryClose - entryOffset;
         }
 
         // §G Pending-Before-Level Law (refinement spec §G):
@@ -314,9 +345,10 @@ public static class DecisionEngine
 
         var maxGrams = ToMaxAffordableGrams(bucketCash, entry) - SafetyBufferGrams;
         var sizePct = ParseSizePercent(sizeClass);
+        var sessionMultiplier = GetSessionSizeMultiplier(session, snapshot.IsFriday);
         // CR11 PRETABLE: apply sizeModifier from PRETABLE intelligence layer.
         // CAUTION → 0.60 multiplier; SAFE → 1.0; BLOCK → 0.0 (already handled above).
-        var effectiveSizePct = sizePct * Math.Clamp(pretableSizeModifier, 0m, 1m);
+        var effectiveSizePct = sizePct * Math.Clamp(pretableSizeModifier, 0m, 1m) * sessionMultiplier;
         var gramsFromSizeClass = ToMaxAffordableGrams(bucketCash * effectiveSizePct, entry);
         var grams = Math.Floor(Math.Min(maxGrams, gramsFromSizeClass));
 
@@ -1190,23 +1222,40 @@ public static class DecisionEngine
     }
 
     /// <summary>
-    /// CR11 §EXPIRY_RULE: Session expiry bands.
-    /// Asia/India setups → 45–60 minutes (use midpoint 52 min).
-    /// London setups     → 30–45 minutes (use midpoint 37 min).
-    /// NY setups         → 20–30 minutes (use midpoint 25 min).
-    /// Friday tight windows: 15 min.
+    /// Spec v7/v8 starter expiry bands.
+    /// Japan 90–120m, India 90–150m, London 60–90m, NY 45–60m.
+    /// Friday trims to the lower half of the band, but does not override the band completely.
     /// </summary>
     private static TimeSpan GetSessionExpiryDurationStandard(string session, bool isFriday)
     {
-        if (IsFridayLondonOrNy(session, isFriday)) return TimeSpan.FromMinutes(15);
-        return session switch
+        var minutes = session switch
         {
-            "JAPAN"  => TimeSpan.FromMinutes(52),   // CR11: Asia 45–60 min
-            "INDIA"  => TimeSpan.FromMinutes(52),   // CR11: Asia 45–60 min
-            "LONDON" => TimeSpan.FromMinutes(37),   // CR11: London 30–45 min
-            "NY"     => TimeSpan.FromMinutes(25),   // CR11: NY 20–30 min
-            _        => TimeSpan.FromMinutes(37),
+            "JAPAN"  => isFriday ? 90 : 105,
+            "INDIA"  => isFriday ? 90 : 120,
+            "LONDON" => isFriday ? 60 : 75,
+            "NY"     => isFriday ? 45 : 52,
+            _ => 75,
         };
+        return TimeSpan.FromMinutes(minutes);
+    }
+
+    private static decimal GetSessionSizeMultiplier(string session, bool isFriday)
+    {
+        var multiplier = session switch
+        {
+            "JAPAN" => 0.5m,
+            "INDIA" => 0.7m,
+            "LONDON" => 1.0m,
+            "NY" => 0.6m,
+            _ => 0.6m,
+        };
+
+        if (isFriday && session is "LONDON" or "NY")
+        {
+            multiplier = Math.Min(multiplier, 0.5m);
+        }
+
+        return multiplier;
     }
 
     /// <summary>

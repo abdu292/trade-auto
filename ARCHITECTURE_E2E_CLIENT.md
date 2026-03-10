@@ -20,12 +20,12 @@ Scope note:
 The system works like a guarded decision factory:
 
 1. MT5 continuously sends live market state to Brain.
-2. Brain runs strict structural and risk filters first.
-3. Pattern Detector identifies live structural patterns (sweep, waterfall, breakout, trap, etc.).
-4. Only valid opportunities are sent to the AI worker.
-5. AI is run in a single-lead live path (with deterministic gate + failover protections).
-6. Brain applies trade score + pre-execution risk intelligence (impulse/sweep/session sizing), then final decision-engine rules.
-7. Post-decision execution legality gates run (capital utilization + portfolio exposure).
+2. Brain treats the physical ledger as capital truth and subtracts reserved pending exposure before any new decision.
+3. Brain runs the gold-engine decision stack first: regime, H1/M15 structure, overextension, sweep/reclaim, path routing, and confidence gating.
+4. Pattern Detector and PRETABLE risk intelligence refine legality and sizing, but they do not override hard blockers.
+5. Only path-valid opportunities are sent to the AI worker.
+6. AI is run in a single-lead live path (with deterministic gate protections); AI can support, but not bypass, the path state.
+7. Brain applies rotation efficiency, final decision-engine rules, and post-decision legality gates.
 8. Trade is either rejected, queued for client approval, or sent to MT5 queue (based on Auto Trade toggle and execution mode).
 9. Client can approve or reject queued trades.
 10. MT5 executes only after final release and sends status back.
@@ -135,18 +135,36 @@ Each regime detection cycle emits a `MARKET_REGIME_DETECTED` timeline event that
 
 These fields are present in both the live and replay timeline logs for full observability.
 
-### 4.2 Four-layer structural rule engine
-Must pass all relevant layers:
-- H1 context
-- M15 setup
-- M5 entry
-- impulse confirmation
+### 4.2 Gold Engine decision stack
+The live path now uses an explicit path-aware decision stack before AI.
 
-If rule engine fails:
+Mandatory order in current code:
+- ledger / deployable cash truth
+- session + phase resolution
+- macro/risk veto inputs (news flags, active hazard windows, waterfall state)
+- regime classification
+- H1 context + M15 structure
+- Overextension Detector
+- Liquidity Sweep + Reclaim detector
+- path routing
+- confidence score gate
+
+Path routing always classifies one of these states:
+- `BUY_LIMIT`
+- `BUY_STOP`
+- `WAIT_PULLBACK`
+- `OVEREXTENDED`
+- `STAND_DOWN`
+
+Important live behavior:
+- there is no longer a universal “no M5 trigger = abort” rule
+- `BUY_LIMIT` can proceed with M5 optional when structure/base/reclaim is valid
+- `BUY_STOP` still requires M5 + impulse readiness, and if not ready the explicit reason is `BUY_STOP_BREAKOUT_NOT_READY`
+- active hazard windows, spread block, waterfall block, and capital/exposure violations now surface as explicit reason codes instead of generic aborts
+
+If this stack rejects the cycle:
 - AI is skipped
-- cycle ends `NO_TRADE`
-
-This prevents AI from inventing trades without structure.
+- timeline records `GOLD_ENGINE_DECISION_STACK` and then `PATH_WAIT` or `FINAL_DECISION`
 
 
 ## Step 4b: Pattern Detector
@@ -195,6 +213,10 @@ If structural setup passes, Brain checks economic-news risk.
 If news gate blocks:
 - cycle ends `NO_TRADE`
 - no AI order candidate is released
+
+Related hard block behavior already active before final order generation:
+- active hazard window at cycle time blocks the gold-engine stack immediately
+- blocked hazard windows are checked again against proposed expiry before routing, so even a legal setup is rejected if its life would cross a blocked window
 
 
 ## Step 6: AI Analysis Is Requested
@@ -264,6 +286,8 @@ After score passes, Brain runs a risk-intelligence layer before the final decisi
 - Risk classifier (`SAFE` / `CAUTION` / `BLOCK`) with `riskScore`, `riskFlags`, `sizeModifier`
 - Dynamic Session Risk modifier lookup (session-specific multiplier with safety bounds)
 - Execution mode selector (`SINGLE_ENTRY`, `STAGGERED`, `BUY_STOP`, `STAND_DOWN`)
+- Rotation Efficiency Engine (`HIGH` / `MEDIUM` / `LOW` / `CAPITAL_SLEEP_RISK`)
+- carried-over gold-engine factor states (`legalityState`, `biasState`, `pathState`, `sizeState`, `exitState`, `overextensionState`, confidence tier)
 
 Timeline observability (live):
 - risk-intelligence decision events are emitted for auditability
@@ -273,6 +297,7 @@ Hard behavior:
 - `rotation mode = STAND_DOWN` -> immediate `NO_TRADE`
 - effective sizing passed to decision engine uses: `pretableSizeModifier * dynamicSessionModifier`
 - dynamic session modifier affects **size only**, never legality
+- confidence tier `< 60` is treated as `WAIT`, so a structurally legal path can still stand down before AI/order generation if quality is too low
 
 Implementation note from current code:
 - Dynamic Session Risk currently provides bootstrap/bounded modifiers in live flow via `GetModifier(...)`.
@@ -292,8 +317,10 @@ Decision engine applies many hard protections including:
 - top-liquidation ban
 - structural-breakdown ban
 - bottom-permission hard gate (dual-path — see below)
-- session-specific TP and expiry constraints (adaptive by session)
+- session-specific TP and expiry constraints
+- session multiplier sizing using gold-engine starter defaults
 - bucket sizing and minimum grams capacity checks
+- preferred-path execution alignment, so final rail generation follows the gold-engine path state instead of re-deciding blindly
 
 Output is either:
 - `NO_TRADE`, or
@@ -351,9 +378,16 @@ Decision engine applies session-aware targets:
 
 - TP model remains session-capped (adaptive cap, max 18 USD distance)
 - expiry bands are session-specific in live path:
-   - Japan/India: 45-60m band (default implementation point around 52m)
-   - London: 30-45m band (default implementation point around 37m)
-   - New York: 20-30m band (default implementation point around 25m)
+   - Japan: 90-120m band (default implementation point around 105m)
+   - India: 90-150m band (default implementation point around 120m)
+   - London: 60-90m band (default implementation point around 75m)
+   - New York: 45-60m band (default implementation point around 52m)
+
+Live sizing also applies session multipliers after legality/path are known:
+- Japan: `0.5`
+- India: `0.7`
+- London: `1.0`
+- New York: `0.6`
 
 
 ## Step 8: Post-Decision Execution Legality Gates
@@ -509,6 +543,12 @@ Current code implements a core subset in the live path, while other modules rema
 13. Portfolio Exposure Gate — live post-decision exposure cap check (25% equity in grams) with `SYMBOL_EXPOSURE_REJECTED` event on block
 14. Hard pending-only execution law — live/EA path constrained to `BUY_LIMIT` and `BUY_STOP`; pending-before-level checks enforced in decision layer
 15. Micro Rotation Mode controls — runtime toggle with single-pending cap behavior and no-ladder-first operating profile
+16. Gold Engine path model — explicit `BUY_LIMIT` / `BUY_STOP` / `WAIT_PULLBACK` / `OVEREXTENDED` / `STAND_DOWN` classification in live polling path
+17. Overextension Detector — active in live decision stack using MA20 distance, RSI, candle range, and distance-from-base signals
+18. Sweep + Reclaim Detector — active in live decision stack and PRETABLE/rotation flow with `NONE` / `SWEEP_ONLY` / `SWEEP_RECLAIM` / `FAILED_RECLAIM`
+19. Confidence scoring — active before AI handoff; low-confidence trade paths are converted into explicit wait states
+20. Rotation Efficiency Engine — active in rotation optimizer and surfaced in monitoring state
+21. Gold-engine dashboard backend payload — monitoring endpoint exposes ledger truth, execution-account state, factor states, confidence, efficiency, and trade-map data
 
 ### Planned / Partial
 The following map items are target modules and not fully implemented as standalone production modules yet:
@@ -604,8 +644,12 @@ Non-UI alignment captured here includes:
 - pending-only buy execution (`BUY_LIMIT` / `BUY_STOP`)
 - no-market-buy enforcement
 - pending-before-level legality checks
+- physical ledger / deployable cash as capital truth for new-buy sizing
 - configurable minimum grams (no forced 100g floor)
 - micro live-experience mode behavior and phased rollout
+- explicit gold-engine path routing with no universal M5-abort rule
+- confidence-based WAIT behavior and explicit reason codes
+- active hazard-window hard blocking and expiry-intersection veto
 - PRETABLE + pattern hard-gate interaction
 - free-cash-only capital utilization basis for new buys
 - unified timeline/logging fields used by execution + study flows
@@ -662,16 +706,17 @@ From MT5 intake to final release, the live core follows this rule:
 
 No single layer can force a trade by itself.
 A trade must pass:
-1) structural validity,
-2) pattern safety check,
-3) risk/news gates,
-4) AI Gate (freshness, risk state, session budget),
-5) AI single-lead model decision,
-6) trade scoring + risk intelligence (risk class, rotation mode, session modifier),
-7) decision engine protections (including dual-path bottom permission),
-8) post-decision capital utilization + portfolio exposure legality gates,
-9) routing policy and Auto Trade toggle check,
-10) and (if Auto Trade OFF or manual path) your explicit approval.
+1) ledger/capital truth,
+2) gold-engine structure + overextension + path routing,
+3) pattern safety check,
+4) news/hazard/waterfall gates,
+5) AI Gate (freshness, risk state, session budget),
+6) AI single-lead model decision,
+7) trade scoring + PRETABLE + rotation efficiency,
+8) decision engine protections (including dual-path bottom permission and pending-before-level legality),
+9) post-decision capital utilization + portfolio exposure legality gates,
+10) routing policy and Auto Trade toggle check,
+11) and (if Auto Trade OFF or manual path) your explicit approval.
 
 That is the real, code-backed end-to-end architecture currently running in this project.
 

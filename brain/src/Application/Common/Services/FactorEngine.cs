@@ -16,8 +16,12 @@ public static class FactorEngine
         RegimeClassificationContract regime,
         string pathState,
         string waterfallRisk,
+        LedgerStateContract? ledgerState = null,
         string? pretableRiskLevel = null,
-        string? efficiencyState = null)
+        string? efficiencyState = null,
+        ConfidenceScoreResult? confidence = null,
+        bool hazardWindowActive = false,
+        string? reasonCode = null)
     {
         var (session, phase) = TradingSessionClock.Resolve(snapshot.KsaTime);
         var factors = new List<FactorImpactContract>();
@@ -33,18 +37,29 @@ public static class FactorEngine
         // Stretch/exhaustion
         factors.Add(StretchFactor(overextension, snapshot));
         // Execution (spread, pending-before-level)
-        factors.Add(ExecutionFactor(snapshot));
-        // Capital (deployable, exposure) — requires ledger; we don't have it here, skip or neutral
-        factors.Add(new FactorImpactContract(
-            "capital_deployable", "UNKNOWN", "neutral", 0m, "immediate",
-            false, false, true, false, false, false));
+        factors.Add(ExecutionFactor(snapshot, pathState));
+        // Capital/business
+        factors.Add(CapitalFactor(ledgerState));
+        if (hazardWindowActive)
+        {
+            factors.Add(new FactorImpactContract(
+                "hazard_window",
+                "ACTIVE_BLOCK",
+                "hazard",
+                1m,
+                "immediate",
+                true,
+                false,
+                true,
+                false,
+                true,
+                true));
+        }
 
-        var legalityState = AggregateLegality(factors, regime, pretableRiskLevel, snapshot.Spread);
+        var legalityState = AggregateLegality(factors, regime, pretableRiskLevel, snapshot.Spread, hazardWindowActive);
         var biasState = AggregateBias(factors, snapshot);
-        var sizeState = AggregateSize(legalityState, pathState, factors);
-        var exitState = pathState == PathState.StandDown || pathState == PathState.WaitPullback
-            ? ExitState.StandDown
-            : ExitState.StandardTp;
+        var sizeState = AggregateSize(legalityState, pathState, factors, confidence, session);
+        var exitState = AggregateExitState(pathState, sweepReclaim, confidence, hazardWindowActive);
 
         return new EngineStatesContract(
             LegalityState: legalityState,
@@ -57,13 +72,18 @@ public static class FactorEngine
             Session: session,
             SessionPhase: phase,
             Factors: factors,
-            EfficiencyState: efficiencyState ?? EfficiencyStates.Low);
+            EfficiencyState: efficiencyState ?? EfficiencyStates.Low,
+            ConfidenceScore: confidence?.Score ?? 0,
+            ConfidenceTier: confidence?.Tier ?? "WAIT",
+            ConfidenceReason: confidence?.Reason,
+            ReasonCode: reasonCode,
+            HazardWindowActive: hazardWindowActive);
     }
 
     private static FactorImpactContract MacroFactor(MarketSnapshotContract s)
     {
-        var tag = s.TelegramImpactTag ?? "LOW";
-        var dir = tag == "HIGH" ? "hazard" : (tag == "MEDIUM" ? "caution" : "neutral");
+        var tag = s.NewsEventFlag || s.GeoRiskFlag ? "HIGH" : (s.TelegramImpactTag ?? "LOW");
+        var dir = s.GeoRiskFlag ? "hazard" : (tag == "HIGH" ? "hazard" : (tag == "MEDIUM" ? "caution" : "neutral"));
         return new FactorImpactContract(
             "macro_news", tag, dir, tag == "HIGH" ? 1m : 0.5m, "immediate",
             true, true, false, false, false, true);
@@ -72,8 +92,9 @@ public static class FactorEngine
     private static FactorImpactContract SessionFactor(string session, string phase, MarketSnapshotContract s)
     {
         var value = $"{session}_{phase}";
+        var direction = phase is "START" or "END" ? "caution" : "neutral";
         return new FactorImpactContract(
-            "session_time", value, "neutral", 0.5m, "session",
+            "session_time", value, direction, phase is "START" or "END" ? 0.6m : 0.5m, "session",
             false, false, true, false, true, false);
     }
 
@@ -81,11 +102,12 @@ public static class FactorEngine
     {
         var adrUsed = s.AdrUsedPct;
         var spread = s.Spread;
+        var vci = ComputeVci(s);
         var block = spread >= 0.7m;
-        var caution = spread >= 0.5m || adrUsed > 0.9m;
+        var caution = spread >= 0.5m || adrUsed > 0.9m || vci > 1.3m;
         var dir = block ? "hazard" : (caution ? "caution" : "neutral");
         return new FactorImpactContract(
-            "volatility_liquidity", $"ADR={adrUsed:0.00} spread={spread:0.00}", dir, block ? 1m : 0.5m, "intraday",
+            "volatility_liquidity", $"ADR={adrUsed:0.00} spread={spread:0.00} VCI={vci:0.00}", dir, block ? 1m : 0.5m, "intraday",
             true, false, true, false, true, block);
     }
 
@@ -107,21 +129,64 @@ public static class FactorEngine
             true, false, false, false, false, true);
     }
 
-    private static FactorImpactContract ExecutionFactor(MarketSnapshotContract s)
+    private static FactorImpactContract ExecutionFactor(MarketSnapshotContract s, string pathState)
     {
         var block = s.Spread >= 0.7m;
+        var pendingLegal = pathState switch
+        {
+            var x when x == PathState.BuyStop => s.Ask <= 0m || s.AuthoritativeRate <= 0m || s.AuthoritativeRate > s.Ask,
+            var x when x == PathState.BuyLimit => s.Bid <= 0m || s.AuthoritativeRate <= 0m || s.AuthoritativeRate < s.Bid,
+            _ => true,
+        };
         return new FactorImpactContract(
-            "execution_spread", $"spread={s.Spread:0.00}", block ? "hazard" : "neutral", block ? 1m : 0m, "immediate",
-            true, false, true, false, false, block);
+            "execution_spread", $"spread={s.Spread:0.00};pendingLegal={pendingLegal}", (!pendingLegal || block) ? "hazard" : "neutral", (!pendingLegal || block) ? 1m : 0m, "immediate",
+            true, false, true, false, false, !pendingLegal || block);
+    }
+
+    private static FactorImpactContract CapitalFactor(LedgerStateContract? ledgerState)
+    {
+        if (ledgerState is null)
+        {
+            return new FactorImpactContract(
+                "capital_business",
+                "UNKNOWN",
+                "neutral",
+                0m,
+                "immediate",
+                false,
+                false,
+                true,
+                false,
+                false,
+                false);
+        }
+
+        var state = $"deployable={ledgerState.DeployableCashAed:0.00};exposure={ledgerState.OpenExposurePercent:0.##}";
+        var blocked = ledgerState.DeployableCashAed <= 0m || ledgerState.OpenExposurePercent >= 65m;
+        var caution = !blocked && (ledgerState.DeployableCashAed < 1000m || ledgerState.OpenExposurePercent >= 45m);
+        var direction = blocked ? "hazard" : (caution ? "caution" : "neutral");
+        return new FactorImpactContract(
+            "capital_business",
+            state,
+            direction,
+            blocked ? 1m : (caution ? 0.5m : 0m),
+            "immediate",
+            true,
+            false,
+            true,
+            false,
+            false,
+            blocked);
     }
 
     private static string AggregateLegality(
         List<FactorImpactContract> factors,
         RegimeClassificationContract regime,
         string? pretableRiskLevel,
-        decimal spread)
+        decimal spread,
+        bool hazardWindowActive)
     {
-        if (regime.IsBlocked || pretableRiskLevel == "BLOCK" || spread >= 0.7m)
+        if (regime.IsBlocked || pretableRiskLevel == "BLOCK" || spread >= 0.7m || hazardWindowActive)
             return LegalityState.Block;
         var hazard = factors.Any(f => f.ImpactDirection == "hazard" && f.AffectsLegality);
         var caution = factors.Any(f => f.ImpactDirection == "caution" && f.AffectsLegality);
@@ -141,11 +206,56 @@ public static class FactorEngine
         return BiasState.Neutral;
     }
 
-    private static string AggregateSize(string legality, string pathState, List<FactorImpactContract> factors)
+    private static string AggregateSize(
+        string legality,
+        string pathState,
+        List<FactorImpactContract> factors,
+        ConfidenceScoreResult? confidence,
+        string session)
     {
-        if (legality == LegalityState.Block || pathState == PathState.StandDown || pathState == PathState.WaitPullback)
+        if (legality == LegalityState.Block || pathState is PathState.StandDown or PathState.WaitPullback or PathState.Overextended)
             return SizeState.Zero;
-        if (legality == LegalityState.Caution) return SizeState.Micro;
+        if (confidence?.Tier == "WAIT") return SizeState.Zero;
+        if (confidence?.Tier == "MICRO" || legality == LegalityState.Caution) return SizeState.Micro;
+        var cautionSize = factors.Any(f => f.AffectsSize && f.ImpactDirection == "caution");
+        if (cautionSize || session is "JAPAN" or "NY") return SizeState.Reduced;
         return SizeState.Full;
+    }
+
+    private static string AggregateExitState(
+        string pathState,
+        SweepReclaimResult sweepReclaim,
+        ConfidenceScoreResult? confidence,
+        bool hazardWindowActive)
+    {
+        if (hazardWindowActive || pathState is PathState.StandDown or PathState.WaitPullback or PathState.Overextended)
+        {
+            return ExitState.StandDown;
+        }
+
+        if (confidence?.Tier == "MICRO")
+        {
+            return ExitState.TightExpiry;
+        }
+
+        if (pathState == PathState.BuyLimit && sweepReclaim.State == SweepReclaimState.SweepReclaim)
+        {
+            return ExitState.MagnetTp;
+        }
+
+        return ExitState.StandardTp;
+    }
+
+    private static decimal ComputeVci(MarketSnapshotContract snapshot)
+    {
+        var ranges = snapshot.CompressionRangesM15;
+        if (ranges is null || ranges.Count < 50)
+        {
+            return 1m;
+        }
+
+        var last10 = ranges.TakeLast(10).Average();
+        var last50 = ranges.TakeLast(50).Average();
+        return last50 > 0m ? last10 / last50 : 1m;
     }
 }

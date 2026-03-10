@@ -281,8 +281,27 @@ public sealed class SignalPollingBackgroundService(
                 }
 
                 // ── Spec v7: Gold Engine decision stack (path-aware; M5 optional for BUY_LIMIT) ──
+                var rawStackLedgerState = ledger.GetState();
+                var reservedPendingAedForStack = EstimateReservedPendingAed(pendingTrades.Snapshot());
+                var stackLedgerState = new LedgerStateContract(
+                    CashAed: rawStackLedgerState.CashAed,
+                    GoldGrams: rawStackLedgerState.GoldGrams,
+                    OpenExposurePercent: rawStackLedgerState.OpenExposurePercent,
+                    DeployableCashAed: Math.Max(0m, rawStackLedgerState.DeployableCashAed - reservedPendingAedForStack),
+                    OpenBuyCount: rawStackLedgerState.OpenBuyCount);
+                var activeHazardWindowBlockNow = await db.HazardWindows
+                    .AsNoTracking()
+                    .AnyAsync(
+                        x => x.IsActive && x.IsBlocked && x.StartUtc <= snapshot.Timestamp && x.EndUtc >= snapshot.Timestamp,
+                        stoppingToken);
                 var waterfallRiskForStack = regime.IsWaterfall ? "HIGH" : (regime.RiskTag == "CAUTION" ? "MEDIUM" : "LOW");
-                var decisionStackResult = GoldEngineDecisionStack.Evaluate(snapshot, regime, waterfallRiskForStack, null);
+                var decisionStackResult = GoldEngineDecisionStack.Evaluate(
+                    snapshot,
+                    regime,
+                    waterfallRiskForStack,
+                    stackLedgerState,
+                    activeHazardWindowBlockNow,
+                    null);
 
                 await timeline.WriteAsync(
                     eventType: "MARKET_REGIME_DETECTED",
@@ -315,6 +334,8 @@ public sealed class SignalPollingBackgroundService(
                         pathState = decisionStackResult.PathState,
                         reasonCode = decisionStackResult.ReasonCode,
                         legalityState = decisionStackResult.LegalityState,
+                        confidenceScore = decisionStackResult.ConfidenceScore.Score,
+                        confidenceTier = decisionStackResult.ConfidenceScore.Tier,
                         overextensionState = decisionStackResult.Overextension.State,
                         sweepReclaimState = decisionStackResult.SweepReclaim.State,
                         engineStates = decisionStackResult.EngineStates == null ? null : new
@@ -327,6 +348,10 @@ public sealed class SignalPollingBackgroundService(
                             decisionStackResult.EngineStates.WaterfallRisk,
                             decisionStackResult.EngineStates.Session,
                             decisionStackResult.EngineStates.SessionPhase,
+                            decisionStackResult.EngineStates.ConfidenceScore,
+                            decisionStackResult.EngineStates.ConfidenceTier,
+                            decisionStackResult.EngineStates.ReasonCode,
+                            decisionStackResult.EngineStates.HazardWindowActive,
                         },
                     },
                     cancellationToken: stoppingToken);
@@ -989,7 +1014,16 @@ public sealed class SignalPollingBackgroundService(
                 var effectiveSizeModifier = pretable.SizeModifier * dynamicSessionRiskResult.Modifier;
 
                 var minTradeGrams = runtimeSettings.GetMinTradeGrams();
-                var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, state, activeStrategy, minTradeGrams, effectiveSizeModifier);
+                var decision = DecisionEngine.Evaluate(
+                    snapshot,
+                    regime,
+                    aiSignal,
+                    state,
+                    activeStrategy,
+                    minTradeGrams,
+                    effectiveSizeModifier,
+                    decisionStackResult.PathState,
+                    decisionStackResult.PathRouting.PendingLimitPath);
                 var snapshotHash = ComputeSnapshotHash(snapshot);
 
                 // Spec v8 §14: compute entry levels (limit1, limit2, stop1) from rotation result and decision

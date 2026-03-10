@@ -21,6 +21,8 @@ public static class WaitReasonCode
     public const string HighWaterfallBlock = "HIGH_WATERFALL_BLOCK";
     public const string FailThreatened = "FAIL_THREATENED";
     public const string BuyStopBreakoutNotReady = "BUY_STOP_BREAKOUT_NOT_READY";
+    public const string CapitalLawBlock = "CAPITAL_LAW_BLOCK";
+    public const string SpreadGuardBlock = "SPREAD_GUARD_BLOCK";
 }
 
 /// <summary>Overextension detector output per spec §5.1.</summary>
@@ -143,7 +145,12 @@ public sealed record EngineStatesContract(
     string SessionPhase,
     IReadOnlyCollection<FactorImpactContract> Factors,
     // Spec v8 §11 — Rotation Efficiency state for dashboard
-    string EfficiencyState = "LOW");
+    string EfficiencyState = "LOW",
+    int ConfidenceScore = 0,
+    string ConfidenceTier = "WAIT",
+    string? ConfidenceReason = null,
+    string? ReasonCode = null,
+    bool HazardWindowActive = false);
 
 /// <summary>Confidence score result. Spec §7 — 0–100, thresholds &lt;60 WAIT, 60–74 MICRO, 75–89 normal, ≥90 high.</summary>
 public sealed record ConfidenceScoreResult(
@@ -205,4 +212,5 @@ public sealed record GoldEngineDecisionStackResult(
     SweepReclaimResult SweepReclaim,
     PathRoutingResult PathRouting,
     string LegalityState,
+    ConfidenceScoreResult ConfidenceScore,
     EngineStatesContract? EngineStates);

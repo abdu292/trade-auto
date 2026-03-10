@@ -23,6 +23,7 @@ public static class PathRouter
         bool hasValidLidAndCompression,
         bool m5EntryValid,
         MarketSnapshotContract snapshot,
+        string? legalityReasonCode = null,
         IGoldEngineThresholds? thresholds = null)
     {
         thresholds ??= new PathRouterDefaultThresholds();
@@ -32,7 +33,7 @@ public static class PathRouter
         {
             return new PathRoutingResult(
                 PathState.StandDown,
-                WaitReasonCode.HighWaterfallBlock,
+                legalityReasonCode ?? WaitReasonCode.HighWaterfallBlock,
                 null,
                 null);
         }
@@ -87,7 +88,10 @@ public static class PathRouter
         // 4. Valid lid + compression → BUY_STOP candidate (M5 mandatory)
         if (hasValidLidAndCompression && marketRegime.IsTradeable)
         {
-            if (!m5EntryValid)
+            var breakoutStretched = overextension.State != OverextensionState.Normal;
+            var breakoutAdrBlocked = snapshot.AdrUsedPct > thresholds.AdrUsedBlockContinuationBuyStopMin;
+            var breakoutSpreadBlocked = snapshot.Spread >= thresholds.SpreadCaution;
+            if (!m5EntryValid || breakoutStretched || breakoutAdrBlocked || breakoutSpreadBlocked)
             {
                 return new PathRoutingResult(
                     PathState.BuyStop,

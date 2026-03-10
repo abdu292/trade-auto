@@ -70,11 +70,15 @@ public static class MonitoringEndpoints
                         legalityState = engineStates.LegalityState,
                         biasState = engineStates.BiasState,
                         pathState = engineStates.PathState,
+                        reasonCode = engineStates.ReasonCode,
                         overextensionState = engineStates.OverextensionState,
                         waterfallRisk = engineStates.WaterfallRisk,
                         session = engineStates.Session,
                         sessionPhase = engineStates.SessionPhase,
-                        // Spec v8 §11 — efficiency state
+                        confidenceScore = engineStates.ConfidenceScore,
+                        confidenceTier = engineStates.ConfidenceTier,
+                        confidenceReason = engineStates.ConfidenceReason,
+                        activeHazardWindow = engineStates.HazardWindowActive,
                         efficiencyState = engineStates.EfficiencyState,
                     },
                     tradeMapChart = new
@@ -85,10 +89,26 @@ public static class MonitoringEndpoints
                                 .Concat(pathRouting.PendingLimitPath.S3ExhaustionPocket.HasValue ? new[] { pathRouting.PendingLimitPath.S3ExhaustionPocket.Value } : Array.Empty<decimal>())
                                 .ToArray()
                             : Array.Empty<decimal>(),
+                        lids = new[]
+                        {
+                            snapshot?.SessionHigh ?? 0m,
+                            snapshot?.PreviousSessionHigh ?? 0m,
+                            snapshot?.PreviousDayHigh ?? 0m,
+                        }.Where(x => x > 0m).Distinct().ToArray(),
+                        sweeps = snapshot?.HasLiquiditySweep == true
+                            ? new[] { snapshot.SessionLow, snapshot.PreviousSessionLow, snapshot.PreviousDayLow }.Where(x => x > 0m).Distinct().ToArray()
+                            : Array.Empty<decimal>(),
+                        reclaims = pathRouting?.PendingLimitPath != null
+                            ? new[] { pathRouting.PendingLimitPath.S1BaseShelf }.Where(x => x > 0m).ToArray()
+                            : Array.Empty<decimal>(),
+                        tpMagnets = pendingTrades.Snapshot().Where(p => p.Tp > 0m).Select(p => p.Tp).Distinct().ToArray(),
                         sessionHigh = snapshot?.SessionHigh ?? 0m,
                         sessionLow = snapshot?.SessionLow ?? 0m,
                         pendingBuyLimit = pendingTrades.Snapshot().Where(p => string.Equals(p.Type, "BUY_LIMIT", StringComparison.OrdinalIgnoreCase)).Select(p => new { p.Price, p.Tp, p.Expiry }).ToList(),
                         pendingBuyStop = pendingTrades.Snapshot().Where(p => string.Equals(p.Type, "BUY_STOP", StringComparison.OrdinalIgnoreCase)).Select(p => new { p.Price, p.Tp, p.Expiry }).ToList(),
+                        expectedPath = engineStates?.PathState,
+                        alternatePath = engineStates?.PathState == PathState.BuyLimit ? PathState.BuyStop : PathState.BuyLimit,
+                        invalidationPath = engineStates?.ReasonCode,
                     },
                     executionMode,
                 });
@@ -985,6 +1005,8 @@ public static class MonitoringEndpoints
             "RULE_ENGINE_SETUP_CANDIDATE" => "Rule engine validated the setup candidate — cycle continues to news filter.",
             "RULE_ENGINE_ABORT" => "Rule engine rejected the setup — no structural basis for a trade.",
             "AI_SKIPPED_RULE_ENGINE_ABORT" => "AI analysis was skipped because the rule engine already rejected this setup.",
+            "GOLD_ENGINE_DECISION_STACK" => "Gold-engine path routing classified BUY_LIMIT, BUY_STOP, WAIT, OVEREXTENDED, or STAND_DOWN before AI.",
+            "PATH_WAIT" => "Gold-engine path routing stood down explicitly with a path-aware reason code.",
             "NEWS_CHECK" => "Economic news filter assessed nearby high-impact events.",
             "CYCLE_ABORTED" => "Cycle was aborted before reaching AI analysis.",
             "AI_ANALYZE_REQUEST" => "Brain sent snapshot + prompt policy to AI worker.",
@@ -995,6 +1017,8 @@ public static class MonitoringEndpoints
             "AI_ANALYZE_RESPONSE" => "Brain received the AI decision payload.",
             "AI_CONSENSUS_FAILED" => "Trade was blocked because AI quorum failed.",
             "TRADE_SCORE_CALCULATION" => "Trade scoring layer calculated setup quality across structure, momentum, execution, AI, and sentiment.",
+            "CR11_PRETABLE_RESULT" => "PRETABLE aggregated risk intelligence and size modifiers before final order generation.",
+            "CR11_ROTATION_OPTIMIZER" => "Rotation optimizer selected execution style and same-session capital efficiency state.",
             "DECISION_EVALUATED" => "Decision engine evaluated risk and trade permissions.",
             "TRADE_ROUTED" => "Trade was routed to MT5 queue or manual approval queue.",
             "FINAL_DECISION" => "Final cycle verdict: trade approved or rejected with primary reason.",
