@@ -16,7 +16,8 @@ public static class FactorEngine
         RegimeClassificationContract regime,
         string pathState,
         string waterfallRisk,
-        string? pretableRiskLevel = null)
+        string? pretableRiskLevel = null,
+        string? efficiencyState = null)
     {
         var (session, phase) = TradingSessionClock.Resolve(snapshot.KsaTime);
         var factors = new List<FactorImpactContract>();
@@ -55,7 +56,8 @@ public static class FactorEngine
             WaterfallRisk: waterfallRisk,
             Session: session,
             SessionPhase: phase,
-            Factors: factors);
+            Factors: factors,
+            EfficiencyState: efficiencyState ?? EfficiencyStates.Low);
     }
 
     private static FactorImpactContract MacroFactor(MarketSnapshotContract s)

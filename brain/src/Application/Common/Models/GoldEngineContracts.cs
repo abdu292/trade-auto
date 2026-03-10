@@ -72,6 +72,15 @@ public static class ExitState
     public const string StandDown = "STAND_DOWN";
 }
 
+/// <summary>Spec v8 §11 — Rotation Efficiency Engine states.</summary>
+public static class EfficiencyStates
+{
+    public const string High = "HIGH";
+    public const string Medium = "MEDIUM";
+    public const string Low = "LOW";
+    public const string CapitalSleepRisk = "CAPITAL_SLEEP_RISK";
+}
+
 // ─── Result contracts ──────────────────────────────────────────────────────
 
 /// <summary>OverextensionDetector output. Spec §5.1.</summary>
@@ -132,7 +141,9 @@ public sealed record EngineStatesContract(
     string WaterfallRisk,
     string Session,
     string SessionPhase,
-    IReadOnlyCollection<FactorImpactContract> Factors);
+    IReadOnlyCollection<FactorImpactContract> Factors,
+    // Spec v8 §11 — Rotation Efficiency state for dashboard
+    string EfficiencyState = "LOW");
 
 /// <summary>Confidence score result. Spec §7 — 0–100, thresholds &lt;60 WAIT, 60–74 MICRO, 75–89 normal, ≥90 high.</summary>
 public sealed record ConfidenceScoreResult(
@@ -147,6 +158,21 @@ public sealed record ConfidenceScoreResult(
     int AdrPoints,
     int SpreadPoints,
     int SafetyPoints,
+    string Reason);
+
+/// <summary>
+/// Spec v8 §11 — Rotation Efficiency Engine result.
+/// Metrics: same-session TP probability, expected AED return, expected hold time, AED per minute, sleep risk.
+/// States: HIGH | MEDIUM | LOW | CAPITAL_SLEEP_RISK.
+/// </summary>
+public sealed record RotationEfficiencyResult(
+    string EfficiencyState,
+    int EfficiencyScore,
+    decimal SameSessionTpProbability,
+    decimal ExpectedAedReturn,
+    int ExpectedHoldTimeMinutes,
+    decimal AedPerMinute,
+    bool SleepRisk,
     string Reason);
 
 /// <summary>Session size and expiry bands. Spec §6.7, §6.8.</summary>

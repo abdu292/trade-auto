@@ -72,7 +72,9 @@ public static class RotationOptimizer
                 Mode: "STAND_DOWN",
                 CrRegime: crRegime,
                 StaggeredLevels: null,
-                Reason: $"PRETABLE={pretable.RiskLevel}: stand-down enforced. {pretable.Reason}");
+                Reason: $"PRETABLE={pretable.RiskLevel}: stand-down enforced. {pretable.Reason}",
+                EfficiencyState: EfficiencyStates.Low,
+                EfficiencyScore: 0);
         }
 
         // ── §D MICRO_ROTATION_MODE: single pending trade, no ladder ──────────
@@ -80,6 +82,7 @@ public static class RotationOptimizer
         // All safety rules still apply; only ladder and breakout modes are restricted.
         if (microRotationMode)
         {
+            var microEff = ComputeEfficiency(snapshot);
             // BUY_STOP still allowed in micro mode if breakout is justified and TREND regime
             if (crRegime == "TREND" && IsBuyStopJustified(snapshot))
             {
@@ -87,14 +90,18 @@ public static class RotationOptimizer
                     Mode: "MICRO_ROTATION_MODE",
                     CrRegime: crRegime,
                     StaggeredLevels: null,
-                    Reason: "MICRO_ROTATION_MODE(BUY_STOP): TREND regime with justified breakout. Single entry only, no ladder.");
+                    Reason: "MICRO_ROTATION_MODE(BUY_STOP): TREND regime with justified breakout. Single entry only, no ladder.",
+                    EfficiencyState: microEff.EfficiencyState,
+                    EfficiencyScore: microEff.EfficiencyScore);
             }
 
             return new RotationOptimizerResult(
                 Mode: "MICRO_ROTATION_MODE",
                 CrRegime: crRegime,
                 StaggeredLevels: null,
-                Reason: "MICRO_ROTATION_MODE(SINGLE_ENTRY): single pending trade, ladder disabled.");
+                Reason: "MICRO_ROTATION_MODE(SINGLE_ENTRY): single pending trade, ladder disabled.",
+                EfficiencyState: microEff.EfficiencyState,
+                EfficiencyScore: microEff.EfficiencyScore);
         }
 
         // ── STAND_DOWN: poor capital efficiency conditions ───────────────────
@@ -104,17 +111,22 @@ public static class RotationOptimizer
                 Mode: "STAND_DOWN",
                 CrRegime: crRegime,
                 StaggeredLevels: null,
-                Reason: $"Stand-down: poor capital efficiency for {crRegime} regime. SameSessionTP probability too low or environment unclear.");
+                Reason: $"Stand-down: poor capital efficiency for {crRegime} regime. SameSessionTP probability too low or environment unclear.",
+                EfficiencyState: EfficiencyStates.Low,
+                EfficiencyScore: 0);
         }
 
         // ── BUY_STOP: continuation breakout in TREND regime ─────────────────
         if (crRegime == "TREND" && IsBuyStopJustified(snapshot))
         {
+            var buyStopEff = ComputeEfficiency(snapshot);
             return new RotationOptimizerResult(
                 Mode: "BUY_STOP",
                 CrRegime: crRegime,
                 StaggeredLevels: null,
-                Reason: $"BUY_STOP: TREND regime with confirmed continuation breakout and no impulse exhaustion.");
+                Reason: $"BUY_STOP: TREND regime with confirmed continuation breakout and no impulse exhaustion.",
+                EfficiencyState: buyStopEff.EfficiencyState,
+                EfficiencyScore: buyStopEff.EfficiencyScore);
         }
 
         // ── STAGGERED: multiple real liquidity shelves ───────────────────────
@@ -124,19 +136,36 @@ public static class RotationOptimizer
             var fractions = usePrimary ? StaggeredFractionsDefault : StaggeredFractionsBalanced;
 
             var levels = BuildStaggeredLevels(snapshot, fractions);
+            var staggerEff = ComputeEfficiency(snapshot);
             return new RotationOptimizerResult(
                 Mode: "STAGGERED",
                 CrRegime: crRegime,
                 StaggeredLevels: levels,
-                Reason: $"STAGGERED: {levels.Count} levels over real liquidity shelves (split={string.Join("/", fractions.Select(f => $"{(int)(f * 100)}"))}).");
+                Reason: $"STAGGERED: {levels.Count} levels over real liquidity shelves (split={string.Join("/", fractions.Select(f => $"{(int)(f * 100)}"))}).",
+                EfficiencyState: staggerEff.EfficiencyState,
+                EfficiencyScore: staggerEff.EfficiencyScore);
         }
 
         // ── SINGLE ENTRY: clean structure with one defended level ────────────
+        var singleEff = ComputeEfficiency(snapshot);
         return new RotationOptimizerResult(
             Mode: "SINGLE_ENTRY",
             CrRegime: crRegime,
             StaggeredLevels: null,
-            Reason: $"SINGLE_ENTRY: clean structure with high single-touch probability. Sweep={liquiditySweep.IsConfirmed}, Compression={snapshot.IsCompression}.");
+            Reason: $"SINGLE_ENTRY: clean structure with high single-touch probability. Sweep={liquiditySweep.IsConfirmed}, Compression={snapshot.IsCompression}.",
+            EfficiencyState: singleEff.EfficiencyState,
+            EfficiencyScore: singleEff.EfficiencyScore);
+    }
+
+    /// <summary>Compute efficiency score using current snapshot bid/ask and session context. Used when no specific entry/TP are known yet.</summary>
+    private static RotationEfficiencyResult ComputeEfficiency(MarketSnapshotContract snapshot)
+    {
+        // Use snapshot mid-price and a realistic ATR-based TP estimate when no specific entry/TP known
+        var entry = snapshot.Bid > 0m ? snapshot.Bid : snapshot.AuthoritativeRate;
+        var atrH1 = snapshot.AtrH1 > 0m ? snapshot.AtrH1 : (snapshot.Atr > 0m ? snapshot.Atr : 3m);
+        var tp = entry > 0m ? entry + atrH1 * 0.8m : 0m; // rough 0.8-ATR TP estimate
+        var grams = 1m; // neutral grams for rate-of-return calculation
+        return RotationEfficiencyEngine.Evaluate(snapshot, entry, tp, grams);
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
