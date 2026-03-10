@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.AddSingleton<ITradingRuntimeSettingsStore>(_ =>
             new InMemoryTradingRuntimeSettingsStore(configuration["Execution:Symbol"] ?? "XAUUSD.gram"));
         services.AddSingleton<ILastGoldEngineStateStore, InMemoryLastGoldEngineStateStore>();
+        services.AddSingleton<ISetupLifecycleStore, InMemorySetupLifecycleStore>();
         services.AddSingleton<IGoldEngineThresholds, GoldEngineThresholds>();
         services.AddSingleton<ITradeLedgerService, DurableTradeLedgerService>();
         services.AddScoped<IMt5BridgeClient, MockMt5BridgeClient>();
