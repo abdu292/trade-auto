@@ -403,6 +403,111 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         }
     }
 
+    public async Task<TradeTableReviewResultContract?> TableReviewAsync(
+        TradeTableReviewRequestContract request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation(
+                "→ [AIWorker] POST {BaseUrl}/table-review tradeId={TradeId} rail={Rail} entry={Entry}",
+                _baseUrl,
+                request.TradeId,
+                request.Rail,
+                request.Entry);
+
+            var body = new
+            {
+                tradeId = request.TradeId,
+                symbol = request.Symbol,
+                rail = request.Rail,
+                entry = request.Entry,
+                tp = request.Tp,
+                grams = request.Grams,
+                session = request.Session,
+                sessionPhase = request.SessionPhase,
+                engineState = request.EngineState,
+                cause = request.Cause,
+                waterfallRisk = request.WaterfallRisk,
+                riskState = request.RiskState,
+                alignmentScore = request.AlignmentScore,
+                efficiencyScore = request.EfficiencyScore,
+                shopBuy = request.ShopBuy,
+                shopSell = request.ShopSell,
+                regime = request.Regime,
+                regimeTag = request.RegimeTag,
+                bucket = request.Bucket,
+                sizeClass = request.SizeClass,
+                telegramState = request.TelegramState,
+                aiSummary = request.AiSummary,
+                cycleId = request.CycleId,
+            };
+
+            var jsonContent = new StringContent(
+                JsonSerializer.Serialize(body),
+                Encoding.UTF8,
+                "application/json");
+
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/table-review")
+            {
+                Content = jsonContent,
+            };
+
+            using var response = await _httpClient.SendAsync(
+                requestMessage,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await ReadResponseBodyLimitedAsync(response, MaxModeResponseBytes, cancellationToken);
+                _logger.LogWarning(
+                    "← [AIWorker] TABLE review returned {StatusCode}. Body: {Body}",
+                    (int)response.StatusCode,
+                    ClipForLog(errorBody, MaxErrorBodyLogChars));
+                return null;
+            }
+
+            var responseBody = await ReadResponseBodyLimitedAsync(response, MaxAnalyzeResponseBytes, cancellationToken);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var result = JsonSerializer.Deserialize<TableReviewResponse>(responseBody, options);
+            if (result is null)
+            {
+                return null;
+            }
+
+            if (result.TradeId is null)
+            {
+                _logger.LogWarning("← [AIWorker] TABLE review response missing tradeId; using request tradeId={TradeId}", request.TradeId);
+            }
+            else if (!string.Equals(result.TradeId, request.TradeId, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "← [AIWorker] TABLE review tradeId mismatch: expected={Expected} got={Got}",
+                    request.TradeId,
+                    result.TradeId);
+            }
+
+            _logger.LogInformation(
+                "← [AIWorker] TABLE review complete: tradeId={TradeId} action={Action} confidence={Confidence:0.00}",
+                result.TradeId ?? request.TradeId,
+                result.Action,
+                result.Confidence);
+
+            return new TradeTableReviewResultContract(
+                TradeId: result.TradeId ?? request.TradeId,
+                Action: string.IsNullOrWhiteSpace(result.Action) ? "CAUTION" : result.Action,
+                Confidence: result.Confidence,
+                Reasoning: result.Reasoning ?? string.Empty,
+                ProviderVotes: result.ProviderVotes ?? []);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "AI worker table-review endpoint unavailable; skipping TABLE review.");
+            return null;
+        }
+    }
+
     private static object BuildSnapshotRequest(MarketSnapshotContract snapshot)
     {
         return new
@@ -636,6 +741,13 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
         string? WaterfallVerdict,
         IReadOnlyCollection<string>? RuleAdjustments,
         double? Confidence,
+        string? Reasoning,
+        IReadOnlyCollection<string>? ProviderVotes);
+
+    private sealed record TableReviewResponse(
+        string? TradeId,
+        string? Action,
+        double Confidence,
         string? Reasoning,
         IReadOnlyCollection<string>? ProviderVotes);
 }

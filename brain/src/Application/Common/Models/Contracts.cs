@@ -357,6 +357,48 @@ public sealed record StudyRefinementSuggestionContract(
     string Reasoning,
     IReadOnlyCollection<string> ProviderVotes);
 
+// ── spec_v9: TABLE Review (Telegram AI review layer) ──────────────────────────
+
+/// <summary>
+/// Request sent to aiworker /table-review after a trade is armed.
+/// AIs review the proposed TABLE and return advisory commentary.
+/// </summary>
+public sealed record TradeTableReviewRequestContract(
+    string TradeId,
+    string Symbol,
+    string Rail,
+    decimal Entry,
+    decimal Tp,
+    decimal Grams,
+    string Session,
+    string SessionPhase,
+    string EngineState,
+    string Cause,
+    string WaterfallRisk,
+    string RiskState,
+    decimal AlignmentScore,
+    int EfficiencyScore,
+    decimal ShopBuy,
+    decimal ShopSell,
+    string Regime,
+    string RegimeTag,
+    string Bucket,
+    string SizeClass,
+    string TelegramState,
+    string AiSummary,
+    string? CycleId);
+
+/// <summary>
+/// AI commentary returned from aiworker /table-review.
+/// Action: APPROVE | CAUTION | SKIP (advisory only — does not auto-execute).
+/// </summary>
+public sealed record TradeTableReviewResultContract(
+    string TradeId,
+    string Action,
+    double Confidence,
+    string Reasoning,
+    IReadOnlyCollection<string> ProviderVotes);
+
 // ── CR11: Impulse Exhaustion Guard ──────────────────────────────────────────
 
 /// <summary>

@@ -171,6 +171,52 @@ class StudyRefinementSuggestion(BaseModel):
     providerVotes: list[str] = Field(default_factory=list)
 
 
+class TradeTableReviewRequest(BaseModel):
+    """Request for AI review of an armed trade TABLE (spec_v9 last section).
+
+    Sent by Brain after a trade is armed and routed to the approval queue or MT5.
+    AIs review the proposed trade and provide commentary / confidence verdict.
+    """
+    tradeId: str
+    symbol: str
+    rail: str           # BUY_LIMIT | BUY_STOP
+    entry: float
+    tp: float
+    grams: float
+    session: str
+    sessionPhase: str = "UNKNOWN"
+    engineState: str = "ARMED"
+    cause: str = "UNKNOWN"
+    waterfallRisk: str = "LOW"
+    riskState: str = "CAUTION"
+    alignmentScore: float = 0.5
+    efficiencyScore: int = 0
+    shopBuy: float = 0.0
+    shopSell: float = 0.0
+    regime: str = "STANDARD"
+    regimeTag: str = "STANDARD"
+    bucket: str = "C1"
+    sizeClass: str = "25%"
+    telegramState: str = "QUIET"
+    aiSummary: str = ""
+    cycleId: str | None = None
+
+
+class TradeTableReviewResult(BaseModel):
+    """AI commentary returned after reviewing an armed trade TABLE.
+
+    action: APPROVE | CAUTION | SKIP
+    confidence: 0.0–1.0
+    reasoning: AI commentary text
+    providerVotes: list of "provider:action@confidence" strings
+    """
+    tradeId: str
+    action: str = "CAUTION"      # APPROVE | CAUTION | SKIP
+    confidence: float = 0.5
+    reasoning: str = ""
+    providerVotes: list[str] = Field(default_factory=list)
+
+
 class TradeSignal(BaseModel):
     rail: str
     entry: float
