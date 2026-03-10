@@ -57,6 +57,56 @@ public static class LiquiditySweepDetectorService
             Reason: reason);
     }
 
+    /// <summary>
+    /// Spec v7 §5.2 — Returns NONE / SWEEP_ONLY / SWEEP_RECLAIM / FAILED_RECLAIM.
+    /// SWEEP_RECLAIM near base strongly improves BUY_LIMIT quality.
+    /// </summary>
+    public static SweepReclaimResult DetectSweepReclaim(MarketSnapshotContract snapshot)
+    {
+        var priceSwept = snapshot.HasLiquiditySweep;
+        var closedBackInside = snapshot.HasOverlapCandles
+            || snapshot.TvAlertType is "SHELF_RECLAIM" or "RETEST_HOLD";
+        var volumeOrRangeSpike = snapshot.IsExpansion || snapshot.IsAtrExpanding || snapshot.HasImpulseCandles;
+        var nearStructuralLiquidity = IsNearStructuralLiquidity(snapshot);
+
+        string state;
+        string reason;
+
+        if (!priceSwept)
+        {
+            state = SweepReclaimState.None;
+            reason = "No sweep detected.";
+        }
+        else if (!closedBackInside && volumeOrRangeSpike)
+        {
+            state = SweepReclaimState.FailedReclaim;
+            reason = "Sweep occurred but candle did not close back inside range (failed reclaim).";
+        }
+        else if (priceSwept && closedBackInside && volumeOrRangeSpike && nearStructuralLiquidity)
+        {
+            state = SweepReclaimState.SweepReclaim;
+            reason = "Sweep + reclaim confirmed near structural liquidity — strong BUY_LIMIT quality.";
+        }
+        else if (priceSwept)
+        {
+            state = SweepReclaimState.SweepOnly;
+            reason = "Sweep only; reclaim or liquidity proximity not confirmed.";
+        }
+        else
+        {
+            state = SweepReclaimState.None;
+            reason = "No sweep.";
+        }
+
+        return new SweepReclaimResult(
+            State: state,
+            PriceSweptPriorLevel: priceSwept,
+            CandleClosedBackInside: closedBackInside,
+            VolumeOrRangeSpike: volumeOrRangeSpike,
+            NearStructuralLiquidity: nearStructuralLiquidity,
+            Reason: reason);
+    }
+
     private static bool IsNearStructuralLiquidity(MarketSnapshotContract snapshot)
     {
         var close = snapshot.AuthoritativeRate > 0m

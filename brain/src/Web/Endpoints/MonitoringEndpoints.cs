@@ -26,6 +26,95 @@ public static class MonitoringEndpoints
             .WithName("GetLedgerState")
             .WithDescription("Returns deterministic ledger state with extended capital metrics (cash, gold, equity, compounding).");
 
+        // Spec v7 §10 — Gold Engine dashboard: Physical Ledger card, MT5 Execution card, factor state panel, trade-map, execution mode
+        monitoring.MapGet(
+            "/dashboard",
+            IResult (
+                ITradeLedgerService ledger,
+                ILatestMarketSnapshotStore snapshotStore,
+                ILastGoldEngineStateStore engineStateStore,
+                IPendingTradeStore pendingTrades,
+                IConfiguration configuration) =>
+            {
+                snapshotStore.TryGet(out var snapshot);
+                var bid = snapshot?.Bid ?? snapshot?.AuthoritativeRate ?? 0m;
+                var ledgerState = ledger.GetExtendedState(bid);
+                var (engineStates, pathRouting, _) = engineStateStore.GetLast();
+                var modeRaw = (configuration["Execution:Mode"] ?? "AUTO").Trim().ToUpperInvariant();
+                var executionMode = modeRaw is "HYBRID" or "MANUAL" ? modeRaw : "AUTO";
+                var pricePerGramAed = bid > 0m ? bid * 3.674m / 31.1035m : 0m;
+                var buyableGrams = pricePerGramAed > 0m && ledgerState.DeployableCashAed > 0m
+                    ? Math.Round(ledgerState.DeployableCashAed / pricePerGramAed, 2)
+                    : 0m;
+
+                return TypedResults.Ok(new
+                {
+                    physicalLedger = new
+                    {
+                        cashAed = ledgerState.CashAed,
+                        goldGrams = ledgerState.GoldGrams,
+                        deployableAed = ledgerState.DeployableCashAed,
+                        buyableGrams,
+                    },
+                    mt5ExecutionAccount = new
+                    {
+                        balance = snapshot?.Balance ?? 0m,
+                        equity = snapshot?.Equity ?? 0m,
+                        freeMargin = snapshot?.FreeMargin ?? 0m,
+                        bid = snapshot?.Bid ?? 0m,
+                        ask = snapshot?.Ask ?? 0m,
+                        spread = snapshot?.Spread ?? 0m,
+                    },
+                    factorStatePanel = engineStates == null ? null : new
+                    {
+                        legalityState = engineStates.LegalityState,
+                        biasState = engineStates.BiasState,
+                        pathState = engineStates.PathState,
+                        overextensionState = engineStates.OverextensionState,
+                        waterfallRisk = engineStates.WaterfallRisk,
+                        session = engineStates.Session,
+                        sessionPhase = engineStates.SessionPhase,
+                    },
+                    tradeMapChart = new
+                    {
+                        bases = pathRouting?.PendingLimitPath != null
+                            ? new[] { pathRouting.PendingLimitPath.S1BaseShelf }
+                                .Concat(pathRouting.PendingLimitPath.S2SweepPocket.HasValue ? new[] { pathRouting.PendingLimitPath.S2SweepPocket.Value } : Array.Empty<decimal>())
+                                .Concat(pathRouting.PendingLimitPath.S3ExhaustionPocket.HasValue ? new[] { pathRouting.PendingLimitPath.S3ExhaustionPocket.Value } : Array.Empty<decimal>())
+                                .ToArray()
+                            : Array.Empty<decimal>(),
+                        sessionHigh = snapshot?.SessionHigh ?? 0m,
+                        sessionLow = snapshot?.SessionLow ?? 0m,
+                        pendingBuyLimit = pendingTrades.Snapshot().Where(p => string.Equals(p.Type, "BUY_LIMIT", StringComparison.OrdinalIgnoreCase)).Select(p => new { p.Price, p.Tp, p.Expiry }).ToList(),
+                        pendingBuyStop = pendingTrades.Snapshot().Where(p => string.Equals(p.Type, "BUY_STOP", StringComparison.OrdinalIgnoreCase)).Select(p => new { p.Price, p.Tp, p.Expiry }).ToList(),
+                    },
+                    executionMode,
+                });
+            })
+            .WithName("GetGoldEngineDashboard")
+            .WithDescription("Spec v7 §10 — Physical Ledger card, MT5 Execution card, factor state panel, trade-map chart, execution mode.");
+
+        // Spec v7 §9 — Auto-Tune Phase 1: report only, no auto-apply
+        monitoring.MapGet(
+            "/auto-tune-report",
+            IResult () =>
+            {
+                var report = new AutoTuneReportContract(
+                    ReportId: $"atr_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}",
+                    GeneratedAtUtc: DateTimeOffset.UtcNow,
+                    SuggestedAdjustments: Array.Empty<string>(),
+                    BoundsRespected: new[] { "stretched threshold 0.7–1.1 ATR", "extreme threshold 1.3–1.8 ATR", "BUY_LIMIT baseDistATR 0.8–1.2", "compressionCount 0–2" },
+                    NeverTouched: new[]
+                    {
+                        "WATERFALL_RISK logic", "FAIL laws", "hazard windows", "no-market-buy law",
+                        "exposure/capital gates", "spread block rules", "pending-before-level law", "PRETABLE BLOCK",
+                    },
+                    Summary: "Phase 1: recommendation only. No auto-apply.");
+                return TypedResults.Ok(report);
+            })
+            .WithName("GetAutoTuneReport")
+            .WithDescription("Spec v7 §9 — Auto-Tune Phase 1 report only; no auto-apply.");
+
         monitoring.MapPost(
             "/ledger/deposit",
             IResult (LedgerActionRequest request, ITradeLedgerService ledger) =>

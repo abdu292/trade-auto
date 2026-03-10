@@ -46,6 +46,7 @@ class DashboardScreen extends ConsumerWidget {
     final aiHealth = ref.watch(aiHealthStatusProvider);
     final notifications = ref.watch(notificationsProvider);
     final kpi = ref.watch(kpiProvider);
+    final goldDashboard = ref.watch(goldDashboardProvider);
     final hazardWindows = ref.watch(hazardWindowsProvider);
 
     Future<void> refresh() async {
@@ -99,7 +100,7 @@ class DashboardScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
 
-          // A) Capital Dashboard
+          // A) Capital Dashboard — physical ledger truth
           _AnimatedCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -158,6 +159,63 @@ class DashboardScreen extends ConsumerWidget {
                     error: (error, _) => Text('Ledger error: $error'),
                   ),
                 ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // A2) Gold Engine Factor State (spec v7 §10.B)
+          _AnimatedCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: goldDashboard.when(
+                data: (dash) {
+                  final panel = dash.factorStatePanel;
+                  if (panel == null) {
+                    return const Text(
+                        'Gold Engine factor state not available yet.');
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Gold Engine Factor State',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _MetricChip(
+                              label: 'Legality',
+                              value: panel.legalityState.toUpperCase()),
+                          _MetricChip(
+                              label: 'Bias',
+                              value: panel.biasState.toUpperCase()),
+                          _MetricChip(
+                              label: 'Path',
+                              value: panel.pathState.toUpperCase()),
+                          _MetricChip(
+                              label: 'Overextension',
+                              value: panel.overextensionState.toUpperCase()),
+                          _MetricChip(
+                              label: 'Waterfall',
+                              value: panel.waterfallRisk.toUpperCase()),
+                          _MetricChip(
+                              label: 'Session',
+                              value:
+                                  '${panel.session} · ${panel.sessionPhase}'),
+                          _MetricChip(
+                              label: 'Exec Mode',
+                              value: dash.executionMode.toUpperCase()),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+                loading: () => const LinearProgressIndicator(),
+                error: (e, _) => Text('Factor state error: $e'),
               ),
             ),
           ),

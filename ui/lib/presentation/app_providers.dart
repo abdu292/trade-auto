@@ -64,6 +64,11 @@ final kpiProvider = FutureProvider<KpiStats>((ref) {
   return ref.watch(brainApiProvider).getKpiStats();
 });
 
+// Spec v7 §10 — Gold Engine dashboard (ledger truth + factor states + trade map)
+final goldDashboardProvider = FutureProvider<GoldDashboard>((ref) {
+  return ref.watch(brainApiProvider).getGoldEngineDashboard();
+});
+
 final replayStatusProvider = FutureProvider<ReplayStatusResponse>((ref) {
   return ref.watch(brainApiProvider).getReplayStatus();
 });

@@ -276,9 +276,10 @@ public sealed class SignalPollingBackgroundService(
                     logger.LogInformation("Watch/Waste kill-switch forcing cycle search (no ARMED order for >=25 minutes).");
                 }
 
-                // ── Rule engine: must generate a setup candidate before AI is invoked ──
-                // Log market regime as a dedicated event for timeline clarity before rule engine runs.
-                var marketRegimePrecheck = MarketRegimeDetector.Detect(snapshot);
+                // ── Spec v7: Gold Engine decision stack (path-aware; M5 optional for BUY_LIMIT) ──
+                var waterfallRiskForStack = regime.IsWaterfall ? "HIGH" : (regime.RiskTag == "CAUTION" ? "MEDIUM" : "LOW");
+                var decisionStackResult = GoldEngineDecisionStack.Evaluate(snapshot, regime, waterfallRiskForStack, null);
+
                 await timeline.WriteAsync(
                     eventType: "MARKET_REGIME_DETECTED",
                     stage: "regime",
@@ -288,16 +289,59 @@ public sealed class SignalPollingBackgroundService(
                     tradeId: null,
                     payload: new
                     {
-                        regime = marketRegimePrecheck.Regime,
-                        isTradeable = marketRegimePrecheck.IsTradeable,
-                        reason = marketRegimePrecheck.Reason,
+                        regime = decisionStackResult.MarketRegime.Regime,
+                        isTradeable = decisionStackResult.MarketRegime.IsTradeable,
+                        reason = decisionStackResult.MarketRegime.Reason,
                         ema50H1 = snapshot.Ema50H1,
                         ema200H1 = snapshot.Ema200H1,
                         rsiH1 = snapshot.RsiH1,
                     },
                     cancellationToken: stoppingToken);
 
-                var setupCandidate = RuleEngine.Evaluate(snapshot);
+                await timeline.WriteAsync(
+                    eventType: "GOLD_ENGINE_DECISION_STACK",
+                    stage: "rule_engine",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        proceedToAi = decisionStackResult.ProceedToAi,
+                        pathState = decisionStackResult.PathState,
+                        reasonCode = decisionStackResult.ReasonCode,
+                        legalityState = decisionStackResult.LegalityState,
+                        overextensionState = decisionStackResult.Overextension.State,
+                        sweepReclaimState = decisionStackResult.SweepReclaim.State,
+                        engineStates = decisionStackResult.EngineStates == null ? null : new
+                        {
+                            decisionStackResult.EngineStates.LegalityState,
+                            decisionStackResult.EngineStates.BiasState,
+                            decisionStackResult.EngineStates.PathState,
+                            decisionStackResult.EngineStates.SizeState,
+                            decisionStackResult.EngineStates.OverextensionState,
+                            decisionStackResult.EngineStates.WaterfallRisk,
+                            decisionStackResult.EngineStates.Session,
+                            decisionStackResult.EngineStates.SessionPhase,
+                        },
+                    },
+                    cancellationToken: stoppingToken);
+
+                var setupCandidate = decisionStackResult.ProceedToAi
+                    ? SetupCandidateResult.Valid(
+                        decisionStackResult.H1Context,
+                        decisionStackResult.M15Setup,
+                        decisionStackResult.M5Entry!,
+                        decisionStackResult.MarketRegime,
+                        decisionStackResult.ImpulseConfirmation!)
+                    : SetupCandidateResult.Aborted(
+                        decisionStackResult.H1Context,
+                        decisionStackResult.M15Setup,
+                        decisionStackResult.ReasonCode ?? $"PATH_{decisionStackResult.PathState}",
+                        decisionStackResult.MarketRegime);
+
+                var lastEngineStore = scope.ServiceProvider.GetRequiredService<ILastGoldEngineStateStore>();
+                lastEngineStore.SetLast(decisionStackResult.EngineStates, decisionStackResult.PathRouting, snapshot);
 
                 // ── Pattern Detector (CR8): runs after regime check, before AI ──────────────
                 // Produces structured pattern intelligence for ANALYZE/TABLE/MANAGE/STUDY feeds.
@@ -335,7 +379,7 @@ public sealed class SignalPollingBackgroundService(
                 }
 
                 await timeline.WriteAsync(
-                    eventType: setupCandidate.IsValid ? "RULE_ENGINE_SETUP_CANDIDATE" : "RULE_ENGINE_ABORT",
+                    eventType: setupCandidate.IsValid ? "RULE_ENGINE_SETUP_CANDIDATE" : "PATH_WAIT",
                     stage: "rule_engine",
                     source: "brain",
                     symbol: snapshot.Symbol,
@@ -344,6 +388,8 @@ public sealed class SignalPollingBackgroundService(
                     payload: new
                     {
                         setupCandidate.IsValid,
+                        pathState = decisionStackResult.PathState,
+                        reasonCode = decisionStackResult.ReasonCode,
                         marketRegime = setupCandidate.MarketRegime,
                         h1Context = setupCandidate.H1Context,
                         m15Setup = setupCandidate.M15Setup,
@@ -356,11 +402,12 @@ public sealed class SignalPollingBackgroundService(
                 if (!setupCandidate.IsValid)
                 {
                     logger.LogInformation(
-                        "RULE_ENGINE_ABORT — no setup candidate. Reason={Reason}",
-                        setupCandidate.AbortReason);
+                        "PATH_WAIT — path={PathState} reason={Reason} (spec v7: no generic M5 abort)",
+                        decisionStackResult.PathState,
+                        decisionStackResult.ReasonCode ?? setupCandidate.AbortReason);
 
                     await timeline.WriteAsync(
-                        eventType: "AI_SKIPPED_RULE_ENGINE_ABORT",
+                        eventType: "AI_SKIPPED_PATH_WAIT",
                         stage: "rule_engine",
                         source: "brain",
                         symbol: snapshot.Symbol,
@@ -368,7 +415,9 @@ public sealed class SignalPollingBackgroundService(
                         tradeId: null,
                         payload: new
                         {
-                            reason = "rule engine invalid setup",
+                            reason = "path-aware decision stack: stand down or BUY_STOP not ready",
+                            pathState = decisionStackResult.PathState,
+                            reasonCode = decisionStackResult.ReasonCode,
                             abortReason = setupCandidate.AbortReason,
                         },
                         cancellationToken: stoppingToken);
@@ -383,7 +432,7 @@ public sealed class SignalPollingBackgroundService(
                         payload: new
                         {
                             finalDecision = "NO_TRADE",
-                            primaryReason = "RULE_ENGINE_ABORT",
+                            primaryReason = decisionStackResult.ReasonCode ?? $"PATH_{decisionStackResult.PathState}",
                             abortReason = setupCandidate.AbortReason,
                         },
                         cancellationToken: stoppingToken);

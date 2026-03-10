@@ -831,6 +831,189 @@ class KpiStats {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Spec v7 §10 — Gold Engine dashboard contracts (Flutter side)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class GoldDashboard {
+  const GoldDashboard({
+    required this.physicalLedger,
+    required this.mt5ExecutionAccount,
+    required this.factorStatePanel,
+    required this.tradeMapChart,
+    required this.executionMode,
+  });
+
+  final PhysicalLedgerCard physicalLedger;
+  final Mt5ExecutionCard mt5ExecutionAccount;
+  final FactorStatePanel? factorStatePanel;
+  final TradeMapSummary tradeMapChart;
+  final String executionMode;
+
+  factory GoldDashboard.fromJson(Map<String, dynamic> json) => GoldDashboard(
+        physicalLedger: PhysicalLedgerCard.fromJson(
+            _readMap(json, 'physicalLedger')),
+        mt5ExecutionAccount: Mt5ExecutionCard.fromJson(
+            _readMap(json, 'mt5ExecutionAccount')),
+        factorStatePanel: json['factorStatePanel'] == null
+            ? null
+            : FactorStatePanel.fromJson(
+                _readMap(json, 'factorStatePanel'),
+              ),
+        tradeMapChart:
+            TradeMapSummary.fromJson(_readMap(json, 'tradeMapChart')),
+        executionMode: _readString(json, 'executionMode'),
+      );
+}
+
+class PhysicalLedgerCard {
+  const PhysicalLedgerCard({
+    required this.cashAed,
+    required this.goldGrams,
+    required this.deployableAed,
+    required this.buyableGrams,
+  });
+
+  final double cashAed;
+  final double goldGrams;
+  final double deployableAed;
+  final double buyableGrams;
+
+  factory PhysicalLedgerCard.fromJson(Map<String, dynamic> json) =>
+      PhysicalLedgerCard(
+        cashAed: _readDouble(json, 'cashAed'),
+        goldGrams: _readDouble(json, 'goldGrams'),
+        deployableAed: _readDouble(json, 'deployableAed'),
+        buyableGrams: _readDouble(json, 'buyableGrams'),
+      );
+}
+
+class Mt5ExecutionCard {
+  const Mt5ExecutionCard({
+    required this.balance,
+    required this.equity,
+    required this.freeMargin,
+    required this.bid,
+    required this.ask,
+    required this.spread,
+  });
+
+  final double balance;
+  final double equity;
+  final double freeMargin;
+  final double bid;
+  final double ask;
+  final double spread;
+
+  factory Mt5ExecutionCard.fromJson(Map<String, dynamic> json) =>
+      Mt5ExecutionCard(
+        balance: _readDouble(json, 'balance'),
+        equity: _readDouble(json, 'equity'),
+        freeMargin: _readDouble(json, 'freeMargin'),
+        bid: _readDouble(json, 'bid'),
+        ask: _readDouble(json, 'ask'),
+        spread: _readDouble(json, 'spread'),
+      );
+}
+
+class FactorStatePanel {
+  const FactorStatePanel({
+    required this.legalityState,
+    required this.biasState,
+    required this.pathState,
+    required this.overextensionState,
+    required this.waterfallRisk,
+    required this.session,
+    required this.sessionPhase,
+  });
+
+  final String legalityState;
+  final String biasState;
+  final String pathState;
+  final String overextensionState;
+  final String waterfallRisk;
+  final String session;
+  final String sessionPhase;
+
+  factory FactorStatePanel.fromJson(Map<String, dynamic> json) =>
+      FactorStatePanel(
+        legalityState: _readString(json, 'legalityState'),
+        biasState: _readString(json, 'biasState'),
+        pathState: _readString(json, 'pathState'),
+        overextensionState: _readString(json, 'overextensionState'),
+        waterfallRisk: _readString(json, 'waterfallRisk'),
+        session: _readString(json, 'session'),
+        sessionPhase: _readString(json, 'sessionPhase'),
+      );
+}
+
+class TradeMapSummary {
+  const TradeMapSummary({
+    required this.bases,
+    required this.sessionHigh,
+    required this.sessionLow,
+    required this.pendingBuyLimit,
+    required this.pendingBuyStop,
+  });
+
+  final List<double> bases;
+  final double sessionHigh;
+  final double sessionLow;
+  final List<PendingLevelSummary> pendingBuyLimit;
+  final List<PendingLevelSummary> pendingBuyStop;
+
+  factory TradeMapSummary.fromJson(Map<String, dynamic> json) {
+    final rawBases = json['bases'];
+    final bases = <double>[];
+    if (rawBases is List) {
+      for (final v in rawBases) {
+        bases.add(
+            v is num ? v.toDouble() : double.tryParse(v.toString()) ?? 0.0);
+      }
+    }
+    List<PendingLevelSummary> _parseList(dynamic raw) {
+      final list = <PendingLevelSummary>[];
+      if (raw is List) {
+        for (final item in raw) {
+          if (item is Map<String, dynamic>) {
+            list.add(PendingLevelSummary.fromJson(item));
+          } else if (item is Map) {
+            list.add(PendingLevelSummary.fromJson(
+                item.map((k, v) => MapEntry(k.toString(), v))));
+          }
+        }
+      }
+      return list;
+    }
+
+    return TradeMapSummary(
+      bases: bases,
+      sessionHigh: _readDouble(json, 'sessionHigh'),
+      sessionLow: _readDouble(json, 'sessionLow'),
+      pendingBuyLimit: _parseList(json['pendingBuyLimit']),
+      pendingBuyStop: _parseList(json['pendingBuyStop']),
+    );
+  }
+}
+
+class PendingLevelSummary {
+  const PendingLevelSummary({
+    required this.price,
+    required this.tp,
+    required this.expiry,
+  });
+
+  final double price;
+  final double tp;
+  final DateTime? expiry;
+
+  factory PendingLevelSummary.fromJson(Map<String, dynamic> json) =>
+      PendingLevelSummary(
+        price: _readDouble(json, 'price'),
+        tp: _readDouble(json, 'tp'),
+        expiry: _readNullableDateTime(json, 'expiry'),
+      );
+}
 String _readString(Map<String, dynamic> json, String key) {
   final value = json[key] ?? json[_pascal(key)] ?? '';
   return value.toString();

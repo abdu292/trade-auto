@@ -33,20 +33,20 @@ public static class RuleEngine
             return SetupCandidateResult.AbortedByRegime(marketRegime);
         }
 
-        var h1 = EvaluateH1Context(snapshot);
+        var h1 = EvaluateH1ContextImpl(snapshot);
 
         if (h1.Context == "NEUTRAL")
         {
             return SetupCandidateResult.Aborted(h1, $"H1 context is neutral — no directional bias. {h1.Reason}", marketRegime);
         }
 
-        var m15 = EvaluateM15Setup(snapshot);
+        var m15 = EvaluateM15SetupImpl(snapshot);
         if (!m15.IsValid)
         {
             return SetupCandidateResult.Aborted(h1, $"M15 setup not found: {m15.Reason}", marketRegime);
         }
 
-        var m5 = EvaluateM5Entry(snapshot);
+        var m5 = EvaluateM5EntryImpl(snapshot);
         if (!m5.IsValid)
         {
             return SetupCandidateResult.Aborted(h1, m15, $"M5 entry not confirmed: {m5.Reason}", marketRegime);
@@ -56,7 +56,7 @@ public static class RuleEngine
         // Verifies that the entry timeframe shows real directional momentum before
         // approving the setup. Filters out weak consolidation, slow movement, and
         // fake breakouts where price lacks actual energy in the trade direction.
-        var impulse = EvaluateImpulse(snapshot);
+        var impulse = EvaluateImpulseImpl(snapshot);
         if (!impulse.IsConfirmed)
         {
             return SetupCandidateResult.AbortedByImpulse(h1, m15, m5, impulse, marketRegime);
@@ -65,12 +65,15 @@ public static class RuleEngine
         return SetupCandidateResult.Valid(h1, m15, m5, marketRegime, impulse);
     }
 
+    /// <summary>Spec v7 — Layer 1 exposed for path-aware decision stack. Do not abort cycle on M5 before path is known.</summary>
+    public static H1ContextResult EvaluateH1Context(MarketSnapshotContract snapshot) => EvaluateH1ContextImpl(snapshot);
+
     // ──────────────────────────────────────────────────────────────────────────
     // Layer 1 — H1 Context
     // Evaluates the broader market state using trend alignment and momentum.
     // Returns BULLISH, BEARISH, or NEUTRAL.
     // ──────────────────────────────────────────────────────────────────────────
-    private static H1ContextResult EvaluateH1Context(MarketSnapshotContract snapshot)
+    private static H1ContextResult EvaluateH1ContextImpl(MarketSnapshotContract snapshot)
     {
         var h1Candle = snapshot.TimeframeData
             .FirstOrDefault(x => string.Equals(x.Timeframe, "H1", StringComparison.OrdinalIgnoreCase));
@@ -136,11 +139,14 @@ public static class RuleEngine
             Reason: reason);
     }
 
+    /// <summary>Spec v7 — Layer 2 exposed for path-aware decision stack.</summary>
+    public static M15SetupResult EvaluateM15Setup(MarketSnapshotContract snapshot) => EvaluateM15SetupImpl(snapshot);
+
     // ──────────────────────────────────────────────────────────────────────────
     // Layer 2 — M15 Setup
     // Identifies structural trade opportunities via compression or base formation.
     // ──────────────────────────────────────────────────────────────────────────
-    private static M15SetupResult EvaluateM15Setup(MarketSnapshotContract snapshot)
+    private static M15SetupResult EvaluateM15SetupImpl(MarketSnapshotContract snapshot)
     {
         // Volatility compression: explicit flag or at least 2 compression candles
         var isCompression = snapshot.IsCompression || snapshot.CompressionCountM15 >= 2;
@@ -166,11 +172,13 @@ public static class RuleEngine
             Reason: reason);
     }
 
+    /// <summary>Spec v7 — Layer 3 exposed for path-aware decision stack. BUY_STOP path requires this; BUY_LIMIT does not.</summary>
+    public static M5EntryResult EvaluateM5Entry(MarketSnapshotContract snapshot) => EvaluateM5EntryImpl(snapshot);
+
     // ──────────────────────────────────────────────────────────────────────────
     // Layer 3 — M5 Entry
-    // Determines whether the setup is actionable at M5 granularity.
     // ──────────────────────────────────────────────────────────────────────────
-    private static M5EntryResult EvaluateM5Entry(MarketSnapshotContract snapshot)
+    private static M5EntryResult EvaluateM5EntryImpl(MarketSnapshotContract snapshot)
     {
         // Compression break: confirmed breakout candle
         var isBreakout = snapshot.IsBreakoutConfirmed;
@@ -201,14 +209,10 @@ public static class RuleEngine
             Reason: reason);
     }
 
-    // ──────────────────────────────────────────────────────────────────────────
-    // Layer 4 — Impulse Confirmation
-    // Verifies that the entry timeframe (M5) shows real directional momentum.
-    // Filters out setups where structure appears valid but the market lacks
-    // immediate price energy (weak consolidation, slow movement, fake breakouts).
-    // At least one impulse signal must be present for the setup to proceed.
-    // ──────────────────────────────────────────────────────────────────────────
-    private static ImpulseConfirmationResult EvaluateImpulse(MarketSnapshotContract snapshot)
+    /// <summary>Spec v7 — Layer 4 exposed for path-aware decision stack. Required for BUY_STOP.</summary>
+    public static ImpulseConfirmationResult EvaluateImpulse(MarketSnapshotContract snapshot) => EvaluateImpulseImpl(snapshot);
+
+    private static ImpulseConfirmationResult EvaluateImpulseImpl(MarketSnapshotContract snapshot)
     {
         // Direct impulse: pre-computed flag with sufficient strength score
         var hasMomentumExpansion = snapshot.HasImpulseCandles && snapshot.ImpulseStrengthScore >= MinimumImpulseStrength;

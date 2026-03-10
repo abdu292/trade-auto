@@ -307,6 +307,12 @@ class BrainApi {
     return LedgerState.fromJson(
         _asMap((_asMap(response.data))['ledger'] ?? response.data));
   }
+
+  /// Spec v7 §10 — Gold Engine dashboard (factor states, trade-map, execution mode).
+  Future<GoldDashboard> getGoldEngineDashboard() async {
+    final response = await _dio.get('/api/monitoring/dashboard');
+    return GoldDashboard.fromJson(_asMap(response.data));
+  }
 }
 
 Map<String, dynamic> _asMap(dynamic data) {

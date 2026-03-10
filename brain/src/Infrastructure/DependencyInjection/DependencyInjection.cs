@@ -1,6 +1,7 @@
 using Brain.Application.Common.Interfaces;
 using Brain.Application.Common.Services;
 using Brain.Infrastructure.Data;
+using Brain.Infrastructure.Services;
 using Brain.Infrastructure.Services.Background;
 using Brain.Infrastructure.Services.External;
 using Microsoft.EntityFrameworkCore;
@@ -50,6 +51,8 @@ public static class DependencyInjection
         services.AddSingleton<INotificationFeedStore, InMemoryNotificationFeedStore>();
         services.AddSingleton<ITradingRuntimeSettingsStore>(_ =>
             new InMemoryTradingRuntimeSettingsStore(configuration["Execution:Symbol"] ?? "XAUUSD.gram"));
+        services.AddSingleton<ILastGoldEngineStateStore, InMemoryLastGoldEngineStateStore>();
+        services.AddSingleton<IGoldEngineThresholds, GoldEngineThresholds>();
         services.AddSingleton<ITradeLedgerService, DurableTradeLedgerService>();
         services.AddScoped<IMt5BridgeClient, MockMt5BridgeClient>();
         services.AddHttpClient<TelegramNotificationService>()
