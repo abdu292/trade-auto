@@ -206,6 +206,10 @@ class DashboardScreen extends ConsumerWidget {
                               label: 'Session',
                               value:
                                   '${panel.session} · ${panel.sessionPhase}'),
+                          // Spec v8 §11 — Rotation Efficiency state
+                          _MetricChip(
+                              label: 'Efficiency',
+                              value: panel.efficiencyState.toUpperCase()),
                           _MetricChip(
                               label: 'Exec Mode',
                               value: dash.executionMode.toUpperCase()),

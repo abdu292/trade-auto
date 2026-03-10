@@ -925,6 +925,7 @@ class FactorStatePanel {
     required this.waterfallRisk,
     required this.session,
     required this.sessionPhase,
+    this.efficiencyState = 'LOW',
   });
 
   final String legalityState;
@@ -934,6 +935,8 @@ class FactorStatePanel {
   final String waterfallRisk;
   final String session;
   final String sessionPhase;
+  // Spec v8 §11 — Rotation Efficiency state
+  final String efficiencyState;
 
   factory FactorStatePanel.fromJson(Map<String, dynamic> json) =>
       FactorStatePanel(
@@ -944,6 +947,7 @@ class FactorStatePanel {
         waterfallRisk: _readString(json, 'waterfallRisk'),
         session: _readString(json, 'session'),
         sessionPhase: _readString(json, 'sessionPhase'),
+        efficiencyState: json['efficiencyState'] as String? ?? 'LOW',
       );
 }
 

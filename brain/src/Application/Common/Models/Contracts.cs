@@ -117,7 +117,11 @@ public sealed record MarketSnapshotContract(
     // Pending/open/execution snapshots (PRD)
     IReadOnlyCollection<PendingOrderSnapshotContract>? PendingOrders = null,
     IReadOnlyCollection<OpenPositionSnapshotContract>? OpenPositions = null,
-    IReadOnlyCollection<OrderExecutionEventContract>? OrderExecutionEvents = null);
+    IReadOnlyCollection<OrderExecutionEventContract>? OrderExecutionEvents = null,
+    // Spec v8 §13 — additional input contract fields
+    decimal Ma20M5 = 0m,
+    bool GeoRiskFlag = false,
+    bool NewsEventFlag = false);
     
 public sealed record PendingOrderSnapshotContract(
     string Type,
@@ -219,7 +223,12 @@ public sealed record DecisionResultContract(
     decimal ShopBuy = 0m,
     decimal ShopSell = 0m,
     DateTimeOffset ExpiryKSA = default,
-    DateTimeOffset ExpiryServer = default);
+    DateTimeOffset ExpiryServer = default,
+    // Spec v8 §14 — entry levels (limit1/limit2/stop1) and efficiency score
+    decimal Limit1 = 0m,
+    decimal Limit2 = 0m,
+    decimal Stop1 = 0m,
+    int EfficiencyScore = 0);
 
 public sealed record LedgerStateContract(
     decimal CashAed,
@@ -406,7 +415,10 @@ public sealed record RotationOptimizerResult(
     string Mode,
     string CrRegime,
     IReadOnlyCollection<StaggeredLevelContract>? StaggeredLevels,
-    string Reason);
+    string Reason,
+    // Spec v8 §11 — Rotation Efficiency Engine output
+    string EfficiencyState = "LOW",
+    int EfficiencyScore = 0);
 
 /// <summary>
 /// One level of a staggered buy-limit ladder.

@@ -187,7 +187,11 @@ public sealed class SignalPollingBackgroundService(
 
                 var symbol = runtimeSettings.GetSymbol();
                 var rawSnapshot = await marketData.GetSnapshotAsync(symbol, stoppingToken);
-                var snapshot = rawSnapshot with { CycleId = cycleId };
+                // Spec v8 §13: enrich snapshot with Ma20M5 extracted from TimeframeData
+                var m5CandleForMa = (rawSnapshot.TimeframeData ?? []).FirstOrDefault(x =>
+                    string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase));
+                var enrichedMa20M5 = m5CandleForMa?.Ma20Value ?? 0m;
+                var snapshot = rawSnapshot with { CycleId = cycleId, Ma20M5 = enrichedMa20M5 };
 
                 // Candle-aligned gate: only run the strategy when a new M5 or M15 candle has closed.
                 var currentM5Time = snapshot.TimeframeData
@@ -514,6 +518,9 @@ public sealed class SignalPollingBackgroundService(
                     continue;
                 }
 
+                // Spec v8 §13: enrich snapshot with NewsEventFlag (any nearby news events present)
+                snapshot = snapshot with { NewsEventFlag = newsRisk.NearbyEvents?.Count > 0 };
+
                 await timeline.WriteAsync(
                     eventType: "AI_ANALYZE_REQUEST",
                     stage: "ai",
@@ -555,6 +562,11 @@ public sealed class SignalPollingBackgroundService(
                     logger.LogWarning(ex, "AI analyze call failed for cycle {CycleId}.", cycleId);
                     throw;
                 }
+
+                // Spec v8 §13: enrich snapshot with GeoRiskFlag from AI geo/event risk assessment
+                var geoRiskFlag = !string.IsNullOrEmpty(aiSignal.GeoHeadline) && aiSignal.GeoHeadline != "NONE"
+                    || aiSignal.EventRisk is "HIGH" or "MEDIUM";
+                snapshot = snapshot with { GeoRiskFlag = geoRiskFlag };
 
                 var aiTrace = ParseAiTrace(aiSignal.AiTraceJson);
                 var aiRequest = TryGetTraceNode(aiTrace, "ai_request");
@@ -888,8 +900,21 @@ public sealed class SignalPollingBackgroundService(
                         rotationResult.CrRegime,
                         rotationResult.Reason,
                         staggeredLevels = rotationResult.StaggeredLevels,
+                        // Spec v8 §11 — efficiency state
+                        efficiencyState = rotationResult.EfficiencyState,
+                        efficiencyScore = rotationResult.EfficiencyScore,
                     },
                     cancellationToken: stoppingToken);
+
+                // Spec v8 §11: update lastEngineStore with efficiency state now that it's known
+                {
+                    var (currentEngineStates, currentPathRouting, currentSnap) = lastEngineStore.GetLast();
+                    if (currentEngineStates != null)
+                    {
+                        var updatedEngineStates = currentEngineStates with { EfficiencyState = rotationResult.EfficiencyState };
+                        lastEngineStore.SetLast(updatedEngineStates, currentPathRouting, currentSnap);
+                    }
+                }
 
                 // CR11 STUDY_CANDIDATE_LOG: log full candidate context for STUDY analysis.
                 // Every evaluated candidate (including blocked ones) must log all CR11 fields.
@@ -966,6 +991,38 @@ public sealed class SignalPollingBackgroundService(
                 var minTradeGrams = runtimeSettings.GetMinTradeGrams();
                 var decision = DecisionEngine.Evaluate(snapshot, regime, aiSignal, state, activeStrategy, minTradeGrams, effectiveSizeModifier);
                 var snapshotHash = ComputeSnapshotHash(snapshot);
+
+                // Spec v8 §14: compute entry levels (limit1, limit2, stop1) from rotation result and decision
+                decimal limit1 = 0m, limit2 = 0m, stop1 = 0m;
+                if (decision.Rail == "BUY_LIMIT")
+                {
+                    limit1 = decision.Entry;
+                    // limit2 from staggered levels or path routing S2
+                    var staggeredLevels = rotationResult.StaggeredLevels;
+                    if (staggeredLevels?.Count >= 2)
+                    {
+                        var s2 = staggeredLevels.OrderBy(l => l.LevelIndex).Skip(1).FirstOrDefault();
+                        limit2 = s2 != null ? Math.Round(decision.Entry + s2.EntryOffset, 2) : 0m;
+                    }
+                    else
+                    {
+                        var pathRouting = decisionStackResult.PathRouting?.PendingLimitPath;
+                        limit2 = pathRouting?.S2SweepPocket ?? 0m;
+                    }
+                }
+                else if (decision.Rail == "BUY_STOP")
+                {
+                    stop1 = decision.Entry;
+                }
+
+                // Spec v8 §14: enrich decision with entry levels and efficiency score
+                decision = decision with
+                {
+                    Limit1 = limit1,
+                    Limit2 = limit2,
+                    Stop1 = stop1,
+                    EfficiencyScore = rotationResult.EfficiencyScore,
+                };
 
                 await timeline.WriteAsync(
                     eventType: "DECISION_EVALUATED",
@@ -1536,6 +1593,11 @@ public sealed class SignalPollingBackgroundService(
                         rail = pending.Type,
                         grams = pending.Grams,
                         route = directToMt5 ? "MT5_PENDING" : "APPROVAL_QUEUE",
+                        // Spec v8 §14 — entry levels and efficiency score
+                        limit1 = decision.Limit1,
+                        limit2 = decision.Limit2,
+                        stop1 = decision.Stop1,
+                        efficiencyScore = decision.EfficiencyScore,
                     },
                     cancellationToken: stoppingToken);
 

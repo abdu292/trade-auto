@@ -74,6 +74,8 @@ public static class MonitoringEndpoints
                         waterfallRisk = engineStates.WaterfallRisk,
                         session = engineStates.Session,
                         sessionPhase = engineStates.SessionPhase,
+                        // Spec v8 §11 — efficiency state
+                        efficiencyState = engineStates.EfficiencyState,
                     },
                     tradeMapChart = new
                     {
