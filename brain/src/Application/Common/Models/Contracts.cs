@@ -121,8 +121,20 @@ public sealed record MarketSnapshotContract(
     // Spec v8 §13 — additional input contract fields
     decimal Ma20M5 = 0m,
     bool GeoRiskFlag = false,
-    bool NewsEventFlag = false);
-    
+    bool NewsEventFlag = false,
+    // Cross-market from MT5 (DXY, Silver/XAG)
+    decimal? DxyBid = null,
+    decimal? SilverBid = null);
+
+/// <summary>Single OHLCV candle for chart display (from MT5 recentCandlesM15).</summary>
+public sealed record CandlePoint(
+    DateTimeOffset Time,
+    decimal Open,
+    decimal High,
+    decimal Low,
+    decimal Close,
+    long Volume = 0L);
+
 public sealed record PendingOrderSnapshotContract(
     string Type,
     decimal Price,

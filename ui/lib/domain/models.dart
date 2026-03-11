@@ -842,6 +842,7 @@ class GoldDashboard {
     required this.factorStatePanel,
     required this.tradeMapChart,
     required this.executionMode,
+    this.validationSummary,
   });
 
   final PhysicalLedgerCard physicalLedger;
@@ -849,6 +850,7 @@ class GoldDashboard {
   final FactorStatePanel? factorStatePanel;
   final TradeMapSummary tradeMapChart;
   final String executionMode;
+  final ValidationSummary? validationSummary;
 
   factory GoldDashboard.fromJson(Map<String, dynamic> json) => GoldDashboard(
         physicalLedger: PhysicalLedgerCard.fromJson(
@@ -863,6 +865,97 @@ class GoldDashboard {
         tradeMapChart:
             TradeMapSummary.fromJson(_readMap(json, 'tradeMapChart')),
         executionMode: _readString(json, 'executionMode'),
+        validationSummary: json['validationSummary'] == null
+            ? null
+            : ValidationSummary.fromJson(
+                _readMap(json, 'validationSummary')),
+      );
+}
+
+/// Indicators and factors sent for validation (DXY, Silver, cross-metal, full indicators list).
+class ValidationSummary {
+  const ValidationSummary({
+    required this.rateNow,
+    required this.rateAsk,
+    required this.rateLabel,
+    required this.indicators,
+    required this.completeIndicatorsList,
+    required this.dxyState,
+    required this.silverCrossMetalState,
+    this.dxyRate,
+    this.silverRate,
+    this.crossMetalNote,
+    this.historicalComparison,
+  });
+
+  final double rateNow;
+  final double rateAsk;
+  final String rateLabel;
+  final ValidationIndicators indicators;
+  final String completeIndicatorsList;
+  final String dxyState;
+  final String silverCrossMetalState;
+  final double? dxyRate;
+  final double? silverRate;
+  final String? crossMetalNote;
+  final String? historicalComparison;
+
+  factory ValidationSummary.fromJson(Map<String, dynamic> json) {
+    final ind = json['indicators'];
+    final dxyRateVal = json['dxyRate'];
+    final silverRateVal = json['silverRate'];
+    return ValidationSummary(
+      rateNow: _readDouble(json, 'rateNow'),
+      rateAsk: _readDouble(json, 'rateAsk'),
+      rateLabel: _readString(json, 'rateLabel'),
+      indicators: ind is Map<String, dynamic>
+          ? ValidationIndicators.fromJson(ind)
+          : const ValidationIndicators(),
+      completeIndicatorsList:
+          _readString(json, 'completeIndicatorsList'),
+      dxyState: _readString(json, 'dxyState'),
+      silverCrossMetalState:
+          _readString(json, 'silverCrossMetalState'),
+      dxyRate: dxyRateVal is num ? (dxyRateVal as num).toDouble() : null,
+      silverRate: silverRateVal is num ? (silverRateVal as num).toDouble() : null,
+      crossMetalNote: _readNullableString(json, 'crossMetalNote'),
+      historicalComparison:
+          _readNullableString(json, 'historicalComparison'),
+    );
+  }
+}
+
+class ValidationIndicators {
+  const ValidationIndicators({
+    this.rsiH1 = 0,
+    this.rsiM15 = 0,
+    this.ma20H1 = 0,
+    this.ma20M15 = 0,
+    this.atrM15 = 0,
+    this.compressionM15 = 0,
+    this.expansionM15 = 0,
+    this.adrUsedPct = 0,
+  });
+
+  final double rsiH1;
+  final double rsiM15;
+  final double ma20H1;
+  final double ma20M15;
+  final double atrM15;
+  final int compressionM15;
+  final int expansionM15;
+  final double adrUsedPct;
+
+  factory ValidationIndicators.fromJson(Map<String, dynamic> json) =>
+      ValidationIndicators(
+        rsiH1: _readDouble(json, 'rsiH1'),
+        rsiM15: _readDouble(json, 'rsiM15'),
+        ma20H1: _readDouble(json, 'ma20H1'),
+        ma20M15: _readDouble(json, 'ma20M15'),
+        atrM15: _readDouble(json, 'atrM15'),
+        compressionM15: (json['compressionM15'] as num?)?.toInt() ?? 0,
+        expansionM15: (json['expansionM15'] as num?)?.toInt() ?? 0,
+        adrUsedPct: _readDouble(json, 'adrUsedPct'),
       );
 }
 
@@ -1018,6 +1111,56 @@ class PendingLevelSummary {
         expiry: _readNullableDateTime(json, 'expiry'),
       );
 }
+/// Single OHLCV candle for chart (from MT5 M15).
+class CandlePoint {
+  const CandlePoint({
+    required this.time,
+    required this.open,
+    required this.high,
+    required this.low,
+    required this.close,
+    this.volume = 0,
+  });
+
+  final DateTime time;
+  final double open;
+  final double high;
+  final double low;
+  final double close;
+  final int volume;
+
+  factory CandlePoint.fromJson(Map<String, dynamic> json) => CandlePoint(
+        time: _readDateTime(json, 'time'),
+        open: _readDouble(json, 'open'),
+        high: _readDouble(json, 'high'),
+        low: _readDouble(json, 'low'),
+        close: _readDouble(json, 'close'),
+        volume: _readInt(json, 'volume'),
+      );
+}
+
+class ChartData {
+  const ChartData({required this.m15});
+
+  final List<CandlePoint> m15;
+
+  factory ChartData.fromJson(Map<String, dynamic> json) {
+    final raw = json['m15'];
+    final list = <CandlePoint>[];
+    if (raw is List) {
+      for (final e in raw) {
+        if (e is Map<String, dynamic>) {
+          list.add(CandlePoint.fromJson(e));
+        } else if (e is Map) {
+          list.add(CandlePoint.fromJson(
+              e.map((k, v) => MapEntry(k.toString(), v))));
+        }
+      }
+    }
+    return ChartData(m15: list);
+  }
+}
+
 String _readString(Map<String, dynamic> json, String key) {
   final value = json[key] ?? json[_pascal(key)] ?? '';
   return value.toString();

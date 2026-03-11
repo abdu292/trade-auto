@@ -69,6 +69,10 @@ final goldDashboardProvider = FutureProvider<GoldDashboard>((ref) {
   return ref.watch(brainApiProvider).getGoldEngineDashboard();
 });
 
+final chartDataProvider = FutureProvider<ChartData>((ref) {
+  return ref.watch(brainApiProvider).getChartData();
+});
+
 final replayStatusProvider = FutureProvider<ReplayStatusResponse>((ref) {
   return ref.watch(brainApiProvider).getReplayStatus();
 });

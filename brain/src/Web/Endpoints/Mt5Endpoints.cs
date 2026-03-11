@@ -145,6 +145,7 @@ public static class Mt5Endpoints
             async Task<IResult> (
                 Mt5MarketSnapshotRequest request,
                 ILatestMarketSnapshotStore snapshotStore,
+                IChartDataStore chartDataStore,
                 ITradeLedgerService ledger,
                 IRuntimeTimelineWriter timeline,
                 ILogger<object> logger,
@@ -332,9 +333,25 @@ public static class Mt5Endpoints
                     CompressionRangesM15: (request.CompressionRangesM15 ?? Array.Empty<decimal>()).ToArray(),
                     PendingOrders: pendingOrders,
                     OpenPositions: openPositions,
-                    OrderExecutionEvents: executionEvents);
+                    OrderExecutionEvents: executionEvents,
+                    DxyBid: request.DxyBid,
+                    SilverBid: request.SilverBid);
 
                 snapshotStore.Upsert(snapshot);
+
+                if (request.RecentCandlesM15 is { Count: > 0 })
+                {
+                    var candles = request.RecentCandlesM15
+                        .Select(c => new CandlePoint(
+                            Time: c.Time ?? DateTimeOffset.MinValue,
+                            Open: c.Open,
+                            High: c.High,
+                            Low: c.Low,
+                            Close: c.Close,
+                            Volume: c.Volume))
+                        .ToList();
+                    chartDataStore.SetM15Candles(candles);
+                }
 
                 // Keep ledger cash/holdings aligned with live runtime account state.
                 // Gold holdings are derived from currently open position grams-equivalent.
@@ -831,7 +848,18 @@ public sealed record Mt5MarketSnapshotRequest(
     IReadOnlyCollection<decimal>? CompressionRangesM15,
     IReadOnlyCollection<Mt5PendingOrderRequest>? PendingOrders,
     IReadOnlyCollection<Mt5OpenPositionRequest>? OpenPositions,
-    IReadOnlyCollection<Mt5OrderExecutionEventRequest>? OrderExecutionEvents);
+    IReadOnlyCollection<Mt5OrderExecutionEventRequest>? OrderExecutionEvents,
+    decimal? DxyBid = null,
+    decimal? SilverBid = null,
+    IReadOnlyCollection<Mt5CandleRequest>? RecentCandlesM15 = null);
+
+public sealed record Mt5CandleRequest(
+    DateTimeOffset? Time,
+    decimal Open,
+    decimal High,
+    decimal Low,
+    decimal Close,
+    long Volume = 0L);
 
 public sealed record Mt5TimeframeDataRequest(
     string Timeframe,

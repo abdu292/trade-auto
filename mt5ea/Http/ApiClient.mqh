@@ -579,6 +579,33 @@ private:
             lowest = SymbolInfoDouble(symbol, SYMBOL_BID);
     }
 
+    double GetCrossSymbolBid(string crossSymbol)
+    {
+        if (!SymbolSelect(crossSymbol, true))
+            return 0.0;
+        return SymbolInfoDouble(crossSymbol, SYMBOL_BID);
+    }
+
+    string BuildRecentCandlesM15Json(string symbol, int bars)
+    {
+        MqlRates rates[];
+        int count = CopyRates(symbol, PERIOD_M15, 0, bars, rates);
+        if (count <= 0)
+            return "[]";
+
+        string json = "[";
+        for (int i = count - 1; i >= 0; i--)
+        {
+            if (i < count - 1) json += ",";
+            json += StringFormat("{\"time\":\"%s\",\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%I64d}",
+                ToIsoUtc(rates[i].time),
+                rates[i].open, rates[i].high, rates[i].low, rates[i].close,
+                rates[i].tick_volume);
+        }
+        json += "]";
+        return json;
+    }
+
 public:
     void Configure(string baseUrl, string apiKey = "")
     {
@@ -1002,7 +1029,27 @@ public:
         payload += "\"compressionRangesM15\":" + compressionRangesJson + ",";
         payload += "\"pendingOrders\":" + pendingOrdersJson + ",";
         payload += "\"openPositions\":" + openPositionsJson + ",";
-        payload += "\"orderExecutionEvents\":" + executionEventsJson;
+        payload += "\"orderExecutionEvents\":" + executionEventsJson + ",";
+
+        // Cross-market: DXY and Silver (XAG) for validation — try common symbol names per broker
+        double dxyBid = GetCrossSymbolBid("DXY");
+        if (dxyBid <= 0.0) dxyBid = GetCrossSymbolBid("USDI");
+        if (dxyBid <= 0.0) dxyBid = GetCrossSymbolBid("DollarIndex");
+        double silverBid = GetCrossSymbolBid("XAGUSD");
+        if (silverBid <= 0.0) silverBid = GetCrossSymbolBid("XAGUSD.gram");
+        if (silverBid <= 0.0) silverBid = GetCrossSymbolBid("Silver");
+        if (dxyBid > 0.0)
+            payload += StringFormat("\"dxyBid\":%.5f,", dxyBid);
+        else
+            payload += "\"dxyBid\":null,";
+        if (silverBid > 0.0)
+            payload += StringFormat("\"silverBid\":%.5f,", silverBid);
+        else
+            payload += "\"silverBid\":null,";
+
+        // Recent M15 candles for dashboard chart (last 50 bars)
+        string candlesJson = BuildRecentCandlesM15Json(symbol, 50);
+        payload += "\"recentCandlesM15\":" + candlesJson;
         payload += "}";
 
         char postData[];

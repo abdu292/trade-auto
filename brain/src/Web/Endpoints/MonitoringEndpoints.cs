@@ -26,19 +26,41 @@ public static class MonitoringEndpoints
             .WithName("GetLedgerState")
             .WithDescription("Returns deterministic ledger state with extended capital metrics (cash, gold, equity, compounding).");
 
-        // Spec v7 §10 — Gold Engine dashboard: Physical Ledger card, MT5 Execution card, factor state panel, trade-map, execution mode
+        monitoring.MapGet(
+            "/chart-data",
+            IResult (IChartDataStore chartDataStore) =>
+            {
+                var candles = chartDataStore.GetM15Candles();
+                var payload = candles.Select(c => new
+                {
+                    time = c.Time,
+                    open = c.Open,
+                    high = c.High,
+                    low = c.Low,
+                    close = c.Close,
+                    volume = c.Volume,
+                }).ToList();
+                return TypedResults.Ok(new { m15 = payload });
+            })
+            .WithName("GetChartData")
+            .WithDescription("Returns recent M15 candlestick data from MT5 for dashboard chart.");
+
+        // Spec v7 §10 — Gold Engine dashboard: Physical Ledger card, MT5 Execution card, factor state panel, trade-map, validation summary, execution mode
         monitoring.MapGet(
             "/dashboard",
-            IResult (
+            async Task<IResult> (
                 ITradeLedgerService ledger,
                 ILatestMarketSnapshotStore snapshotStore,
                 ILastGoldEngineStateStore engineStateStore,
                 ISetupLifecycleStore setupLifecycleStore,
                 IPendingTradeStore pendingTrades,
-                IConfiguration configuration) =>
+                IConfiguration configuration,
+                IApplicationDbContext db,
+                CancellationToken cancellationToken) =>
             {
                 snapshotStore.TryGet(out var snapshot);
                 var bid = snapshot?.Bid ?? snapshot?.AuthoritativeRate ?? 0m;
+                var ask = snapshot?.Ask ?? 0m;
                 var ledgerState = ledger.GetExtendedState(bid);
                 var (engineStates, pathRouting, _) = engineStateStore.GetLast();
                 var modeRaw = (configuration["Execution:Mode"] ?? "AUTO").Trim().ToUpperInvariant();
@@ -49,6 +71,54 @@ public static class MonitoringEndpoints
                     : 0m;
                 var symbol = snapshot?.Symbol ?? (configuration["Execution:Symbol"] ?? "XAUUSD.gram");
                 var lifecycleStatus = setupLifecycleStore.GetStatus(symbol);
+
+                var macro = await db.MacroCacheStates
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.LastRefreshedUtc)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                // Validation block: indicators + DXY / Silver / cross-metal + historical (for client validation)
+                var timeframeData = snapshot?.TimeframeData ?? Array.Empty<TimeframeDataContract>();
+                var indicatorsList = new List<object>();
+                foreach (var tf in timeframeData.OrderBy(x => x.Timeframe))
+                {
+                    indicatorsList.Add(new
+                    {
+                        timeframe = tf.Timeframe,
+                        close = tf.Close,
+                        rsi = tf.Rsi,
+                        ma20 = tf.Ma20Value,
+                        atr = tf.Atr,
+                        volume = tf.Volume,
+                    });
+                }
+                var validationSummary = new
+                {
+                    rateNow = bid,
+                    rateAsk = ask,
+                    rateLabel = $"Rate now at {bid:0.##}",
+                    indicators = new
+                    {
+                        rsiH1 = snapshot?.RsiH1 ?? 0m,
+                        rsiM15 = snapshot?.RsiM15 ?? 0m,
+                        ma20H1 = snapshot?.Ma20H1 ?? 0m,
+                        ma20M15 = snapshot?.Ma20M30 ?? 0m,
+                        atrM15 = snapshot?.AtrM15 ?? 0m,
+                        compressionM15 = snapshot?.CompressionCountM15 ?? 0,
+                        expansionM15 = snapshot?.ExpansionCountM15 ?? 0,
+                        adrUsedPct = snapshot?.AdrUsedPct ?? 0m,
+                        perTimeframe = indicatorsList,
+                    },
+                    completeIndicatorsList = "RSI(14) H1/M15/M5, MA(20) H1/M15/M5, ATR M15, Volume, Compression/Expansion counts, ADR used %",
+                    dxyRate = snapshot?.DxyBid,
+                    silverRate = snapshot?.SilverBid,
+                    dxyState = snapshot?.DxyBid != null ? snapshot.DxyBid.Value.ToString("0.##") : (macro?.MacroBias ?? "—"),
+                    silverCrossMetalState = snapshot?.SilverBid != null ? snapshot.SilverBid.Value.ToString("0.##") : (macro?.InstitutionalBias ?? "—"),
+                    crossMetalNote = "DXY and Silver rates from MT5 when symbols (DXY, XAGUSD) available; otherwise macro bias.",
+                    historicalComparison = snapshot != null
+                        ? $"ADR used {snapshot.AdrUsedPct:0}%; M15 compression={snapshot.CompressionCountM15}, expansion={snapshot.ExpansionCountM15}; session {snapshot.Session} {snapshot.SessionPhase}"
+                        : "—",
+                };
 
                 return TypedResults.Ok(new
                 {
@@ -126,6 +196,7 @@ public static class MonitoringEndpoints
                         alternatePath = engineStates?.PathState == PathState.BuyLimit ? PathState.BuyStop : PathState.BuyLimit,
                         invalidationPath = engineStates?.ReasonCode,
                     },
+                    validationSummary,
                     executionMode,
                 });
             })
