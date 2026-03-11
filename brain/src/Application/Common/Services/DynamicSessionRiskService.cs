@@ -3,7 +3,7 @@ using Brain.Application.Common.Models;
 namespace Brain.Application.Common.Services;
 
 /// <summary>
-/// CR11 — Dynamic Session Risk Service.
+/// Dynamic Session Risk Service.
 /// Provides session-adaptive size modifiers that adapt from real trade results.
 ///
 /// Bootstrap modifiers (initial values):

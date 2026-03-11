@@ -39,7 +39,7 @@ public static class GoldMarketRegimeDetector
                 return new GoldRegimeResult(DeadNoEdge, false, structuralRegime.Reason, "Stand down.");
             if (string.Equals(structuralRegime.Regime, "CHOPPY", StringComparison.OrdinalIgnoreCase))
             {
-                // CR12 §9: Upgrade from EXHAUSTION to RANGE_RELOAD/CONTINUATION_REBUILD/BULLISH_RECOVERY when structure has repaired
+                // Upgrade from EXHAUSTION to RANGE_RELOAD/BULLISH_RECOVERY when structure has repaired
                 if (IsStructureRepaired(snapshot))
                     return new GoldRegimeResult(RangeReload, true, "Structure repaired; upgraded from EXHAUSTION.", "Bullish rebuild / range reload; rotation allowed.");
                 return new GoldRegimeResult(Exhaustion, false, structuralRegime.Reason, "ADR/expansion exhausted.");
@@ -55,7 +55,7 @@ public static class GoldMarketRegimeDetector
         var atrM15 = snapshot.AtrM15 > 0m ? snapshot.AtrM15 : snapshot.Atr;
         var adrUsed = snapshot.AdrUsedPct;
 
-        // EXHAUSTION: large prior move, weak follow-through — CR12 §9: upgrade when structure repaired
+        // EXHAUSTION: large prior move, weak follow-through; upgrade when structure repaired
         if (adrUsed >= 85m && snapshot.CompressionCountM15 <= 1)
         {
             if (IsStructureRepaired(snapshot))
@@ -92,7 +92,7 @@ public static class GoldMarketRegimeDetector
         return new GoldRegimeResult(Range, structuralRegime.IsTradeable, structuralRegime.Reason, structuralRegime.Reason);
     }
 
-    /// <summary>CR12 §9: Structure has materially repaired — H1 bullish, M15 base, no fail/waterfall/hazard.</summary>
+    /// <summary>Structure has materially repaired — H1 bullish, M15 base, no fail/waterfall/hazard.</summary>
     private static bool IsStructureRepaired(MarketSnapshotContract snapshot)
     {
         var h1 = snapshot.TimeframeData

@@ -155,7 +155,7 @@ _CycleView _buildCycleView(
 ) {
   // Find the most recent PRETABLE result
   final pretableEvent =
-      events.lastWhereOrNull((e) => e.eventType == 'CR11_PRETABLE_RESULT');
+      events.lastWhereOrNull((e) => e.eventType == 'PRETABLE_RESULT');
 
   // Find the most recent pattern detector results
   final patternEvent =
@@ -173,9 +173,9 @@ _CycleView _buildCycleView(
   final finalDecisionEvent =
       events.lastWhereOrNull((e) => e.eventType == 'FINAL_DECISION');
 
-  // Find the most recent candidate context from CR11 study logging
+  // Find the most recent candidate context from study logging
   final candidateEvent =
-      events.lastWhereOrNull((e) => e.eventType == 'CR11_STUDY_CANDIDATE_LOG');
+      events.lastWhereOrNull((e) => e.eventType == 'STUDY_CANDIDATE_LOG');
 
   // Find the most recent capital utilization check
   final capitalEvent =
@@ -183,7 +183,7 @@ _CycleView _buildCycleView(
 
   // Find the most recent rotation optimizer result
   final rotationEvent =
-      events.lastWhereOrNull((e) => e.eventType == 'CR11_ROTATION_OPTIMIZER');
+      events.lastWhereOrNull((e) => e.eventType == 'ROTATION_OPTIMIZER');
 
   String? pretableLevel;
   double? pretableRiskScore;
@@ -269,7 +269,7 @@ _CycleView _buildCycleView(
   String? candidateExecutionMode;
   if (candidateEvent != null) {
     final p = candidateEvent.payload;
-    regime = _s(p, 'crRegime');
+    regime = _s(p, 'rotationRegime');
     structureValid = p['structureValid'] == true;
     candidateRiskLevel = _s(p, 'pretableRiskLevel');
     candidateExecutionMode = _s(p, 'rotationMode');

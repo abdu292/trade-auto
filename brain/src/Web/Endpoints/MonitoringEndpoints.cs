@@ -204,7 +204,7 @@ public static class MonitoringEndpoints
             .WithName("LedgerShopAdjustment")
             .WithDescription("Apply a shop price adjustment to ledger cash (positive = gain, negative = loss).");
 
-        // CR12 — Set physical ledger (cash AED + gold grams) from UI; no scaling; values shown exactly.
+        // Set physical ledger (cash AED + gold grams) from UI; no scaling; values shown exactly.
         monitoring.MapPost(
             "/ledger/set-physical",
             IResult (LedgerSetPhysicalRequest request, ITradeLedgerService ledger) =>
@@ -1053,8 +1053,9 @@ public static class MonitoringEndpoints
             "AI_ANALYZE_RESPONSE" => "Brain received the AI decision payload.",
             "AI_CONSENSUS_FAILED" => "Trade was blocked because AI quorum failed.",
             "TRADE_SCORE_CALCULATION" => "Trade scoring layer calculated setup quality across structure, momentum, execution, AI, and sentiment.",
-            "CR11_PRETABLE_RESULT" => "PRETABLE aggregated risk intelligence and size modifiers before final order generation.",
-            "CR11_ROTATION_OPTIMIZER" => "Rotation optimizer selected execution style and same-session capital efficiency state.",
+            "PRETABLE_RESULT" => "PRETABLE aggregated risk intelligence and size modifiers before final order generation.",
+            "ROTATION_OPTIMIZER" => "Rotation optimizer selected execution style and same-session capital efficiency state.",
+            "STUDY_CANDIDATE_LOG" => "Full candidate context logged for STUDY analysis.",
             "DECISION_EVALUATED" => "Decision engine evaluated risk and trade permissions.",
             "TRADE_ROUTED" => "Trade was routed to MT5 queue or manual approval queue.",
             "FINAL_DECISION" => "Final cycle verdict: trade approved or rejected with primary reason.",

@@ -3,7 +3,7 @@ using Brain.Application.Common.Models;
 namespace Brain.Application.Common.Services;
 
 /// <summary>
-/// CR11 — Liquidity Sweep Detector.
+/// Liquidity Sweep Detector.
 /// Detects stop-hunt sweeps that create safe reversal entries.
 ///
 /// Conditions required for a confirmed sweep:

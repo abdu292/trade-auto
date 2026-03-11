@@ -99,7 +99,7 @@ class _LedgerSummaryCard extends StatelessWidget {
       );
 }
 
-/// CR12 — Set physical ledger (cash AED + gold g) from UI; values shown exactly, no scaling.
+/// Set physical ledger (cash AED + gold g) from UI; values shown exactly, no scaling.
 class _SetPhysicalLedgerCard extends ConsumerStatefulWidget {
   const _SetPhysicalLedgerCard({
     required this.currentCashAed,
@@ -195,7 +195,7 @@ class _SetPhysicalLedgerCardState extends ConsumerState<_SetPhysicalLedgerCard> 
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Set physical ledger (CR12)',
+            Text('Set physical ledger',
                 style: tt.titleMedium),
             const SizedBox(height: 6),
             Text(

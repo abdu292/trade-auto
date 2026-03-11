@@ -3,18 +3,9 @@ using Brain.Application.Common.Models;
 namespace Brain.Application.Common.Services;
 
 /// <summary>
-/// CR11 — Rotation Optimizer (HARD LOCK).
-/// Decides how capital should be deployed across valid trade opportunities.
-///
-/// Modes:
-///   SINGLE_ENTRY   — one order, clean structure, high probability single-touch
-///   STAGGERED      — multiple buy limits across real liquidity shelves
-///   BUY_STOP       — continuation breakout (TREND regime only, no exhaustion)
-///   STAND_DOWN     — no order despite legal environment (poor capital efficiency)
-///
-/// This optimizer only decides execution style; PRETABLE legality gate runs first.
+/// Rotation Optimizer: decides how capital should be deployed across valid trade opportunities.
+/// Modes: SINGLE_ENTRY | STAGGERED | BUY_STOP | STAND_DOWN.
 /// PRETABLE BLOCK → NO_TRADE regardless of optimizer output.
-/// PRETABLE CAUTION → optimizer may still trade, but with reduced size.
 /// </summary>
 public static class RotationOptimizer
 {
@@ -50,7 +41,7 @@ public static class RotationOptimizer
     /// <param name="snapshot">Current market snapshot.</param>
     /// <param name="pretable">PRETABLE risk result.</param>
     /// <param name="liquiditySweep">Liquidity sweep detection result.</param>
-    /// <param name="crRegime">CR11 regime string: TREND | RANGE | SHOCK.</param>
+    /// <param name="rotationRegime">CR11 regime string: TREND | RANGE | SHOCK.</param>
     /// <param name="ledger">Current ledger state.</param>
     /// <param name="microRotationMode">
     /// When true, activates MICRO_ROTATION_MODE (refinement spec §D):
@@ -61,7 +52,7 @@ public static class RotationOptimizer
         MarketSnapshotContract snapshot,
         PretableResult pretable,
         LiquiditySweepResult liquiditySweep,
-        string crRegime,
+        string rotationRegime,
         LedgerStateContract ledger,
         bool microRotationMode = false)
     {
@@ -70,7 +61,7 @@ public static class RotationOptimizer
         {
             return new RotationOptimizerResult(
                 Mode: "STAND_DOWN",
-                CrRegime: crRegime,
+                RotationRegime: rotationRegime,
                 StaggeredLevels: null,
                 Reason: $"PRETABLE={pretable.RiskLevel}: stand-down enforced. {pretable.Reason}",
                 EfficiencyState: EfficiencyStates.Low,
@@ -84,11 +75,11 @@ public static class RotationOptimizer
         {
             var microEff = ComputeEfficiency(snapshot);
             // BUY_STOP still allowed in micro mode if breakout is justified and TREND regime
-            if (crRegime == "TREND" && IsBuyStopJustified(snapshot))
+            if (rotationRegime == "TREND" && IsBuyStopJustified(snapshot))
             {
                 return new RotationOptimizerResult(
                     Mode: "MICRO_ROTATION_MODE",
-                    CrRegime: crRegime,
+                    RotationRegime: rotationRegime,
                     StaggeredLevels: null,
                     Reason: "MICRO_ROTATION_MODE(BUY_STOP): TREND regime with justified breakout. Single entry only, no ladder.",
                     EfficiencyState: microEff.EfficiencyState,
@@ -97,7 +88,7 @@ public static class RotationOptimizer
 
             return new RotationOptimizerResult(
                 Mode: "MICRO_ROTATION_MODE",
-                CrRegime: crRegime,
+                RotationRegime: rotationRegime,
                 StaggeredLevels: null,
                 Reason: "MICRO_ROTATION_MODE(SINGLE_ENTRY): single pending trade, ladder disabled.",
                 EfficiencyState: microEff.EfficiencyState,
@@ -105,24 +96,24 @@ public static class RotationOptimizer
         }
 
         // ── STAND_DOWN: poor capital efficiency conditions ───────────────────
-        if (ShouldStandDown(snapshot, crRegime))
+        if (ShouldStandDown(snapshot, rotationRegime))
         {
             return new RotationOptimizerResult(
                 Mode: "STAND_DOWN",
-                CrRegime: crRegime,
+                RotationRegime: rotationRegime,
                 StaggeredLevels: null,
-                Reason: $"Stand-down: poor capital efficiency for {crRegime} regime. SameSessionTP probability too low or environment unclear.",
+                Reason: $"Stand-down: poor capital efficiency for {rotationRegime} regime. SameSessionTP probability too low or environment unclear.",
                 EfficiencyState: EfficiencyStates.Low,
                 EfficiencyScore: 0);
         }
 
         // ── BUY_STOP: continuation breakout in TREND regime ─────────────────
-        if (crRegime == "TREND" && IsBuyStopJustified(snapshot))
+        if (rotationRegime == "TREND" && IsBuyStopJustified(snapshot))
         {
             var buyStopEff = ComputeEfficiency(snapshot);
             return new RotationOptimizerResult(
                 Mode: "BUY_STOP",
-                CrRegime: crRegime,
+                RotationRegime: rotationRegime,
                 StaggeredLevels: null,
                 Reason: $"BUY_STOP: TREND regime with confirmed continuation breakout and no impulse exhaustion.",
                 EfficiencyState: buyStopEff.EfficiencyState,
@@ -139,7 +130,7 @@ public static class RotationOptimizer
             var staggerEff = ComputeEfficiency(snapshot);
             return new RotationOptimizerResult(
                 Mode: "STAGGERED",
-                CrRegime: crRegime,
+                RotationRegime: rotationRegime,
                 StaggeredLevels: levels,
                 Reason: $"STAGGERED: {levels.Count} levels over real liquidity shelves (split={string.Join("/", fractions.Select(f => $"{(int)(f * 100)}"))}).",
                 EfficiencyState: staggerEff.EfficiencyState,
@@ -150,7 +141,7 @@ public static class RotationOptimizer
         var singleEff = ComputeEfficiency(snapshot);
         return new RotationOptimizerResult(
             Mode: "SINGLE_ENTRY",
-            CrRegime: crRegime,
+            RotationRegime: rotationRegime,
             StaggeredLevels: null,
             Reason: $"SINGLE_ENTRY: clean structure with high single-touch probability. Sweep={liquiditySweep.IsConfirmed}, Compression={snapshot.IsCompression}.",
             EfficiencyState: singleEff.EfficiencyState,
@@ -170,10 +161,10 @@ public static class RotationOptimizer
 
     // ── Private helpers ──────────────────────────────────────────────────────
 
-    private static bool ShouldStandDown(MarketSnapshotContract snapshot, string crRegime)
+    private static bool ShouldStandDown(MarketSnapshotContract snapshot, string rotationRegime)
     {
         // SHOCK regime: most trades blocked
-        if (crRegime == "SHOCK") return true;
+        if (rotationRegime == "SHOCK") return true;
 
         // Expiry realism too poor (ADR fully consumed — no room for TP within session)
         if (snapshot.AdrUsedPct >= StandDownAdrUsedPctThreshold) return true;

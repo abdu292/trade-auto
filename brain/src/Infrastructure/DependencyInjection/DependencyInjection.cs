@@ -83,7 +83,7 @@ public static class DependencyInjection
         services.AddScoped<ICalendarService, MockCalendarService>();
         services.AddSingleton<IHistoricalReplayService, HistoricalReplayService>();
 
-        // CR11: Dynamic Session Risk Service (singleton — tracks session modifiers across cycles)
+        // Dynamic Session Risk Service (singleton — tracks session modifiers across cycles)
         services.AddSingleton<DynamicSessionRiskService>();
 
         services.AddHostedService<SessionSchedulerBackgroundService>();

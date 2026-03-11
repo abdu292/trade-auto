@@ -1131,24 +1131,21 @@ public sealed class SignalPollingBackgroundService(
                     DeployableCashAed: Math.Max(0m, rawState.DeployableCashAed - reservedPendingAed),
                     OpenBuyCount: rawState.OpenBuyCount);
 
-                // ── CR11 Layer B: PRETABLE Risk Intelligence ─────────────────────────────
-                // Run Impulse Exhaustion Guard, Liquidity Sweep Detector, and PRETABLE before
-                // decision engine. PRETABLE BLOCK → no trade regardless of engine output.
-                // Pattern Detector results are passed to PRETABLE as active gate (Section F).
+                // PRETABLE Risk Intelligence: Impulse Exhaustion Guard, Liquidity Sweep Detector, PRETABLE.
+                // PRETABLE BLOCK → no trade regardless of engine output.
 
                 var impulseExhaustion = ImpulseExhaustionGuard.Evaluate(snapshot);
                 var liquiditySweep = LiquiditySweepDetectorService.Detect(snapshot);
                 var sessionForPretable = NormalizeSessionForPretable(snapshot.Session);
                 var pretable = PretableService.Evaluate(snapshot, regime, impulseExhaustion, liquiditySweep, sessionForPretable, patterns);
 
-                // CR11 CR11: Regime → TREND / RANGE / SHOCK for Rotation Optimizer
-                var crRegime = MapToCr11Regime(setupCandidate.MarketRegime?.Regime ?? regime.Regime);
+                var rotationRegime = MapToRotationRegime(setupCandidate.MarketRegime?.Regime ?? regime.Regime);
 
                 // Dynamic Session Risk: get current session size modifier
                 var dynamicSessionRiskResult = dynamicSessionRisk.GetModifier(snapshot.Session);
 
                 await timeline.WriteAsync(
-                    eventType: "CR11_PRETABLE_RESULT",
+                    eventType: "PRETABLE_RESULT",
                     stage: "pretable",
                     source: "brain",
                     symbol: snapshot.Symbol,
@@ -1168,7 +1165,7 @@ public sealed class SignalPollingBackgroundService(
                         impulseExhaustion.ImpulseDistanceAtr,
                         liquiditySweepConfirmed = liquiditySweep.IsConfirmed,
                         liquiditySweepReason = liquiditySweep.Reason,
-                        crRegime,
+                        rotationRegime,
                         dynamicSessionModifier = dynamicSessionRiskResult.Modifier,
                         dynamicSessionWaterfallCap = dynamicSessionRiskResult.WaterfallCapActive,
                         patternCount = patterns.Count,
@@ -1176,11 +1173,11 @@ public sealed class SignalPollingBackgroundService(
                     },
                     cancellationToken: stoppingToken);
 
-                // PRETABLE BLOCK: stop pipeline — this is a Layer B hard block
+                // PRETABLE BLOCK: stop pipeline
                 if (pretable.RiskLevel == "BLOCK")
                 {
                     logger.LogInformation(
-                        "CR11_PRETABLE_BLOCK — {Reason}",
+                        "PRETABLE_BLOCK — {Reason}",
                         pretable.Reason);
 
                     await timeline.WriteAsync(
@@ -1193,7 +1190,7 @@ public sealed class SignalPollingBackgroundService(
                         payload: new
                         {
                             finalDecision = "NO_TRADE",
-                            primaryReason = "CR11_PRETABLE_BLOCK",
+                            primaryReason = "PRETABLE_BLOCK",
                             reason = pretable.Reason,
                         },
                         cancellationToken: stoppingToken);
@@ -1204,10 +1201,10 @@ public sealed class SignalPollingBackgroundService(
 
                 // Rotation Optimizer: decide execution mode
                 var microRotationMode = runtimeSettings.GetMicroRotationEnabled();
-                var rotationResult = RotationOptimizer.Optimize(snapshot, pretable, liquiditySweep, crRegime, state, microRotationMode);
+                var rotationResult = RotationOptimizer.Optimize(snapshot, pretable, liquiditySweep, rotationRegime, state, microRotationMode);
 
                 await timeline.WriteAsync(
-                    eventType: "CR11_ROTATION_OPTIMIZER",
+                    eventType: "ROTATION_OPTIMIZER",
                     stage: "rotation",
                     source: "brain",
                     symbol: snapshot.Symbol,
@@ -1216,7 +1213,7 @@ public sealed class SignalPollingBackgroundService(
                     payload: new
                     {
                         rotationResult.Mode,
-                        rotationResult.CrRegime,
+                        rotationRegime = rotationResult.RotationRegime,
                         rotationResult.Reason,
                         staggeredLevels = rotationResult.StaggeredLevels,
                         // Spec v8 §11 — efficiency state
@@ -1235,10 +1232,9 @@ public sealed class SignalPollingBackgroundService(
                     }
                 }
 
-                // CR11 STUDY_CANDIDATE_LOG: log full candidate context for STUDY analysis.
-                // Every evaluated candidate (including blocked ones) must log all CR11 fields.
+                // STUDY_CANDIDATE_LOG: full candidate context for STUDY analysis.
                 await timeline.WriteAsync(
-                    eventType: "CR11_STUDY_CANDIDATE_LOG",
+                    eventType: "STUDY_CANDIDATE_LOG",
                     stage: "study",
                     source: "brain",
                     symbol: snapshot.Symbol,
@@ -1246,10 +1242,9 @@ public sealed class SignalPollingBackgroundService(
                     tradeId: null,
                     payload: new
                     {
-                        // CR11 §LOGGING_FOR_STUDY required fields:
                         session = snapshot.Session,
                         sessionPhase = snapshot.SessionPhase,
-                        crRegime,
+                        rotationRegime,
                         structureValid = setupCandidate.IsValid,
                         pretableRiskLevel = pretable.RiskLevel,
                         pretableRiskScore = pretable.RiskScore,
@@ -1282,7 +1277,7 @@ public sealed class SignalPollingBackgroundService(
                 if (rotationResult.Mode == "STAND_DOWN")
                 {
                     logger.LogInformation(
-                        "CR11_ROTATION_STANDDOWN — {Reason}",
+                        "ROTATION_STANDDOWN — {Reason}",
                         rotationResult.Reason);
 
                     await timeline.WriteAsync(
@@ -1295,7 +1290,7 @@ public sealed class SignalPollingBackgroundService(
                         payload: new
                         {
                             finalDecision = "NO_TRADE",
-                            primaryReason = "CR11_STAND_DOWN",
+                            primaryReason = "STAND_DOWN",
                             reason = rotationResult.Reason,
                         },
                         cancellationToken: stoppingToken);
@@ -1377,6 +1372,9 @@ public sealed class SignalPollingBackgroundService(
                         effectiveSizeModifier,
                         decision.TelegramState,
                         snapshotHash,
+                        bottom_candidate_ok = decision.BottomCandidateOk,
+                        bottom_arm_ok = decision.BottomArmOk,
+                        bottom_execution_ok = decision.BottomExecutionOk,
                         bottomPermissionMode = decision.BottomPermissionMode,
                         bottomPermissionReason = decision.BottomPermissionReason,
                     },
@@ -1487,9 +1485,7 @@ public sealed class SignalPollingBackgroundService(
                         },
                         cancellationToken: stoppingToken);
 
-                    // BLOCKED_VALID_SETUP_CANDIDATE (CR8): when a setup passed scoring but was
-                    // blocked by the final bottom-permission gate, tag it as a study candidate.
-                    // STUDY module uses these to determine if the permission rule is too strict.
+                    // BLOCKED_VALID_SETUP_CANDIDATE: setup passed scoring but blocked by bottom-permission gate; tag for STUDY.
                     if (string.Equals(decision.Cause, "BOTTOMPERMISSION_FALSE", StringComparison.Ordinal))
                     {
                         logger.LogInformation(
@@ -1506,6 +1502,10 @@ public sealed class SignalPollingBackgroundService(
                             payload: new
                             {
                                 cause = decision.Cause,
+                                bottom_candidate_ok = decision.BottomCandidateOk,
+                                bottom_arm_ok = decision.BottomArmOk,
+                                bottom_execution_ok = decision.BottomExecutionOk,
+                                bottom_block_reason = decision.BottomPermissionReason ?? decision.Reason,
                                 bottomPermissionReason = decision.Reason,
                                 bottomPermissionMode = decision.BottomPermissionMode,
                                 bottomPermissionReasonDetail = decision.BottomPermissionReason,
@@ -2489,7 +2489,7 @@ public sealed class SignalPollingBackgroundService(
     }
 
     /// <summary>
-    /// CR11: Normalizes session name for the PRETABLE service.
+    /// Normalizes session name for the PRETABLE service.
     /// </summary>
     private static string NormalizeSessionForPretable(string? session)
     {
@@ -2504,12 +2504,9 @@ public sealed class SignalPollingBackgroundService(
     }
 
     /// <summary>
-    /// CR11: Maps the existing market regime taxonomy to the CR11 three-way regime:
-    ///   TREND (TRENDING_BULL)
-    ///   RANGE (RANGING, CHOPPY)
-    ///   SHOCK (any waterfall/news spike / DEAD)
+    /// Maps market regime to rotation optimizer taxonomy: TREND | RANGE | SHOCK.
     /// </summary>
-    private static string MapToCr11Regime(string? regime)
+    private static string MapToRotationRegime(string? regime)
     {
         var r = (regime ?? string.Empty).Trim().ToUpperInvariant();
         return r switch

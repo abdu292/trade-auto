@@ -212,12 +212,12 @@ public static class DecisionEngine
                 railPermissionB: "BLOCKED");
         }
 
-        // Section 9.4 / CR12: BottomPermission — two modes: DEEP_BOTTOM_CATCH (strict) or CONTINUATION_REBUILD (relaxed)
-        var (bottomPermissionGranted, bottomPermissionReason, bottomPermissionMode) = EvaluateBottomPermission(snapshot, session);
+        // Spec §10: Bottom permission (three stages: candidate / arm / execution)
+        var (bottomPermissionGranted, bottomPermissionReason, bottomPermissionMode, bottomCandidateOk, bottomArmOk, bottomExecutionOk) = EvaluateBottomPermission(snapshot, session);
         if (!bottomPermissionGranted)
         {
             return NoTrade(
-            $"TABLE ABORTED — BOTTOMPERMISSION_FALSE ({bottomPermissionReason}).",
+                $"TABLE ABORTED — BOTTOMPERMISSION_FALSE ({bottomPermissionReason}).",
                 score,
                 snapshot,
                 cause: "BOTTOMPERMISSION_FALSE",
@@ -225,7 +225,10 @@ public static class DecisionEngine
                 railPermissionA: "BLOCKED",
                 railPermissionB: "BLOCKED",
                 bottomPermissionMode: bottomPermissionMode,
-                bottomPermissionReason: bottomPermissionReason);
+                bottomPermissionReason: bottomPermissionReason,
+                bottomCandidateOk: bottomCandidateOk,
+                bottomArmOk: bottomArmOk,
+                bottomExecutionOk: bottomExecutionOk);
         }
 
         var primaryClose = snapshot.AuthoritativeRate > 0m
@@ -348,7 +351,7 @@ public static class DecisionEngine
         var maxGrams = ToMaxAffordableGrams(bucketCash, entry) - SafetyBufferGrams;
         var sizePct = ParseSizePercent(sizeClass);
         var sessionMultiplier = GetSessionSizeMultiplier(session, snapshot.IsFriday);
-        // CR11 PRETABLE: apply sizeModifier from PRETABLE intelligence layer.
+        // PRETABLE: apply sizeModifier from risk intelligence layer.
         // CAUTION → 0.60 multiplier; SAFE → 1.0; BLOCK → 0.0 (already handled above).
         var effectiveSizePct = sizePct * Math.Clamp(pretableSizeModifier, 0m, 1m) * sessionMultiplier;
         var gramsFromSizeClass = ToMaxAffordableGrams(bucketCash * effectiveSizePct, entry);
@@ -359,7 +362,7 @@ public static class DecisionEngine
             return NoTrade($"Capacity below {minTradeGrams:0.##}g minimum after spread/buffer.", score, snapshot, waterfallRisk: waterfallRisk, cause: cause, mode: mode, railPermissionA: railPermissionA, railPermissionB: railPermissionB);
         }
 
-        // CR11 §EXPIRY_RULE: Session expiry bands (Asia 45-60m, London 30-45m, NY 20-30m)
+        // Session expiry bands (Asia 45-60m, London 30-45m, NY 20-30m)
         var expiryDuration = GetSessionExpiryDurationStandard(session, snapshot.IsFriday);
         var expiryUtcOffset = new DateTimeOffset(snapshot.Timestamp.UtcDateTime.Add(expiryDuration), TimeSpan.Zero);
 
@@ -400,6 +403,9 @@ public static class DecisionEngine
             ShopSell: shopSell,
             ExpiryKSA: expiryKsa,
             ExpiryServer: expiryServer,
+            BottomCandidateOk: true,
+            BottomArmOk: true,
+            BottomExecutionOk: true,
             BottomPermissionMode: bottomPermissionMode,
             BottomPermissionReason: bottomPermissionReason);
     }
@@ -1117,14 +1123,10 @@ public static class DecisionEngine
     }
 
     /// <summary>
-    /// Section 9.4: BottomPermission hard gate — supports two legal paths (CR8):
-    /// Path A (Reversal): H1 sweep + reclaim, M15 base, M5 compression, and momentum.
-    /// CR12: Two-mode bottom permission. DEEP_BOTTOM = strict (sweep+reclaim, M5 required).
-    /// CONTINUATION_REBUILD = relaxed (H1 bullish, M15Base≥2, no mandatory H1SweepReclaim or M5).
-    /// When NoFail+NoWaterfall+NoHazard+SpreadOk+H1Bullish+M15Base(min≥2), do not auto-fail;
-    /// classify setup and allow CONTINUATION_REBUILD path without M5 veto.
+    /// Spec §10: Three-stage bottom permission. BOTTOM_CANDIDATE_OK = early shelf; BOTTOM_ARM_OK = arm pending; BOTTOM_EXECUTION_OK = place order.
+    /// Returns (granted, reason, mode, candidateOk, armOk, executionOk). executionOk = armOk for bottom gate; other execution checks are in TABLE.
     /// </summary>
-    private static (bool IsGranted, string Reason, string Mode) EvaluateBottomPermission(
+    private static (bool IsGranted, string Reason, string Mode, bool CandidateOk, bool ArmOk, bool ExecutionOk) EvaluateBottomPermission(
         MarketSnapshotContract snapshot,
         string? session = null)
     {
@@ -1134,12 +1136,13 @@ public static class DecisionEngine
 
         var normalizedSession = session ?? NormalizeSession(snapshot.Session);
 
-        // Shared conditions (CR12 §5): when all true, BOTTOMPERMISSION must not auto-fail
         var h1Data = snapshot.TimeframeData
             .FirstOrDefault(x => string.Equals(x.Timeframe, "H1", StringComparison.OrdinalIgnoreCase));
         var h1Close = h1Data?.Close ?? 0m;
         var h1BullishContext = snapshot.Ma20H1 > 0m && h1Close > 0m && h1Close > snapshot.Ma20H1;
+        var h1Acceptable = snapshot.Ma20H1 > 0m && h1Close > 0m && h1Close >= snapshot.Ma20H1 * 0.98m;
         var m15BaseMin2 = snapshot.HasOverlapCandles && snapshot.CompressionCountM15 >= 2;
+        var m15BaseOrShelf = snapshot.HasOverlapCandles && snapshot.CompressionCountM15 >= 1;
         var noFailThreat = snapshot.AdrUsedPct <= 85m || snapshot.AdrUsedPct == 0m;
         var noWaterfallSignature = !snapshot.HasPanicDropSequence
             && (!snapshot.IsExpansion || !snapshot.IsAtrExpanding);
@@ -1149,10 +1152,13 @@ public static class DecisionEngine
             || snapshot.SpreadAvg1m == 0m
             || snapshot.SpreadMax1m < snapshot.SpreadAvg1m * 1.5m;
 
+        // BOTTOM_CANDIDATE_OK: early shelf detection (Spec §10.1)
+        var bottomCandidateOk = (h1BullishContext || h1Acceptable) && m15BaseOrShelf && noFailThreat && noWaterfallSignature && noHazardConflict && spreadOk;
+
         var safeGate = noFailThreat && noWaterfallSignature && noHazardConflict && spreadOk
             && h1BullishContext && m15BaseMin2;
 
-        // ── Mode A: DEEP_BOTTOM_CATCH (strict) — near true flush bottom ───────
+        // BOTTOM_ARM_OK: DEEP_BOTTOM or CONTINUATION_REBUILD
         var hasH1SweepReclaim = snapshot.HasLiquiditySweep;
         var m15BaseThreshold = normalizedSession == "LONDON" ? 4 : 2;
         var hasM15Base = snapshot.HasOverlapCandles && snapshot.CompressionCountM15 >= m15BaseThreshold;
@@ -1165,21 +1171,19 @@ public static class DecisionEngine
         if (deepBottomGranted)
         {
             var msg = $"DEEP_BOTTOM: H1SweepReclaim={hasH1SweepReclaim}, M15Base={hasM15Base}(min={m15BaseThreshold}), M5Compression={hasM5Compression}, MomentumOk={momentumOk}";
-            return (true, msg, ModeDeepBottom);
+            return (true, msg, ModeDeepBottom, bottomCandidateOk, true, true);
         }
 
-        // ── Mode B: CONTINUATION_REBUILD (relaxed) — H1SweepReclaim and M5 NOT mandatory ───────
         if (safeGate)
         {
             var msg = $"CONTINUATION_REBUILD: H1Bullish={h1BullishContext}, M15Base={m15BaseMin2}(min=2), NoFail={noFailThreat}, NoWaterfall={noWaterfallSignature}, NoHazard={noHazardConflict}, SpreadOk={spreadOk}";
-            return (true, msg, ModeContinuationRebuild);
+            return (true, msg, ModeContinuationRebuild, bottomCandidateOk, true, true);
         }
 
-        // Both paths invalid — build explicit reason for logging (CR12 §7)
         var deepBottomWhy = $"DEEP_BOTTOM failed: H1SweepReclaim={hasH1SweepReclaim}, M15Base={hasM15Base}(min={m15BaseThreshold}), M5Compression={hasM5Compression}, MomentumOk={momentumOk}";
         var contWhy = $"CONTINUATION_REBUILD failed: safeGate={safeGate} (H1Bullish={h1BullishContext}, M15Base={m15BaseMin2}, NoFail={noFailThreat}, NoWaterfall={noWaterfallSignature}, NoHazard={noHazardConflict}, SpreadOk={spreadOk})";
         var reason = $"{deepBottomWhy} | {contWhy}";
-        return (false, reason, ModeNone);
+        return (false, reason, ModeNone, bottomCandidateOk, false, false);
     }
 
     /// <summary>
@@ -1190,8 +1194,7 @@ public static class DecisionEngine
         => isFriday && session is "LONDON" or "NY";
 
     /// <summary>
-    /// CR11 §TARGET_PROFIT_MODEL: Session TP cap (max USD distance from entry to TP).
-    /// Target range: +8 to +15 USD. Maximum adaptive TP: 18 USD (CR11 §ADAPTIVE_TP_ENGINE).
+    /// Session TP cap (max USD distance from entry to TP). Target range: +8 to +15 USD.
     /// </summary>
     private static decimal GetSessionTpCap(string session, bool isFriday)
     {
@@ -1333,7 +1336,10 @@ public static class DecisionEngine
         string railPermissionA = "BLOCKED",
         string railPermissionB = "BLOCKED",
         string bottomPermissionMode = "NONE",
-        string? bottomPermissionReason = null) =>
+        string? bottomPermissionReason = null,
+        bool bottomCandidateOk = false,
+        bool bottomArmOk = false,
+        bool bottomExecutionOk = false) =>
         new(
             IsTradeAllowed: false,
             Status: "NO_TRADE",
@@ -1359,6 +1365,9 @@ public static class DecisionEngine
             RailPermissionA: railPermissionA,
             RailPermissionB: railPermissionB,
             RotationCapThisSession: 0,
+            BottomCandidateOk: bottomCandidateOk,
+            BottomArmOk: bottomArmOk,
+            BottomExecutionOk: bottomExecutionOk,
             BottomPermissionMode: bottomPermissionMode,
             BottomPermissionReason: bottomPermissionReason);
 

@@ -308,7 +308,7 @@ class BrainApi {
         _asMap((_asMap(response.data))['ledger'] ?? response.data));
   }
 
-  /// CR12 — Set physical ledger (cash AED + gold grams); values stored and displayed exactly.
+  /// Set physical ledger (cash AED + gold grams); values stored and displayed exactly.
   Future<LedgerState> ledgerSetPhysical(
       {required double cashAed, required double goldGrams}) async {
     final response = await _dio.post('/api/monitoring/ledger/set-physical',

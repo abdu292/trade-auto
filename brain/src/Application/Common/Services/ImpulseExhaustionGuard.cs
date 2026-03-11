@@ -3,7 +3,7 @@ using Brain.Application.Common.Models;
 namespace Brain.Application.Common.Services;
 
 /// <summary>
-/// CR11 — Impulse Exhaustion Guard.
+/// Impulse Exhaustion Guard.
 /// Prevents late breakout chasing after vertical impulse moves.
 ///
 /// Thresholds:

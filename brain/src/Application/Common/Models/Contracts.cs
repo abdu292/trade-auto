@@ -229,7 +229,10 @@ public sealed record DecisionResultContract(
     decimal Limit2 = 0m,
     decimal Stop1 = 0m,
     int EfficiencyScore = 0,
-    // CR12 — bottom permission mode and reason for logging
+    // Spec §10: Three-stage bottom permission (candidate / arm / execution)
+    bool BottomCandidateOk = false,
+    bool BottomArmOk = false,
+    bool BottomExecutionOk = false,
     string BottomPermissionMode = "NONE",
     string? BottomPermissionReason = null);
 
@@ -402,7 +405,7 @@ public sealed record TradeTableReviewResultContract(
     string Reasoning,
     IReadOnlyCollection<string> ProviderVotes);
 
-// ── CR11: Impulse Exhaustion Guard ──────────────────────────────────────────
+// ── Impulse Exhaustion Guard ────────────────────────────────────────────────
 
 /// <summary>
 /// Result from the Impulse Exhaustion Guard.
@@ -434,10 +437,10 @@ public sealed record LiquiditySweepResult(
     bool NearStructuralLiquidity,
     string Reason);
 
-// ── CR11: PRETABLE Risk Intelligence ────────────────────────────────────────
+// ── PRETABLE Risk Intelligence ──────────────────────────────────────────────
 
 /// <summary>
-/// Output from the PRETABLE Risk Intelligence layer (Layer B in CR11 architecture).
+/// Output from the PRETABLE Risk Intelligence layer.
 /// Determines trade aggressiveness before execution.
 /// RiskLevel: SAFE | CAUTION | BLOCK.
 /// SizeModifier: multiplier applied to computed gram size (0.0 – 1.0).
@@ -458,7 +461,7 @@ public sealed record PretableResult(
 /// </summary>
 public sealed record RotationOptimizerResult(
     string Mode,
-    string CrRegime,
+    string RotationRegime,
     IReadOnlyCollection<StaggeredLevelContract>? StaggeredLevels,
     string Reason,
     // Spec v8 §11 — Rotation Efficiency Engine output
@@ -474,7 +477,7 @@ public sealed record StaggeredLevelContract(
     decimal SizeFraction,
     string Label);
 
-// ── CR11: Dynamic Session Risk ───────────────────────────────────────────────
+// ── Dynamic Session Risk ─────────────────────────────────────────────────────
 
 /// <summary>
 /// Dynamic session size modifier produced by DynamicSessionRiskService.

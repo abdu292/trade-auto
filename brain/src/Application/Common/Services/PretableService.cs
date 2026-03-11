@@ -3,7 +3,7 @@ using Brain.Application.Common.Models;
 namespace Brain.Application.Common.Services;
 
 /// <summary>
-/// CR11 Layer B — PRETABLE Risk Intelligence.
+/// PRETABLE Risk Intelligence.
 /// Determines trade aggressiveness before execution.
 ///
 /// Outputs:
