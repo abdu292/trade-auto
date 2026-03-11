@@ -1695,22 +1695,27 @@ public sealed class SignalPollingBackgroundService(
 
                 // ── Portfolio Exposure Gate ────────────────────────────────────────────────
                 // Rejects new orders when total open position grams + proposed grams exceeds
-                // 25% of account equity expressed in gold grams. Prevents position stacking
-                // even when individual orders pass the capital utilization gate (CR10).
+                // 25% of account equity expressed in gold grams. Uses PHYSICAL LEDGER as source
+                // of truth (not MT5): equity and open gold from ledger so updates to Set Physical
+                // are reflected immediately.
                 //
                 // maxSymbolExposureGrams = (accountEquityUsd * 0.25) / goldPricePerGram
                 // where goldPricePerGram = authoritativeRate / 31.1035
-                var accountEquityUsd = snapshot.Equity;
                 var authoritativeRate = snapshot.AuthoritativeRate;
+                var extendedLedger = ledger.GetExtendedState(authoritativeRate > 0m ? authoritativeRate : snapshot.Bid);
+                var accountEquityUsd = extendedLedger.NetEquityAed / UsdToAed;
+                var openPositionGrams = extendedLedger.GoldGrams;
+
                 if (accountEquityUsd <= 0m || authoritativeRate <= 0m)
                 {
                     var rejectionReason =
-                        $"EXPOSURE_GATE_DATA_INVALID accountEquityUsd={accountEquityUsd:0.00} authoritativeRate={authoritativeRate:0.0000}";
+                        $"EXPOSURE_GATE_DATA_INVALID accountEquityUsd={accountEquityUsd:0.00} authoritativeRate={authoritativeRate:0.0000} (ledger NetEquityAed={extendedLedger.NetEquityAed:0.00})";
 
                     logger.LogWarning(
-                        "EXPOSURE_GATE_DATA_INVALID — rejecting trade because required exposure inputs are invalid. AccountEquityUsd={EquityUsd} AuthoritativeRate={AuthoritativeRate}",
+                        "EXPOSURE_GATE_DATA_INVALID — rejecting trade because required exposure inputs are invalid. AccountEquityUsd={EquityUsd} AuthoritativeRate={AuthoritativeRate} LedgerNetEquityAed={LedgerNetEquityAed}",
                         accountEquityUsd,
-                        authoritativeRate);
+                        authoritativeRate,
+                        extendedLedger.NetEquityAed);
 
                     await timeline.WriteAsync(
                         eventType: "SYMBOL_EXPOSURE_REJECTED",
@@ -1754,7 +1759,10 @@ public sealed class SignalPollingBackgroundService(
                 var goldPricePerGram = authoritativeRate / OunceToGram;
                 var maxSymbolExposureGrams = (accountEquityUsd * 0.25m) / goldPricePerGram;
 
-                var openPositionGrams = snapshot.OpenPositions?.Sum(p => p.VolumeGramsEquivalent) ?? 0m;
+                logger.LogInformation(
+                    "EXPOSURE_GATE (ledger) NetEquityAed={NetEquityAed} GoldGrams={GoldGrams} -> EquityUsd={EquityUsd} open={Open}g max={Max}g",
+                    extendedLedger.NetEquityAed, extendedLedger.GoldGrams, accountEquityUsd, openPositionGrams, maxSymbolExposureGrams);
+
                 var totalProjectedExposure = openPositionGrams + approvedGrams;
                 if (totalProjectedExposure > maxSymbolExposureGrams)
                 {
@@ -1774,6 +1782,8 @@ public sealed class SignalPollingBackgroundService(
                         payload: new
                         {
                             orderStatus = "REJECTED",
+                            exposureSource = "ledger",
+                            ledgerNetEquityAed = extendedLedger.NetEquityAed,
                             openPositionGrams,
                             proposedGrams = approvedGrams,
                             totalProjectedExposure,
