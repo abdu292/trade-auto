@@ -318,50 +318,156 @@ String _describeEvent(RuntimeTimelineItem item) {
           .map((w) =>
               w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : w)
           .join(' ');
-      return reason.isNotEmpty ? '$words — $reason' : words;
+      final base = reason.isNotEmpty ? '$words — $reason' : words;
+      final summary = _shortPayloadSummary(item.eventType, item.payload, maxParts: 3);
+      return summary.isEmpty ? base : '$base · $summary';
   }
 }
 
-// ─── Supplemental detail lines ────────────────────────────────────────────────
-List<String> _detailLines(RuntimeTimelineItem item) {
-  final p = item.payload;
+String _shortPayloadSummary(String eventType, Map<String, dynamic> payload, {int maxParts = 3}) {
+  final preferred = _preferredKeys[eventType];
+  final keys = preferred != null
+      ? preferred.where(payload.containsKey).take(maxParts + 2)
+      : payload.keys.where((k) => !_skipPayloadKeys.contains(k)).take(maxParts + 2);
+  final parts = <String>[];
+  for (final key in keys) {
+    final v = payload[key];
+    if (v == null || (v is String && v.isEmpty)) continue;
+    if (parts.length >= maxParts) break;
+    parts.add(_formatPayloadValue(v));
+  }
+  return parts.join(' · ');
+}
+
+// ─── Dynamic payload → detail lines (single path for all event types) ───────────
+const _maxDetailLines = 12;
+const _maxValueLength = 36;
+const _skipPayloadKeys = {'id', 'cycleId', 'tradeId', 'snapshotHash'};
+
+/// Preferred key order per event type (first keys shown first; rest appended).
+/// Omit event type to use payload key order for that event.
+final _preferredKeys = <String, List<String>>{
+  'PRETABLE_RESULT': [
+    'riskLevel', 'riskScore', 'riskFlags', 'sizeModifier', 'session',
+    'pretableReason', 'impulseExhaustionLevel', 'liquiditySweepConfirmed',
+    'rotationRegime', 'dynamicSessionModifier', 'patternCount',
+  ],
+  'DECISION_EVALUATED': [
+    'status', 'rail', 'reason', 'waterfallRisk', 'mode', 'cause',
+    'bottomPermissionVerdict', 'bottomPermissionMode',
+  ],
+  'FINAL_DECISION': [
+    'finalDecision', 'primaryReason', 'reason', 'entry', 'tp', 'grams', 'rail',
+  ],
+  'TRADE_ROUTED': ['rail', 'entry', 'tp', 'grams', 'orderStatus'],
+  'CAPITAL_UTILIZATION_CHECK': [
+    'orderStatus', 'approvedGrams', 'maxLegalGrams', 'attemptedGrams',
+    'requiredAed', 'allowedCapitalAed', 'cashAed',
+  ],
+  'SYMBOL_EXPOSURE_REJECTED': [
+    'exposureSource', 'ledgerNetEquityAed', 'openPositionGrams',
+    'proposedGrams', 'totalProjectedExposure', 'maxSymbolExposureGrams',
+    'rejectionReason',
+  ],
+  'MARKET_REGIME_DETECTED': ['regime', 'isTradeable', 'reason'],
+  'PATTERN_DETECTOR_RESULTS': ['patternCount', 'patterns'],
+  'AI_ANALYZE_RESPONSE': ['rail', 'disagreementReason'],
+  'MT5_MARKET_SNAPSHOT_RECEIVED': ['session', 'sessionPhase', 'bid', 'ask'],
+  'CYCLE_STARTED': ['symbol'],
+  'BLOCKED_VALID_SETUP_CANDIDATE': ['cause', 'tradeScore', 'session'],
+  'RULE_ENGINE_ABORT': ['abortReason'],
+  'STUDY_REFINEMENT_RESULT': [
+    'bottomPermissionVerdict', 'waterfallVerdict', 'ruleAdjustments',
+  ],
+  'TRADE_SCORE_CALCULATION': [
+    'totalScore', 'decisionTier', 'structureScore', 'momentumScore', 'aiScore',
+  ],
+};
+
+String _formatPayloadValue(dynamic v) {
+  if (v == null) return '—';
+  if (v is bool) return v ? 'Yes' : 'No';
+  if (v is num) return v is int ? '$v' : (v as double).toStringAsFixed(2);
+  if (v is List) {
+    if (v.isEmpty) return '—';
+    if (v.length <= 3 && v.every((e) => e is num || e is String)) {
+      final s = v.join(', ');
+      return s.length <= _maxValueLength ? s : '${s.substring(0, _maxValueLength - 3)}…';
+    }
+    return '${v.length} item${v.length == 1 ? '' : 's'}';
+  }
+  final s = v.toString();
+  return s.length <= _maxValueLength ? s : '${s.substring(0, _maxValueLength - 1)}…';
+}
+
+String _payloadKeyToLabel(String key) {
+  const knownLabels = {
+    'riskLevel': 'Risk level',
+    'riskScore': 'Risk score',
+    'riskFlags': 'Risk flags',
+    'sizeModifier': 'Size modifier',
+    'pretableReason': 'Reason',
+    'impulseExhaustionLevel': 'Impulse level',
+    'liquiditySweepConfirmed': 'Liquidity sweep',
+    'rotationRegime': 'Rotation regime',
+    'dynamicSessionModifier': 'Session modifier',
+    'dynamicSessionWaterfallCap': 'Waterfall cap',
+    'patternCount': 'Patterns',
+    'patternTypes': 'Pattern types',
+    'openPositionGrams': 'Open (g)',
+    'proposedGrams': 'Proposed (g)',
+    'totalProjectedExposure': 'Total exposure (g)',
+    'maxSymbolExposureGrams': 'Max allowed (g)',
+    'rejectionReason': 'Reason',
+    'ledgerNetEquityAed': 'Ledger equity (AED)',
+    'exposureSource': 'Source',
+    'orderStatus': 'Status',
+    'approvedGrams': 'Approved (g)',
+    'maxLegalGrams': 'Max legal (g)',
+    'attemptedGrams': 'Attempted (g)',
+    'requiredAed': 'Required (AED)',
+    'allowedCapitalAed': 'Allowed (AED)',
+    'cashAed': 'Cash (AED)',
+    'finalDecision': 'Decision',
+    'primaryReason': 'Reason',
+    'bottomPermissionVerdict': 'Bottom verdict',
+    'bottomPermissionMode': 'Bottom mode',
+    'waterfallRisk': 'Waterfall risk',
+    'totalScore': 'Score',
+    'decisionTier': 'Tier',
+    'structureScore': 'Structure',
+    'momentumScore': 'Momentum',
+    'aiScore': 'AI score',
+  };
+  if (knownLabels.containsKey(key)) return knownLabels[key]!;
+  final withSpaces = key.replaceAllMapped(RegExp(r'([A-Z])'), (m) => ' ${m[1]!.toLowerCase()}').replaceAll('_', ' ').trim();
+  if (withSpaces.isEmpty) return key;
+  return withSpaces.split(RegExp(r'\s+')).map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : w).join(' ');
+}
+
+List<String> _payloadToDetailLines(String eventType, Map<String, dynamic> payload) {
   final lines = <String>[];
+  final preferred = _preferredKeys[eventType];
+  final keys = preferred != null
+      ? [...preferred.where(payload.containsKey), ...payload.keys.where((k) => !_skipPayloadKeys.contains(k) && !preferred.contains(k))]
+      : payload.keys.where((k) => !_skipPayloadKeys.contains(k)).toList();
 
-  String? _tryStr(String key) {
-    final v = p[key];
-    if (v == null || v.toString().isEmpty) return null;
-    return v.toString();
+  for (final key in keys) {
+    if (lines.length >= _maxDetailLines) break;
+    final v = payload[key];
+    if (v == null || (v is String && v.isEmpty)) continue;
+    final label = _payloadKeyToLabel(key);
+    final value = _formatPayloadValue(v);
+    lines.add('$label: $value');
   }
+  return lines;
+}
 
-  // For FINAL_DECISION show entry/TP if present
-  if (item.eventType == 'TRADE_ROUTED' ||
-      (item.eventType == 'FINAL_DECISION' &&
-          p['finalDecision'] != 'NO_TRADE')) {
-    final entry = _tryStr('entry');
-    final tp = _tryStr('tp');
-    final grams = _tryStr('grams');
-    final rail = _tryStr('rail');
-    if (entry != null) lines.add('Entry: $entry');
-    if (tp != null) lines.add('TP: $tp');
-    if (grams != null) lines.add('Grams: $grams');
-    if (rail != null) lines.add('Rail: $rail');
-  }
-
-  // For DECISION_EVALUATED show key decision fields
-  if (item.eventType == 'DECISION_EVALUATED') {
-    final waterfallRisk = _tryStr('waterfallRisk');
-    final mode = _tryStr('mode');
-    final cause = _tryStr('cause');
-    if (waterfallRisk != null) lines.add('Waterfall risk: $waterfallRisk');
-    if (mode != null) lines.add('Mode: $mode');
-    if (cause != null) lines.add('Cause: $cause');
-  }
-
-  // Source & stage always shown if non-trivial
-  if (item.stage.isNotEmpty && item.stage != 'info') {
+List<String> _detailLines(RuntimeTimelineItem item) {
+  final lines = _payloadToDetailLines(item.eventType, item.payload);
+  if (item.stage.isNotEmpty && item.stage != 'info' && !lines.any((l) => l.toLowerCase().startsWith('stage:'))) {
     lines.add('Stage: ${item.stage}');
   }
-
   return lines;
 }
 
