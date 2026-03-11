@@ -925,8 +925,8 @@ class ValidationSummary {
       dxyState: _readString(json, 'dxyState'),
       silverCrossMetalState:
           _readString(json, 'silverCrossMetalState'),
-      dxyRate: dxyRateVal is num ? (dxyRateVal as num).toDouble() : null,
-      silverRate: silverRateVal is num ? (silverRateVal as num).toDouble() : null,
+      dxyRate: dxyRateVal is num ? dxyRateVal.toDouble() : null,
+      silverRate: silverRateVal is num ? silverRateVal.toDouble() : null,
       crossMetalNote: _readNullableString(json, 'crossMetalNote'),
       historicalComparison:
           _readNullableString(json, 'historicalComparison'),
