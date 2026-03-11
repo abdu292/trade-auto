@@ -297,6 +297,35 @@ public sealed class SignalPollingBackgroundService(
                         x => x.IsActive && x.IsBlocked && x.StartUtc <= snapshot.Timestamp && x.EndUtc >= snapshot.Timestamp,
                         stoppingToken);
                 var waterfallRiskForStack = regime.IsWaterfall ? "HIGH" : (regime.RiskTag == "CAUTION" ? "MEDIUM" : "LOW");
+
+                // Spec v11 §9 — Pending order supervision: cancel if FAIL/hazard/waterfall/spread/stale
+                var pendingSnapshot = pendingTrades.Snapshot();
+                var (superviseCancel, superviseReason) = PendingOrderSupervision.Supervise(
+                    pendingSnapshot,
+                    snapshot,
+                    waterfallRiskForStack,
+                    activeHazardWindowBlockNow,
+                    regimeBlockedReason: null,
+                    spreadBlockThreshold: 0.7m,
+                    adrFailThresholdPct: 85m);
+                if (superviseCancel && pendingSnapshot.Count > 0)
+                {
+                    var canceled = pendingTrades.Clear();
+                    mt5Control.RequestCancelPending(superviseReason);
+                    await timeline.WriteAsync(
+                        eventType: "PENDING_ORDER_SUPERVISION_CANCEL",
+                        stage: "supervision",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new { reason = superviseReason, canceledCount = canceled },
+                        cancellationToken: stoppingToken);
+                    logger.LogInformation("PENDING_ORDER_SUPERVISION — canceled {Count} pending order(s). Reason: {Reason}", canceled, superviseReason);
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
                 var decisionStackResult = GoldEngineDecisionStack.Evaluate(
                     snapshot,
                     regime,
@@ -304,6 +333,15 @@ public sealed class SignalPollingBackgroundService(
                     stackLedgerState,
                     activeHazardWindowBlockNow,
                     null);
+
+                // Spec v9/v10/v11 — Read existing candidate early for packet and lifecycle logic
+                var existingCandidate = setupLifecycleStore.GetCandidate(snapshot.Symbol);
+
+                var goldRegime = GoldMarketRegimeDetector.Detect(
+                    decisionStackResult.MarketRegime,
+                    snapshot,
+                    decisionStackResult.SweepReclaim,
+                    snapshot.NewsEventFlag);
 
                 await timeline.WriteAsync(
                     eventType: "MARKET_REGIME_DETECTED",
@@ -320,11 +358,48 @@ public sealed class SignalPollingBackgroundService(
                         ema50H1 = snapshot.Ema50H1,
                         ema200H1 = snapshot.Ema200H1,
                         rsiH1 = snapshot.RsiH1,
+                        goldRegime = goldRegime.Regime,
+                        goldRegimeTradeable = goldRegime.IsTradeable,
+                        goldRegimeInterpretation = goldRegime.Interpretation,
                     },
                     cancellationToken: stoppingToken);
 
-                // ── Spec v9/v10 §5: Setup lifecycle — read existing candidate for diagnostic logging ──
-                var existingCandidate = setupLifecycleStore.GetCandidate(snapshot.Symbol);
+                // Spec v11 §19 — Structured context packet (deterministic snapshot for AI/logging)
+                var ledgerStateForPacket = ledger.GetState();
+                var structuredPacket = StructuredContextPacketBuilder.Build(
+                    snapshot,
+                    decisionStackResult.MarketRegime.Regime,
+                    decisionStackResult.Overextension.State,
+                    waterfallRiskForStack,
+                    activeHazardWindowBlockNow,
+                    s1: snapshot.SessionLow > 0m ? snapshot.SessionLow : null,
+                    s2: snapshot.PreviousSessionLow > 0m ? snapshot.PreviousSessionLow : null,
+                    r1: snapshot.SessionHigh > 0m ? snapshot.SessionHigh : null,
+                    r2: snapshot.PreviousSessionHigh > 0m ? snapshot.PreviousSessionHigh : null,
+                    fail: null,
+                    existingCandidate?.LifecycleState,
+                    existingCandidate?.BaseLevel,
+                    existingCandidate?.LidLevel,
+                    existingCandidate?.PathType,
+                    existingCandidate?.ExpiryWindow,
+                    new LedgerStateContract(
+                        ledgerStateForPacket.CashAed,
+                        ledgerStateForPacket.GoldGrams,
+                        ledgerStateForPacket.OpenExposurePercent,
+                        ledgerStateForPacket.DeployableCashAed,
+                        ledgerStateForPacket.OpenBuyCount),
+                    goldRegime.Regime);
+                await timeline.WriteAsync(
+                    eventType: "STRUCTURED_CONTEXT_PACKET",
+                    stage: "rule_engine",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new { packetText = structuredPacket },
+                    cancellationToken: stoppingToken);
+
+                // ── Spec v9/v10 §5: Setup lifecycle — diagnostic logging (existingCandidate already read above) ──
                 string? whyNotArmedEarlier = null;
                 if (!decisionStackResult.ProceedToAi)
                 {
@@ -458,6 +533,68 @@ public sealed class SignalPollingBackgroundService(
                             setupLifecycleStore.MarkPassedOverextended(snapshot.Symbol, "ENTRY_LEVEL_EXCEEDED_BY_CURRENT_BID");
                         }
                         // else: candidate remains ARMED — the BUY_LIMIT entry is still reachable on pullback.
+                    }
+                }
+                // Spec v11 §8 — Re-qualification: previously overextended/passed setup cooled off → re-arm BUY_LIMIT
+                else if (existingCandidate != null
+                    && (existingCandidate.LifecycleState == SetupLifecycleState.PassedOverextended
+                        || existingCandidate.LifecycleState == SetupLifecycleState.Invalidated))
+                {
+                    var requalResult = ReQualificationChecker.Check(
+                        snapshot,
+                        existingCandidate,
+                        decisionStackResult.PathState,
+                        decisionStackResult.Overextension,
+                        decisionStackResult.SweepReclaim,
+                        waterfallRiskForStack,
+                        activeHazardWindowBlockNow,
+                        0.7m,
+                        null);
+                    if (requalResult.CanRequalify)
+                    {
+                        var (candidateSession, _) = TradingSessionClock.Resolve(snapshot.KsaTime);
+                        var candidateExpiryMinutes = candidateSession switch
+                        {
+                            "JAPAN" => 120,
+                            "INDIA" => 150,
+                            "LONDON" => 90,
+                            "NY" => 60,
+                            _ => 120,
+                        };
+                        var requalifiedCandidate = new ArmedSetupCandidate(
+                            PathType: PathState.BuyLimit,
+                            BaseLevel: existingCandidate.BaseLevel,
+                            LidLevel: existingCandidate.LidLevel,
+                            TriggerCondition: "REQUALIFIED_AFTER_PULLBACK",
+                            ExpiryWindow: DateTimeOffset.UtcNow.AddMinutes(candidateExpiryMinutes),
+                            InvalidationCondition: existingCandidate.InvalidationCondition,
+                            CreatedAt: DateTimeOffset.UtcNow,
+                            CycleId: cycleId,
+                            ConfidenceScore: decisionStackResult.ConfidenceScore.Score,
+                            LifecycleState: SetupLifecycleState.Armed,
+                            InvalidationReason: null,
+                            PlantedAt: null,
+                            RequalifiedFrom: existingCandidate.LifecycleState);
+                        setupLifecycleStore.StoreArmedCandidate(snapshot.Symbol, requalifiedCandidate);
+                        await timeline.WriteAsync(
+                            eventType: "CANDIDATE_REQUALIFIED",
+                            stage: "rule_engine",
+                            source: "brain",
+                            symbol: snapshot.Symbol,
+                            cycleId: cycleId,
+                            tradeId: null,
+                            payload: new
+                            {
+                                requalifiedFrom = existingCandidate.LifecycleState,
+                                candidateBase = existingCandidate.BaseLevel,
+                                candidateLid = existingCandidate.LidLevel,
+                                reason = requalResult.Reason,
+                            },
+                            cancellationToken: stoppingToken);
+                        logger.LogInformation(
+                            "CANDIDATE_REQUALIFIED — BUY_LIMIT re-armed after pullback. Base={Base} From={From}",
+                            existingCandidate.BaseLevel,
+                            existingCandidate.LifecycleState);
                     }
                 }
 

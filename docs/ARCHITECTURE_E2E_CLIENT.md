@@ -117,11 +117,20 @@ At this point, no trade is placed yet.
 ## Step 3: Brain Decision Cycle Starts (Candle-Aligned)
 A background cycle runs only when a new M5 or M15 candle appears (noise reduction).
 
-For each cycle:
+For each cycle (spec v11 §2 — final continuous loop):
 - creates a unique cycle id
 - loads latest snapshot
 - checks session availability
 - continues only if the market state is current and valid
+- **Pending order supervision** (spec v11 §9) runs early: if FAIL threatened, hazard, waterfall, spread blowout, or stale expiry, all pendings are cancelled and the cancel signal is sent to MT5.
+
+
+## Step 3b: Pending Order Supervision (Spec v11 §9)
+Every cycle, before new decisions, the engine supervises all existing pending orders:
+
+- **Checks:** FAIL threatened (ADR), structure/safety, waterfall HIGH, hazard window active, spread block, regime block, expired pendings.
+- **Action:** If any check fails, the system requests cancel-all via `IMt5ControlStore`, clears the pending queue, and logs `PENDING_ORDER_SUPERVISION_CANCEL` with reason.
+- Pending orders are thus actively supervised until trigger, expiry, or cancellation — no zombie orders.
 
 
 ## Step 4: Market Regime + Rule Engine Gate (Before AI)
@@ -137,22 +146,39 @@ Each regime detection cycle emits a `MARKET_REGIME_DETECTED` timeline event that
 - `regime`, `isTradeable`, `reason`
 - `ema50H1`, `ema200H1` — EMA values from the snapshot used for the golden/death-cross check
 - `rsiH1` — H1 RSI value used in the regime classification
+- **Spec v11 §4:** `goldRegime`, `goldRegimeTradeable`, `goldRegimeInterpretation` — gold-specific regime (RANGE, RANGE_RELOAD, TREND_CONTINUATION, FLUSH_CATCH, EXPANSION, EXHAUSTION, LIQUIDATION, NEWS_SPIKE, SHOCK, DEAD).
 
 These fields are present in both the live and replay timeline logs for full observability.
+
+### 4.1b Gold-Specific Market Regime (Spec v11 §4)
+A **Gold Market Regime Detector** refines the structural regime into gold-specific states that drive path preference, confidence, size, and TP/expiry:
+
+- **RANGE** / **RANGE_RELOAD** — BUY_LIMIT favored near shelves; rotation-friendly.
+- **TREND_CONTINUATION** — H1 aligned; BUY_STOP allowed if not overextended.
+- **FLUSH_CATCH** — sweep + reclaim; BUY_LIMIT after reclaim/hold.
+- **EXPANSION** / **EXHAUSTION** / **LIQUIDATION** / **NEWS_SPIKE** / **SHOCK** / **DEAD** — path and tradeability constrained accordingly.
 
 ### 4.2 Gold Engine decision stack
 The live path now uses an explicit path-aware decision stack before AI.
 
-Mandatory order in current code:
-- ledger / deployable cash truth
-- session + phase resolution
-- macro/risk veto inputs (news flags, active hazard windows, waterfall state)
-- regime classification
-- H1 context + M15 structure
-- Overextension Detector
-- Liquidity Sweep + Reclaim detector
-- path routing
-- confidence score gate
+Mandatory order (spec v11 §3 — exact decision stack order):
+1. Ledger / capital truth
+2. Session + phase + day
+3. Macro / geo / news / Telegram context (veto inputs)
+4. Market Regime Detection
+5. Structure Detection (H1 + M15)
+6. **Base-Opportunity Window Detection** (spec v11 §7) — early shelf/reclaim window before expansion
+7. Overextension / waterfall / hazard / spread / stale-context checks
+8. Path Routing
+9. Candidate Lifecycle update
+10. Re-Qualification after overextension (spec v11 §8)
+11. PRETABLE legality + confidence + size
+12. TP + expiry computation
+13. Order generation / cancellation / replacement
+14. MT5 execution routing
+15. Learning / ledger logging
+
+No low-level trigger failure (e.g. “M5 not confirmed”) may abort the cycle before this stack finishes.
 
 Path routing always classifies one of these states:
 - `BUY_LIMIT`
@@ -163,6 +189,7 @@ Path routing always classifies one of these states:
 
 Important live behavior:
 - there is no longer a universal “no M5 trigger = abort” rule
+- **Base-Opportunity Window (spec v11 §7):** when path would be WAIT_PULLBACK but a valid shelf/defended base exists and price is still near it (H1 ok, regime RANGE/RANGE_RELOAD/TREND, no FAIL/hazard/waterfall), the engine overrides to **BUY_LIMIT** so early candidate creation happens before the rate runs away.
 - `BUY_LIMIT` can proceed with M5 optional when structure/base/reclaim is valid
 - `BUY_STOP` still requires M5 + impulse readiness, and if not ready the explicit reason is `BUY_STOP_BREAKOUT_NOT_READY`
 - active hazard windows, spread block, waterfall block, and capital/exposure violations now surface as explicit reason codes instead of generic aborts
@@ -212,20 +239,25 @@ Pattern Detector feeds PRETABLE directly:
    - Result: biases legal pending pullback path (`BUY_LIMIT`) at structural reclaim/base zones
 
 
-## Step 4c: Setup Lifecycle / Candidate Memory (spec v9 / v10)
+## Step 4c: Setup Lifecycle / Candidate Memory (spec v9 / v10 / v11)
 After the decision stack and pattern detector, the engine tracks setup lifecycle state across cycles.
 
 **Problem addressed:** The engine previously evaluated only the *current* candle state. If structure became valid on cycle N but price expanded quickly before the order was placed, cycle N+1 would see `OVEREXTENDED_ABOVE_BASE` and block the trade — with no record that a valid setup had been detected earlier.
 
-**Solution:** A per-symbol `SetupLifecycleStore` (singleton) persists the ARMED candidate between cycles.
+**Solution:** A per-symbol `SetupLifecycleStore` (singleton) persists the ARMED candidate between cycles. Spec v11 extends the lifecycle with **re-qualification** and full state set.
 
-### Lifecycle states
+### Lifecycle states (spec v11 §6)
 | State | Meaning |
 |---|---|
+| `NONE` | No candidate exists |
 | `FORMING` | Structure starting to form, not yet fully valid |
+| `CANDIDATE` | Base-opportunity window detected; early candidate before full confirmation |
 | `ARMED` | Structure fully valid; pending order should be planted |
-| `ORDER_PLANTED` | Pending order successfully queued (MT5 or approvals) |
-| `PASSED_OVEREXTENDED` | Setup was armed but window missed — entry level no longer reachable |
+| `ORDER_PLANTED` / `PENDING_PLANTED` | Pending order successfully queued (MT5 or approvals) |
+| `FILLED` | Order triggered and position opened |
+| `PASSED` / `PASSED_OVEREXTENDED` | Setup was armed but window missed — entry level no longer reachable |
+| `OVEREXTENDED` | Price overextended above base; waiting for pullback |
+| **`REQUALIFIED`** | Previously overextended/passed setup cooled off; BUY_LIMIT may be re-armed (spec v11 §8) |
 | `INVALIDATED` | Candidate invalidated by safety condition change |
 
 ### Transition rules
@@ -233,18 +265,21 @@ After the decision stack and pattern detector, the engine tracks setup lifecycle
 - **Invalidation**: if next cycle detects waterfall HIGH, active hazard window, spread explosion, or entry level violated → `INVALIDATED`.
 - **BUY_STOP + overextended**: price expanded past lid → `PASSED_OVEREXTENDED` (entry would be a chase).
 - **BUY_LIMIT + overextended + entry still reachable**: candidate STAYS ARMED (price may pull back to base).
-- **BUY_LIMIT override**: when current cycle is `OVEREXTENDED` but an ARMED BUY_LIMIT candidate still satisfies pending-before-level law and safety, the engine proceeds to AI and decision engine using the candidate's structural context. The overextension filter blocks late chase entries, not valid BUY_LIMIT setups at structural base.
+- **BUY_LIMIT override**: when current cycle is `OVEREXTENDED` but an ARMED BUY_LIMIT candidate still satisfies pending-before-level law and safety, the engine proceeds to AI and decision engine using the candidate's structural context.
+- **Re-Qualification (spec v11 §8):** When pathState is OVEREXTENDED_ABOVE_BASE or WAIT_PULLBACK_BASE and the last candidate was PASSED_OVEREXTENDED or INVALIDATED, the engine runs **ReQualificationChecker**. If MA20 distance normalizes, RSI cools, price returns near valid shelf/reclaim, M15 structure rebuilds, and no FAIL/hazard/waterfall/spread block → a new ARMED candidate is stored with `RequalifiedFrom` set; timeline event `CANDIDATE_REQUALIFIED` is emitted.
 - **ORDER_PLANTED**: set immediately after the pending trade is queued.
 
 ### Diagnostic logging
 Every `GOLD_ENGINE_DECISION_STACK` timeline event now includes:
-- `candidateState` — current lifecycle state (NONE / FORMING / ARMED / ORDER_PLANTED / PASSED_OVEREXTENDED / INVALIDATED)
+- `candidateState` — current lifecycle state (NONE / FORMING / CANDIDATE / ARMED / ORDER_PLANTED / PASSED_OVEREXTENDED / REQUALIFIED / INVALIDATED)
 - `candidateCreatedAt` — when the armed candidate was stored
 - `candidateBase` — structural base level in the candidate
 - `candidateLid` — structural lid level in the candidate
 - `candidatePath` — path type in the candidate (BUY_LIMIT / BUY_STOP)
 - `candidateExpiry` — expiry window for the candidate
 - `whyNotArmedEarlier` — diagnostic reason when no candidate exists and cycle is not valid
+
+**Spec v11 §19:** A **STRUCTURED_CONTEXT_PACKET** timeline event is emitted each cycle with a deterministic text snapshot (symbol, bid, ask, spread, session, regime, overextension, S1/S2/R1/R2, candidate state, ledger, goldRegime) for AI and logging — replacing screenshot dependence.
 
 A `SETUP_LIFECYCLE_OVERRIDE` timeline event is emitted whenever the armed candidate overrides an OVEREXTENDED cycle.
 
@@ -823,4 +858,15 @@ That is the real, code-backed end-to-end architecture currently running in this 
 - `GET /api/monitoring/dashboard` response extended with `setupLifecycle` panel
 - Candidate expiry is session-aligned (Japan 120 min / India 150 min / London 90 min / NY 60 min)
 - All existing safety protections (waterfall, hazard, spread, pending-before-level, capital gates) remain intact and are checked BEFORE any lifecycle override is applied
+
+### spec v11 (unified implementation — safe-and-early, MT5-linked, multi-AI disciplined)
+- **Final objective:** BUY-ONLY physical gold automation that plants BUY_LIMIT/BUY_STOP before the move, supervises every pending until trigger/expiry/cancel, cancels when premise breaks, avoids waterfall/panic/first-leg traps, remains ledger-first and Shariah-compliant.
+- **Non-negotiable laws:** Trading (buy-only, no leverage, no shorting, no market buys), Order (pending-before-level, TP+expiry, no zombies), Safety (waterfall/FAIL/hazard/spread/stale-context/structural-break blocks), Capital (physical ledger truth, two-bucket, max two slots), Governance (structure+safety+capital override AI).
+- **Pending order supervision (§9):** Every cycle runs `PendingOrderSupervision.Supervise`; on FAIL threatened, hazard, waterfall HIGH, spread blowout, or expired pending → cancel-all and clear queue, log `PENDING_ORDER_SUPERVISION_CANCEL`.
+- **Gold-specific market regime (§4):** `GoldMarketRegimeDetector` classifies RANGE, RANGE_RELOAD, TREND_CONTINUATION, FLUSH_CATCH, EXPANSION, EXHAUSTION, LIQUIDATION, NEWS_SPIKE, SHOCK, DEAD; emitted in `MARKET_REGIME_DETECTED` as `goldRegime`, `goldRegimeTradeable`, `goldRegimeInterpretation`.
+- **Base-opportunity window (§7):** `BaseOpportunityWindowDetector` allows early BUY_LIMIT when H1 ok, M15 shelf/base, price near shelf, regime RANGE/RANGE_RELOAD/TREND, no safety block; integrated in `GoldEngineDecisionStack` to override WAIT_PULLBACK → BUY_LIMIT.
+- **Re-qualification after overextension (§8):** `ReQualificationChecker` runs when last candidate was PASSED_OVEREXTENDED or INVALIDATED; if MA20 normalizes, RSI cools, price near shelf, structure rebuilds, no safety block → new ARMED candidate with `RequalifiedFrom`; `CANDIDATE_REQUALIFIED` timeline event.
+- **Candidate lifecycle extended:** States NONE, FORMING, CANDIDATE, ARMED, PENDING_PLANTED, FILLED, PASSED, OVEREXTENDED, REQUALIFIED, INVALIDATED; `ArmedSetupCandidate` gains `RequalifiedFrom`.
+- **Structured context packet (§19):** `StructuredContextPacketBuilder` builds deterministic text snapshot per cycle; `STRUCTURED_CONTEXT_PACKET` timeline event for AI/logging (replaces screenshot dependence).
+- **Decision stack order:** Documented to match spec v11 §3 (ledger → session → macro → regime → structure → base-opportunity → overextension/checks → path → lifecycle → re-qualification → PRETABLE → TP/expiry → order gen → MT5 → learning).
 

@@ -169,6 +169,21 @@ public static class GoldEngineDecisionStack
         var pathState = pathRouting.PathState;
         var reasonCode = pathRouting.ReasonCode;
 
+        // Spec v11 §7 — Base-Opportunity Window: early BUY_LIMIT candidate before rate runs away
+        if (pathState == PathState.WaitPullback && hasValidBaseOrReclaim
+            && BaseOpportunityWindowDetector.Detect(snapshot, marketRegime, h1, m15, sweepReclaim,
+                waterfallRisk, hazardWindowBlocked).IsActive)
+        {
+            var s1Shelf = snapshot.SessionLow > 0m ? snapshot.SessionLow : snapshot.PreviousSessionLow;
+            decimal? s2 = null, s3 = null;
+            if (snapshot.PreviousSessionLow > 0m && snapshot.PreviousSessionLow < s1Shelf) s2 = snapshot.PreviousSessionLow;
+            if (snapshot.PreviousDayLow > 0m && snapshot.PreviousDayLow < (s2 ?? s1Shelf)) s3 = snapshot.PreviousDayLow;
+            pathRouting = new PathRoutingResult(PathState.BuyLimit, null,
+                new PendingLimitPathContract(s1Shelf, s2, s3), "BUY_LIMIT");
+            pathState = PathState.BuyLimit;
+            reasonCode = null;
+        }
+
         var confidence = ConfidenceScoreCalculator.Calculate(
             snapshot,
             h1,
