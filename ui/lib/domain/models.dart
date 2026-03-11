@@ -374,6 +374,9 @@ class RuntimeStatus {
     this.freezeGapDetected = false,
     this.pendingOrders = const [],
     this.openPositions = const [],
+    this.balance = 0,
+    this.equity = 0,
+    this.freeMargin = 0,
   });
 
   final String symbol;
@@ -382,6 +385,9 @@ class RuntimeStatus {
   final DateTime? ksaTime;
   final double bid;
   final double ask;
+  final double balance;
+  final double equity;
+  final double freeMargin;
   final double spread;
   final double spreadMedian60m;
   final double spreadMax60m;
@@ -435,6 +441,9 @@ class RuntimeStatus {
         ksaTime: _readNullableDateTime(json, 'ksaTime'),
         bid: _readDouble(json, 'bid'),
         ask: _readDouble(json, 'ask'),
+        balance: _readDouble(json, 'balance'),
+        equity: _readDouble(json, 'equity'),
+        freeMargin: _readDouble(json, 'freeMargin'),
         spread: _readDouble(json, 'spread'),
         spreadMedian60m: _readDouble(json, 'spreadMedian60m'),
         spreadMax60m: _readDouble(json, 'spreadMax60m'),

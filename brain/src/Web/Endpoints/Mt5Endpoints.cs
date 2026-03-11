@@ -353,14 +353,8 @@ public static class Mt5Endpoints
                     chartDataStore.SetM15Candles(candles);
                 }
 
-                // Keep ledger cash/holdings aligned with live runtime account state.
-                // Gold holdings are derived from currently open position grams-equivalent.
-                if (request.Balance.HasValue)
-                {
-                    var syncedCashAed = request.Balance.Value;
-                    var syncedGoldGrams = openPositions.Sum(x => x.VolumeGramsEquivalent);
-                    ledger.SyncRuntimeState(syncedCashAed, syncedGoldGrams, mt5ServerTime);
-                }
+                // Physical ledger is source of truth — only updated by user (Set Physical) or slips/deposits/withdrawals.
+                // Do NOT overwrite ledger from MT5; MT5 is execution infrastructure only.
 
                 await timeline.WriteAsync(
                     eventType: "MT5_MARKET_SNAPSHOT_RECEIVED",

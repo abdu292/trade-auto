@@ -271,7 +271,7 @@ class DashboardScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
 
-          // A) Capital Dashboard — physical ledger truth
+          // A) Capital Dashboard — physical ledger (source of truth) and MT5 execution (separate)
           _AnimatedCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -280,19 +280,24 @@ class DashboardScreen extends ConsumerWidget {
                 children: [
                   Text('Capital Dashboard',
                       style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
+                  Text('Physical ledger (source of truth)',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 6),
                   ledger.when(
                     data: (state) => Wrap(
                       spacing: 8,
                       runSpacing: 8,
                       children: [
                         _MetricChip(
-                            label: 'Cash',
-                            value: 'AED ${state.cashAed.toStringAsFixed(2)}'),
+                            label: 'Cash (AED)',
+                            value: state.cashAed.toStringAsFixed(2)),
                         _MetricChip(
-                            label: 'Gold',
-                            value:
-                                '${state.goldGrams.toStringAsFixed(2)}g = AED ${state.goldAedEquivalent.toStringAsFixed(2)}'),
+                            label: 'Gold (g)',
+                            value: state.goldGrams.toStringAsFixed(2)),
+                        _MetricChip(
+                            label: 'Gold ≈ AED',
+                            value: state.goldAedEquivalent.toStringAsFixed(2)),
                         _MetricChip(
                             label: 'Net Equity',
                             value:
@@ -328,6 +333,33 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                     loading: () => const LinearProgressIndicator(),
                     error: (error, _) => Text('Ledger error: $error'),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('MT5 execution account (for reference only)',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  runtime.when(
+                    data: (rt) => Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _MetricChip(
+                            label: 'MT5 Balance',
+                            value: 'AED ${rt.balance.toStringAsFixed(2)}'),
+                        _MetricChip(
+                            label: 'MT5 Equity',
+                            value: 'AED ${rt.equity.toStringAsFixed(2)}'),
+                        _MetricChip(
+                            label: 'Free Margin',
+                            value: 'AED ${rt.freeMargin.toStringAsFixed(2)}'),
+                        _MetricChip(
+                            label: 'Bid / Ask',
+                            value:
+                                '${rt.bid.toStringAsFixed(2)} / ${rt.ask.toStringAsFixed(2)}'),
+                      ],
+                    ),
+                    loading: () => const LinearProgressIndicator(),
+                    error: (error, _) => Text('Runtime error: $error'),
                   ),
                 ],
               ),
