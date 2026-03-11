@@ -16,6 +16,8 @@ public static class GoldMarketRegimeDetector
     public const string FlushCatch = "FLUSH_CATCH";
     public const string Expansion = "EXPANSION";
     public const string Exhaustion = "EXHAUSTION";
+    public const string ContinuationRebuild = "CONTINUATION_REBUILD";
+    public const string BullishRecovery = "BULLISH_RECOVERY";
     public const string Liquidation = "LIQUIDATION";
     public const string NewsSpike = "NEWS_SPIKE";
     public const string Shock = "SHOCK";
@@ -36,7 +38,12 @@ public static class GoldMarketRegimeDetector
             if (string.Equals(structuralRegime.Regime, "DEAD", StringComparison.OrdinalIgnoreCase))
                 return new GoldRegimeResult(DeadNoEdge, false, structuralRegime.Reason, "Stand down.");
             if (string.Equals(structuralRegime.Regime, "CHOPPY", StringComparison.OrdinalIgnoreCase))
+            {
+                // CR12 §9: Upgrade from EXHAUSTION to RANGE_RELOAD/CONTINUATION_REBUILD/BULLISH_RECOVERY when structure has repaired
+                if (IsStructureRepaired(snapshot))
+                    return new GoldRegimeResult(RangeReload, true, "Structure repaired; upgraded from EXHAUSTION.", "Bullish rebuild / range reload; rotation allowed.");
                 return new GoldRegimeResult(Exhaustion, false, structuralRegime.Reason, "ADR/expansion exhausted.");
+            }
             if (string.Equals(structuralRegime.Regime, "TRENDING_BEAR", StringComparison.OrdinalIgnoreCase))
                 return new GoldRegimeResult(Liquidation, false, structuralRegime.Reason, "Buy-only: no catch without rebuild.");
         }
@@ -48,9 +55,13 @@ public static class GoldMarketRegimeDetector
         var atrM15 = snapshot.AtrM15 > 0m ? snapshot.AtrM15 : snapshot.Atr;
         var adrUsed = snapshot.AdrUsedPct;
 
-        // EXHAUSTION: large prior move, weak follow-through, long wicks, stretched MA
+        // EXHAUSTION: large prior move, weak follow-through — CR12 §9: upgrade when structure repaired
         if (adrUsed >= 85m && snapshot.CompressionCountM15 <= 1)
+        {
+            if (IsStructureRepaired(snapshot))
+                return new GoldRegimeResult(BullishRecovery, true, "Structure repaired; upgraded from EXHAUSTION.", "Rebound/shelf rebuilding; re-qualified.");
             return new GoldRegimeResult(Exhaustion, false, $"ADR used {adrUsed:0}%.", "Wait for pullback or re-qualification.");
+        }
 
         // FLUSH_CATCH: sharp dump into known liquidity, reclaim visible
         if (sweepReclaim.State == SweepReclaimState.SweepReclaim && structuralRegime.IsTradeable)
@@ -79,6 +90,20 @@ public static class GoldMarketRegimeDetector
             return new GoldRegimeResult(TrendContinuation, true, structuralRegime.Reason, "H1 bullish, clean compression possible.");
 
         return new GoldRegimeResult(Range, structuralRegime.IsTradeable, structuralRegime.Reason, structuralRegime.Reason);
+    }
+
+    /// <summary>CR12 §9: Structure has materially repaired — H1 bullish, M15 base, no fail/waterfall/hazard.</summary>
+    private static bool IsStructureRepaired(MarketSnapshotContract snapshot)
+    {
+        var h1 = snapshot.TimeframeData
+            .FirstOrDefault(x => string.Equals(x.Timeframe, "H1", StringComparison.OrdinalIgnoreCase));
+        var h1Close = h1?.Close ?? 0m;
+        var h1Bullish = snapshot.Ma20H1 > 0m && h1Close > 0m && h1Close > snapshot.Ma20H1;
+        var m15Base = snapshot.HasOverlapCandles && snapshot.CompressionCountM15 >= 2;
+        var noFail = snapshot.AdrUsedPct <= 85m || snapshot.AdrUsedPct == 0m;
+        var noWaterfall = !snapshot.HasPanicDropSequence && (!snapshot.IsExpansion || !snapshot.IsAtrExpanding);
+        var noHazard = !snapshot.IsUsRiskWindow;
+        return h1Bullish && m15Base && noFail && noWaterfall && noHazard;
     }
 }
 

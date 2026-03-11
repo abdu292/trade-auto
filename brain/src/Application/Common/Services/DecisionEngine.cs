@@ -212,8 +212,8 @@ public static class DecisionEngine
                 railPermissionB: "BLOCKED");
         }
 
-        // Section 9.4: BottomPermission hard gate — must be TRUE before any TABLE
-        var (bottomPermissionGranted, bottomPermissionReason) = EvaluateBottomPermission(snapshot, session);
+        // Section 9.4 / CR12: BottomPermission — two modes: DEEP_BOTTOM_CATCH (strict) or CONTINUATION_REBUILD (relaxed)
+        var (bottomPermissionGranted, bottomPermissionReason, bottomPermissionMode) = EvaluateBottomPermission(snapshot, session);
         if (!bottomPermissionGranted)
         {
             return NoTrade(
@@ -223,7 +223,9 @@ public static class DecisionEngine
                 cause: "BOTTOMPERMISSION_FALSE",
                 waterfallRisk: waterfallRisk,
                 railPermissionA: "BLOCKED",
-                railPermissionB: "BLOCKED");
+                railPermissionB: "BLOCKED",
+                bottomPermissionMode: bottomPermissionMode,
+                bottomPermissionReason: bottomPermissionReason);
         }
 
         var primaryClose = snapshot.AuthoritativeRate > 0m
@@ -397,7 +399,9 @@ public static class DecisionEngine
             ShopBuy: shopBuy,
             ShopSell: shopSell,
             ExpiryKSA: expiryKsa,
-            ExpiryServer: expiryServer);
+            ExpiryServer: expiryServer,
+            BottomPermissionMode: bottomPermissionMode,
+            BottomPermissionReason: bottomPermissionReason);
     }
 
     private static bool IsSupportedGoldSymbol(string? symbol)
@@ -1115,86 +1119,67 @@ public static class DecisionEngine
     /// <summary>
     /// Section 9.4: BottomPermission hard gate — supports two legal paths (CR8):
     /// Path A (Reversal): H1 sweep + reclaim, M15 base, M5 compression, and momentum.
-    /// Path B (Continuation): H1 bullish context intact, M15 compression base, M5 alignment,
-    ///   no FAIL threat, no waterfall signature, no hazard conflict.
-    ///
-    /// Session-adaptive strictness (CR7):
-    ///   London: stronger structure confirmation (M15 compression ≥ 4).
-    ///   NY: additional spread/liquidity guard.
+    /// CR12: Two-mode bottom permission. DEEP_BOTTOM = strict (sweep+reclaim, M5 required).
+    /// CONTINUATION_REBUILD = relaxed (H1 bullish, M15Base≥2, no mandatory H1SweepReclaim or M5).
+    /// When NoFail+NoWaterfall+NoHazard+SpreadOk+H1Bullish+M15Base(min≥2), do not auto-fail;
+    /// classify setup and allow CONTINUATION_REBUILD path without M5 veto.
     /// </summary>
-    private static (bool IsGranted, string Reason) EvaluateBottomPermission(
+    private static (bool IsGranted, string Reason, string Mode) EvaluateBottomPermission(
         MarketSnapshotContract snapshot,
         string? session = null)
     {
+        const string ModeDeepBottom = "DEEP_BOTTOM";
+        const string ModeContinuationRebuild = "CONTINUATION_REBUILD";
+        const string ModeNone = "NONE";
+
         var normalizedSession = session ?? NormalizeSession(snapshot.Session);
 
-        // ── Path A: Reversal — H1 sweep+reclaim ───────────────────────────────
-        var hasH1SweepReclaim = snapshot.HasLiquiditySweep;
-
-        // Session-adaptive M15 base threshold: London needs ≥ 4 candles (stronger confirmation)
-        var m15BaseThreshold = normalizedSession == "LONDON" ? 4 : 2;
-        var hasM15Base = snapshot.HasOverlapCandles && snapshot.CompressionCountM15 >= m15BaseThreshold;
-
-        // M5 compression: ≥6 overlapping M5 candles, contracting range, no new down-impulse
-        var hasM5Compression = snapshot.IsCompression
-            && snapshot.CompressionCountM5 >= 6
-            && !snapshot.IsAtrExpanding;
-
-        // Momentum confirmation: RSI(M15) > 35 (not oversold) or RSI not available
-        var momentumOk = snapshot.RsiM15 == 0m || snapshot.RsiM15 > 35m;
-
-        var reversalGranted = hasH1SweepReclaim && hasM15Base && hasM5Compression && momentumOk;
-
-        if (reversalGranted)
-        {
-            return (true, $"PATH_A_REVERSAL: H1SweepReclaim={hasH1SweepReclaim}, M15Base={hasM15Base}(min={m15BaseThreshold}), M5Compression={hasM5Compression}, MomentumOk={momentumOk}");
-        }
-
-        // ── Path B: Continuation — trend pullback / reload ────────────────────
-        // H1 bullish context: H1 close above MA20
+        // Shared conditions (CR12 §5): when all true, BOTTOMPERMISSION must not auto-fail
         var h1Data = snapshot.TimeframeData
             .FirstOrDefault(x => string.Equals(x.Timeframe, "H1", StringComparison.OrdinalIgnoreCase));
         var h1Close = h1Data?.Close ?? 0m;
         var h1BullishContext = snapshot.Ma20H1 > 0m && h1Close > 0m && h1Close > snapshot.Ma20H1;
-
-        // M15 compression base: session-adaptive threshold (London: ≥ 4, others: ≥ 3)
-        var contM15Threshold = normalizedSession == "LONDON" ? 4 : 3;
-        var contM15Base = snapshot.CompressionCountM15 >= contM15Threshold && snapshot.IsCompression;
-
-        // M5 entry alignment
-        var contM5Alignment = snapshot.IsCompression && snapshot.CompressionCountM5 >= 3;
-
-        // No FAIL threat: ADR usage not extreme
+        var m15BaseMin2 = snapshot.HasOverlapCandles && snapshot.CompressionCountM15 >= 2;
         var noFailThreat = snapshot.AdrUsedPct <= 85m || snapshot.AdrUsedPct == 0m;
-
-        // No waterfall signature
         var noWaterfallSignature = !snapshot.HasPanicDropSequence
             && (!snapshot.IsExpansion || !snapshot.IsAtrExpanding);
-
-        // No hazard conflict (no high-impact US risk window)
         var noHazardConflict = !snapshot.IsUsRiskWindow;
-
-        // NY-specific: additional spread guard (strictest spike/liquidity check)
         var spreadOk = normalizedSession != "NY"
             || snapshot.SpreadMax1m == 0m
             || snapshot.SpreadAvg1m == 0m
             || snapshot.SpreadMax1m < snapshot.SpreadAvg1m * 1.5m;
 
-        var continuationGranted = h1BullishContext
-            && contM15Base
-            && contM5Alignment
-            && noFailThreat
-            && noWaterfallSignature
-            && noHazardConflict
-            && spreadOk;
+        var safeGate = noFailThreat && noWaterfallSignature && noHazardConflict && spreadOk
+            && h1BullishContext && m15BaseMin2;
 
-        if (continuationGranted)
+        // ── Mode A: DEEP_BOTTOM_CATCH (strict) — near true flush bottom ───────
+        var hasH1SweepReclaim = snapshot.HasLiquiditySweep;
+        var m15BaseThreshold = normalizedSession == "LONDON" ? 4 : 2;
+        var hasM15Base = snapshot.HasOverlapCandles && snapshot.CompressionCountM15 >= m15BaseThreshold;
+        var hasM5Compression = snapshot.IsCompression
+            && snapshot.CompressionCountM5 >= 6
+            && !snapshot.IsAtrExpanding;
+        var momentumOk = snapshot.RsiM15 == 0m || snapshot.RsiM15 > 35m;
+        var deepBottomGranted = hasH1SweepReclaim && hasM15Base && hasM5Compression && momentumOk;
+
+        if (deepBottomGranted)
         {
-            return (true, $"PATH_B_CONTINUATION: H1Bullish={h1BullishContext}, M15Base={contM15Base}(min={contM15Threshold}), M5Align={contM5Alignment}, NoFail={noFailThreat}, NoWaterfall={noWaterfallSignature}, NoHazard={noHazardConflict}, SpreadOk={spreadOk}");
+            var msg = $"DEEP_BOTTOM: H1SweepReclaim={hasH1SweepReclaim}, M15Base={hasM15Base}(min={m15BaseThreshold}), M5Compression={hasM5Compression}, MomentumOk={momentumOk}";
+            return (true, msg, ModeDeepBottom);
         }
 
-        var reason = $"PATH_A: H1SweepReclaim={hasH1SweepReclaim}, M15Base={hasM15Base}(min={m15BaseThreshold}), M5Compression={hasM5Compression}, MomentumOk={momentumOk} | PATH_B: H1Bullish={h1BullishContext}, M15Base={contM15Base}(min={contM15Threshold}), M5Align={contM5Alignment}, NoFail={noFailThreat}, NoWaterfall={noWaterfallSignature}, NoHazard={noHazardConflict}, SpreadOk={spreadOk}";
-        return (false, reason);
+        // ── Mode B: CONTINUATION_REBUILD (relaxed) — H1SweepReclaim and M5 NOT mandatory ───────
+        if (safeGate)
+        {
+            var msg = $"CONTINUATION_REBUILD: H1Bullish={h1BullishContext}, M15Base={m15BaseMin2}(min=2), NoFail={noFailThreat}, NoWaterfall={noWaterfallSignature}, NoHazard={noHazardConflict}, SpreadOk={spreadOk}";
+            return (true, msg, ModeContinuationRebuild);
+        }
+
+        // Both paths invalid — build explicit reason for logging (CR12 §7)
+        var deepBottomWhy = $"DEEP_BOTTOM failed: H1SweepReclaim={hasH1SweepReclaim}, M15Base={hasM15Base}(min={m15BaseThreshold}), M5Compression={hasM5Compression}, MomentumOk={momentumOk}";
+        var contWhy = $"CONTINUATION_REBUILD failed: safeGate={safeGate} (H1Bullish={h1BullishContext}, M15Base={m15BaseMin2}, NoFail={noFailThreat}, NoWaterfall={noWaterfallSignature}, NoHazard={noHazardConflict}, SpreadOk={spreadOk})";
+        var reason = $"{deepBottomWhy} | {contWhy}";
+        return (false, reason, ModeNone);
     }
 
     /// <summary>
@@ -1346,7 +1331,9 @@ public static class DecisionEngine
         string cause = "UNKNOWN",
         string mode = "EXHAUSTION",
         string railPermissionA = "BLOCKED",
-        string railPermissionB = "BLOCKED") =>
+        string railPermissionB = "BLOCKED",
+        string bottomPermissionMode = "NONE",
+        string? bottomPermissionReason = null) =>
         new(
             IsTradeAllowed: false,
             Status: "NO_TRADE",
@@ -1371,7 +1358,9 @@ public static class DecisionEngine
             TelegramState: NormalizeTelegramState(snapshot.TelegramState),
             RailPermissionA: railPermissionA,
             RailPermissionB: railPermissionB,
-            RotationCapThisSession: 0);
+            RotationCapThisSession: 0,
+            BottomPermissionMode: bottomPermissionMode,
+            BottomPermissionReason: bottomPermissionReason);
 
     private sealed record WarModeState(
         string Mode,

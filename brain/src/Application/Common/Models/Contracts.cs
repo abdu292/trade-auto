@@ -228,7 +228,10 @@ public sealed record DecisionResultContract(
     decimal Limit1 = 0m,
     decimal Limit2 = 0m,
     decimal Stop1 = 0m,
-    int EfficiencyScore = 0);
+    int EfficiencyScore = 0,
+    // CR12 — bottom permission mode and reason for logging
+    string BottomPermissionMode = "NONE",
+    string? BottomPermissionReason = null);
 
 public sealed record LedgerStateContract(
     decimal CashAed,

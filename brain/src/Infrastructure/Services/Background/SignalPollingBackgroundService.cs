@@ -1377,6 +1377,8 @@ public sealed class SignalPollingBackgroundService(
                         effectiveSizeModifier,
                         decision.TelegramState,
                         snapshotHash,
+                        bottomPermissionMode = decision.BottomPermissionMode,
+                        bottomPermissionReason = decision.BottomPermissionReason,
                     },
                     cancellationToken: stoppingToken);
 
@@ -1505,6 +1507,8 @@ public sealed class SignalPollingBackgroundService(
                             {
                                 cause = decision.Cause,
                                 bottomPermissionReason = decision.Reason,
+                                bottomPermissionMode = decision.BottomPermissionMode,
+                                bottomPermissionReasonDetail = decision.BottomPermissionReason,
                                 tradeScore = tradeScore.TotalScore,
                                 session = snapshot.Session,
                                 sessionPhase = snapshot.SessionPhase,

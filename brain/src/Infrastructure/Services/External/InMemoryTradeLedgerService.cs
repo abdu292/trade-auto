@@ -35,7 +35,41 @@ public sealed class InMemoryTradeLedgerService : ITradeLedgerService
         }
     }
 
-    public LedgerStateContract GetExtendedState(decimal currentBidPrice) => GetState();
+    public LedgerStateContract GetExtendedState(decimal currentBidPrice)
+    {
+        lock (_gate)
+        {
+            var exposure = GetExposurePercentUnsafe();
+            var deployable = decimal.Round(Math.Max(0m, _cashAed), 2);
+            var cashAed = decimal.Round(_cashAed, 2);
+            var goldGrams = decimal.Round(_goldGrams, 2);
+            var openExposurePercent = decimal.Round(exposure, 2);
+            var bucketC1 = decimal.Round(deployable * 0.80m, 2);
+            var bucketC2 = decimal.Round(deployable * 0.20m, 2);
+            if (currentBidPrice <= 0m)
+                return new LedgerStateContract(cashAed, goldGrams, openExposurePercent, deployable, _openPositions.Count, BucketC1Aed: bucketC1, BucketC2Aed: bucketC2);
+            var shopSellBid = currentBidPrice - 0.80m;
+            var goldAedEquivalent = decimal.Round(_goldGrams / OunceToGram * shopSellBid * UsdToAed, 2);
+            var netEquityAed = decimal.Round(_cashAed + goldAedEquivalent, 2);
+            var totalOpenCost = _openPositions.Values.Sum(x => x.DebitAed);
+            return new LedgerStateContract(
+                cashAed,
+                goldGrams,
+                openExposurePercent,
+                deployable,
+                _openPositions.Count,
+                GoldAedEquivalent: goldAedEquivalent,
+                NetEquityAed: netEquityAed,
+                PurchasePowerAed: deployable,
+                DeployedAed: decimal.Round(totalOpenCost, 2),
+                OpenPositionsAed: decimal.Round(totalOpenCost, 2),
+                PendingReservedAed: 0m,
+                StartingInvestmentAed: 0m,
+                EquityMultiple: 0m,
+                BucketC1Aed: bucketC1,
+                BucketC2Aed: bucketC2);
+        }
+    }
 
     public bool CanScaleIn(decimal currentPrice, RegimeClassificationContract regime, decimal minSpacingPercent, decimal exposureCapPercent)
     {

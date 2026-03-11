@@ -25,6 +25,16 @@ class LedgerScreen extends ConsumerWidget {
             error: (e, _) => Text('Error loading ledger: $e'),
           ),
           const SizedBox(height: 16),
+          ledger.when(
+            data: (state) => _SetPhysicalLedgerCard(
+              currentCashAed: (state.cashAed as num).toDouble(),
+              currentGoldGrams: (state.goldGrams as num).toDouble(),
+              onRefresh: onRefresh,
+            ),
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 16),
           _CompoundingTrackerCard(),
           const SizedBox(height: 16),
           _LedgerActionsCard(onRefresh: onRefresh),
@@ -87,6 +97,164 @@ class _LedgerSummaryCard extends StatelessWidget {
           ],
         ),
       );
+}
+
+/// CR12 — Set physical ledger (cash AED + gold g) from UI; values shown exactly, no scaling.
+class _SetPhysicalLedgerCard extends ConsumerStatefulWidget {
+  const _SetPhysicalLedgerCard({
+    required this.currentCashAed,
+    required this.currentGoldGrams,
+    required this.onRefresh,
+  });
+
+  final double currentCashAed;
+  final double currentGoldGrams;
+  final VoidCallback onRefresh;
+
+  @override
+  ConsumerState<_SetPhysicalLedgerCard> createState() =>
+      _SetPhysicalLedgerCardState();
+}
+
+class _SetPhysicalLedgerCardState extends ConsumerState<_SetPhysicalLedgerCard> {
+  late final TextEditingController _cashController;
+  late final TextEditingController _goldController;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _cashController = TextEditingController(
+        text: widget.currentCashAed.toStringAsFixed(2));
+    _goldController = TextEditingController(
+        text: widget.currentGoldGrams.toStringAsFixed(2));
+  }
+
+  @override
+  void didUpdateWidget(covariant _SetPhysicalLedgerCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentCashAed != widget.currentCashAed) {
+      _cashController.text = widget.currentCashAed.toStringAsFixed(2);
+    }
+    if (oldWidget.currentGoldGrams != widget.currentGoldGrams) {
+      _goldController.text = widget.currentGoldGrams.toStringAsFixed(2);
+    }
+  }
+
+  @override
+  void dispose() {
+    _cashController.dispose();
+    _goldController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() {
+      _error = null;
+      _busy = true;
+    });
+    try {
+      final cash = double.tryParse(_cashController.text.replaceAll(',', '.'));
+      final gold = double.tryParse(_goldController.text.replaceAll(',', '.'));
+      if (cash == null || cash < 0 || gold == null || gold < 0) {
+        setState(() {
+          _error = 'Enter valid Cash (AED) and Gold (g)';
+          _busy = false;
+        });
+        return;
+      }
+      await ref.read(brainApiProvider).ledgerSetPhysical(
+            cashAed: cash,
+            goldGrams: gold,
+          );
+      _cashController.text = cash.toStringAsFixed(2);
+      _goldController.text = gold.toStringAsFixed(2);
+      widget.onRefresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Physical ledger updated (cash and gold).')));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _busy = false;
+        });
+      }
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Set physical ledger (CR12)',
+                style: tt.titleMedium),
+            const SizedBox(height: 6),
+            Text(
+              'Enter cash (AED) and gold (g). Values are stored and displayed exactly (no scaling).',
+              style: tt.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _cashController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Cash (AED)',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _goldController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Gold (g)',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ],
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _busy ? null : _submit,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save),
+              label: Text(_busy ? 'Updating…' : 'Update physical ledger'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _CompoundingTrackerCard extends ConsumerWidget {

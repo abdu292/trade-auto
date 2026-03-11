@@ -204,6 +204,26 @@ public static class MonitoringEndpoints
             .WithName("LedgerShopAdjustment")
             .WithDescription("Apply a shop price adjustment to ledger cash (positive = gain, negative = loss).");
 
+        // CR12 — Set physical ledger (cash AED + gold grams) from UI; no scaling; values shown exactly.
+        monitoring.MapPost(
+            "/ledger/set-physical",
+            IResult (LedgerSetPhysicalRequest request, ITradeLedgerService ledger) =>
+            {
+                try
+                {
+                    var cashAed = Math.Max(0m, request.CashAed);
+                    var goldGrams = Math.Max(0m, request.GoldGrams);
+                    ledger.SyncRuntimeState(cashAed, goldGrams, DateTimeOffset.UtcNow);
+                    return TypedResults.Ok(new { ledger = ledger.GetState(), message = "Physical ledger updated (cash and gold)." });
+                }
+                catch (Exception ex)
+                {
+                    return TypedResults.BadRequest(new { error = ex.Message });
+                }
+            })
+            .WithName("LedgerSetPhysical")
+            .WithDescription("Set physical ledger cash (AED) and gold (grams) from UI; values stored and displayed exactly (no scaling).");
+
         monitoring.MapGet(
             "/notifications",
             (INotificationFeedStore feedStore, int take = 50) => TypedResults.Ok(feedStore.GetLatest(take)))
@@ -1054,6 +1074,7 @@ public sealed record CreateHazardWindowRequest(
 
 public sealed record LedgerActionRequest(decimal AmountAed, string? Note);
 public sealed record LedgerAdjustmentRequest(decimal AdjustmentAed, string? Note);
+public sealed record LedgerSetPhysicalRequest(decimal CashAed, decimal GoldGrams);
 
 public sealed record UpdateRuntimeSettingsRequest(string? Symbol, bool? AutoTradeEnabled = null, decimal? MinTradeGrams = null);
 
