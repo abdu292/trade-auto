@@ -36,18 +36,22 @@ public static class RegimeRiskClassifier
         var session = (snapshot.Session ?? string.Empty).Trim().ToUpperInvariant();
         var phase = (snapshot.SessionPhase ?? string.Empty).Trim().ToUpperInvariant();
         var isNySession = session is "NY" or "NEW_YORK";
-        var isNyLateOrEnd = TradingSessionClock.IsNewYorkLateOrEnd(snapshot.Session ?? "", snapshot.SessionPhase ?? "");
         var t = snapshot.Mt5ServerTime.TimeOfDay;
+        var ksaTime = TradingSessionClock.ServerTimeToKsa(snapshot.Mt5ServerTime);
+        var ksaTimeOfDay = ksaTime.TimeOfDay;
 
-        // 1) HARD BLOCK only: Friday AND session == NEW_YORK AND phase in {LATE, END}. Client: "if Friday AND session == NEW_YORK AND phase == END: block"
-        if (isFriday && isNyLateOrEnd)
+        // 1) HARD BLOCK only: Friday AND exact late-NY time window (18:00-20:10 server = 18:50-20:60 KSA)
+        // Client requirement: "only late New York should be blocked, not generic NEW_YORK END"
+        // Use exact clock-based window instead of sessionPhase to avoid blocking too early
+        var isInLateNyWindow = IsWithin(t, FridayLateNyStartServer, FridayLateNyEndServer);
+        if (isFriday && isNySession && isInLateNyWindow)
         {
             return new RegimeClassificationContract(
                 Regime: "FRIDAY_NY_LATE_BLOCK",
                 RiskTag: "BLOCK",
                 IsBlocked: true,
                 IsWaterfall: false,
-                Reason: "Friday late New York (phase LATE/END) — hard block per client rule.");
+                Reason: $"Friday late New York (exact window: {FridayLateNyStartServer:hh\\:mm}-{FridayLateNyEndServer:hh\\:mm} server / {ksaTimeOfDay:hh\\:mm} KSA) — hard block per client rule.");
         }
 
         // 2) Friday London/NY overlap + expansion = CAUTION (tighter rails), not full abort unless another veto.

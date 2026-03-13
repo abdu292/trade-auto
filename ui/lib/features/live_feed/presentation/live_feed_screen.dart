@@ -113,6 +113,52 @@ String _describeEvent(RuntimeTimelineItem item) {
       if (cause.isNotEmpty) blockedDesc += ' · Cause: $cause';
       return blockedDesc;
 
+    case 'ZONE_WATCH_ACTIVE':
+      final pathState = s('pathState');
+      final reasonCode = s('reasonCode');
+      return 'Zone watch active — Price approaching valid zone${pathState.isNotEmpty ? ' · Path: $pathState' : ''}${reasonCode.isNotEmpty ? ' · $reasonCode' : ''}';
+    
+    case 'EARLY_FLUSH_CANDIDATE':
+      final reason = s('reason');
+      return 'Early flush candidate detected — Price flushes into defended deep shelf${reason.isNotEmpty ? ' · $reason' : ''}';
+    
+    case 'CANDIDATE':
+      final pathType = s('pathType');
+      final confidence = n('confidenceScore');
+      return 'Candidate state — Path: $pathType${confidence.isNotEmpty ? ' · Confidence: $confidence' : ''}';
+    
+    case 'ARMED':
+      final pathType = s('pathType');
+      return 'Armed — Candidate ready for analysis · Path: $pathType';
+    
+    case 'ANALYZE_STARTED':
+      final bottomType = s('bottomType');
+      final patternType = s('patternType');
+      final waterfallRisk = s('waterfallRisk');
+      final railPermission = s('railPermission');
+      return 'Analyze layer — Bottom: $bottomType, Pattern: $patternType, Risk: $waterfallRisk, Rails: $railPermission';
+    
+    case 'VALIDATE_STARTED':
+      final isValid = p['isValid'] == true;
+      final reason = s('reason');
+      return isValid ? 'Validate layer ✅ — Passed all checks' : 'Validate layer ❌ — $reason';
+    
+    case 'TABLE_READY':
+      final orderType = s('orderType');
+      final entry = n('entry');
+      final tp = n('tp');
+      return 'Table compiler ✅ — $orderType at $entry, TP: $tp';
+    
+    case 'NO_TRADE':
+      final reason = s('reason');
+      return 'Table compiler — No trade${reason.isNotEmpty ? ' · $reason' : ''}';
+    
+    case 'GOVERNANCE_STATE':
+      final verifyState = s('verifyState');
+      final newsState = s('newsState');
+      final riskRail = s('riskRailLockdown');
+      return 'Governance — Verify: $verifyState, News: $newsState, Risk: $riskRail';
+
     case 'RULE_ENGINE_SETUP_CANDIDATE':
       final regimeLabel = s('marketRegime');
       final abortReason = s('abortReason');
@@ -383,6 +429,15 @@ final _preferredKeys = <String, List<String>>{
   'TRADE_SCORE_CALCULATION': [
     'totalScore', 'decisionTier', 'structureScore', 'momentumScore', 'aiScore',
   ],
+  'ZONE_WATCH_ACTIVE': ['state', 'pathState', 'reasonCode'],
+  'EARLY_FLUSH_CANDIDATE': ['state', 'reason'],
+  'CANDIDATE': ['state', 'pathType', 'confidenceScore'],
+  'ARMED': ['state', 'pathType'],
+  'ANALYZE_STARTED': ['bottomType', 'patternType', 'sweepDetected', 'reclaimConfirmed', 'retestHeld', 'compressionState', 'expansionState', 'waterfallRisk', 'railPermission', 'nextLikelyPath'],
+  'VALIDATE_STARTED': ['isValid', 'reason', 'expiryValid', 'tpValid', 'sizeLegal', 'regimeCoherent', 'capacityLegal', 'safetyPass'],
+  'TABLE_READY': ['isValid', 'orderType', 'entry', 'tp', 'grams', 'expiryUtc', 'projectedMoveNetUSD', 'template'],
+  'NO_TRADE': ['isValid', 'reason'],
+  'GOVERNANCE_STATE': ['verifyState', 'newsState', 'riskRailLockdown', 'telegramState'],
 };
 
 String _formatPayloadValue(dynamic v) {
