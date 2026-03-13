@@ -37,8 +37,8 @@ motivation and Web as the startup project; new files appear under
 - **Start Here (Run + Test)**: [docs/RUN_AND_TEST_GUIDE.md](docs/RUN_AND_TEST_GUIDE.md)
 - **Live Demo Test (XAUUSD)**: [docs/LIVE_XAUUSD_DEMO_TEST.md](docs/LIVE_XAUUSD_DEMO_TEST.md)
 - **AI Provider Decision**: [docs/AI_PROVIDER_DECISION.md](docs/AI_PROVIDER_DECISION.md)
-- **Spec (authoritative)**: [spec/spec_v4_war_premium.md](spec/spec_v4_war_premium.md)
-- **Implemented SOP**: [spec/SOP_SPEC_V3_IMPLEMENTATION.md](spec/SOP_SPEC_V3_IMPLEMENTATION.md)
+- **Spec (authoritative)**: [spec/00_instructions](spec/00_instructions) and Physical Gold Final Pack (spec 01–14 under `spec/`). Integration Map: [spec/arch_diagram.jpeg](spec/arch_diagram.jpeg).
+- **Architecture (client view)**: [docs/ARCHITECTURE_E2E_CLIENT.md](docs/ARCHITECTURE_E2E_CLIENT.md)
 - **Strict Parity Status**: [docs/STRICT_SPEC_PARITY_STATUS.md](docs/STRICT_SPEC_PARITY_STATUS.md)
 - **Trader Mode Guide**: [docs/TRADER_MODE_GUIDE.md](docs/TRADER_MODE_GUIDE.md)
 - **Go-Live Checklist**: [docs/GO_LIVE_CHECKLIST.md](docs/GO_LIVE_CHECKLIST.md)
