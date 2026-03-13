@@ -49,6 +49,8 @@ public static class DependencyInjection
         services.AddSingleton<IHistoryFetchStore, InMemoryHistoryFetchStore>();
         services.AddSingleton<ITradeApprovalStore, InMemoryTradeApprovalStore>();
         services.AddSingleton<ITradingViewSignalStore, InMemoryTradingViewSignalStore>();
+        services.AddSingleton<ITelegramSignalStore, InMemoryTelegramSignalStore>();
+        services.AddSingleton<IHistoricalPatternStore, InMemoryHistoricalPatternStore>();
         services.AddSingleton<INotificationFeedStore, InMemoryNotificationFeedStore>();
         services.AddSingleton<ITradingRuntimeSettingsStore>(_ =>
             new InMemoryTradingRuntimeSettingsStore(configuration["Execution:Symbol"] ?? "XAUUSD.gram"));
