@@ -3,198 +3,284 @@ using Brain.Application.Common.Models;
 namespace Brain.Application.Common.Services;
 
 /// <summary>
-/// HISTORICAL_PATTERN_ENGINE per spec/00_instructions
-/// Position: before candidate promotion and before ANALYZE/TABLE decisioning
-/// Role: inject 10+ year memory into today's decision
+/// Engine 10: HISTORICAL_PATTERN_ENGINE
+/// Purpose: Injects 10+ year memory into today's decision.
+/// 
+/// Outputs:
+/// - historicalPatternTag
+/// - historicalContinuationScore
+/// - historicalReversalRisk
+/// - historicalExtensionBandUSD
+/// - historicalTrapProbability
+/// - historicalBestPath
+/// - sessionHistoricalModifier
+/// 
+/// Meaning:
+/// This engine decides whether today is more likely to:
+/// - rotate normally +8 to +12,
+/// - continue into +20 / +30 / +50,
+/// - or trap/exhaust.
 /// </summary>
 public static class HistoricalPatternEngine
 {
-    public record HistoricalPatternResult(
-        string HistoricalPatternTag,  // Pattern identifier
-        decimal HistoricalContinuationScore,  // 0.0 to 1.0
-        decimal HistoricalReversalRisk,  // 0.0 to 1.0
-        decimal HistoricalExtensionBandUsd,  // USD extension potential
-        decimal HistoricalTrapProbability,  // 0.0 to 1.0
-        string HistoricalBestPath,  // BUY_LIMIT, BUY_STOP, WAIT
-        decimal SessionHistoricalModifier  // -1.0 to +1.0
-    );
-
-    /// <summary>
-    /// Analyzes historical patterns and returns memory-based insights.
-    /// In production, this would query a 10+ year historical database.
-    /// </summary>
-    public static HistoricalPatternResult AnalyzeHistoricalPattern(
+    public static HistoricalPatternEngineResult Process(
         MarketSnapshotContract snapshot,
-        RegimeClassificationContract regime,
-        string session,
-        string sessionPhase,
-        DayOfWeek dayOfWeek,
-        IReadOnlyCollection<HistoricalPatternMatch>? historicalMatches = null)
+        IndicatorEngineResult indicators,
+        StructureEngineResult structure,
+        SessionEngineResult session)
     {
-        var historicalPatternTag = "UNKNOWN";
-        var historicalContinuationScore = 0.5m;
-        var historicalReversalRisk = 0.5m;
-        var historicalExtensionBandUsd = 12.0m;  // Default to standard rotation
-        var historicalTrapProbability = 0.3m;
-        var historicalBestPath = "WAIT";
-        var sessionHistoricalModifier = 0.0m;
-
-        // Analyze session-specific historical behavior
-        var sessionBehavior = AnalyzeSessionBehavior(session, sessionPhase, dayOfWeek);
-        sessionHistoricalModifier = sessionBehavior.Modifier;
-        historicalPatternTag = sessionBehavior.PatternTag;
-
-        // Analyze regime-specific patterns
-        var regimePattern = AnalyzeRegimePattern(regime, snapshot);
-        historicalContinuationScore = regimePattern.ContinuationScore;
-        historicalReversalRisk = regimePattern.ReversalRisk;
-        historicalExtensionBandUsd = regimePattern.ExtensionBandUsd;
-        historicalTrapProbability = regimePattern.TrapProbability;
-
-        // If historical matches provided, use them for more accurate scoring
-        if (historicalMatches != null && historicalMatches.Any())
-        {
-            var avgContinuation = historicalMatches.Average(m => m.ContinuationScore);
-            var avgReversal = historicalMatches.Average(m => m.ReversalRisk);
-            var avgExtension = historicalMatches.Average(m => m.ExtensionBandUsd);
-            var avgTrap = historicalMatches.Average(m => m.TrapProbability);
-
-            // Weighted blend: 70% historical matches, 30% session/regime defaults
-            historicalContinuationScore = (avgContinuation * 0.7m) + (historicalContinuationScore * 0.3m);
-            historicalReversalRisk = (avgReversal * 0.7m) + (historicalReversalRisk * 0.3m);
-            historicalExtensionBandUsd = (avgExtension * 0.7m) + (historicalExtensionBandUsd * 0.3m);
-            historicalTrapProbability = (avgTrap * 0.7m) + (historicalTrapProbability * 0.3m);
-
-            // Use most common pattern tag from matches
-            var mostCommonTag = historicalMatches
-                .GroupBy(m => m.PatternTag)
-                .OrderByDescending(g => g.Count())
-                .First().Key;
-            historicalPatternTag = mostCommonTag;
-        }
-
-        // Determine best path based on scores
-        if (historicalContinuationScore > 0.7m && historicalReversalRisk < 0.3m && historicalTrapProbability < 0.3m)
-        {
-            // Strong continuation, low reversal risk, low trap probability
-            if (snapshot.HasLiquiditySweep && snapshot.IsCompression)
-            {
-                historicalBestPath = "BUY_STOP";
-            }
-            else
-            {
-                historicalBestPath = "BUY_LIMIT";
-            }
-        }
-        else if (historicalContinuationScore > 0.6m && historicalReversalRisk < 0.4m)
-        {
-            historicalBestPath = "BUY_LIMIT";
-        }
-
-        // Clamp values
-        historicalContinuationScore = Math.Clamp(historicalContinuationScore, 0.0m, 1.0m);
-        historicalReversalRisk = Math.Clamp(historicalReversalRisk, 0.0m, 1.0m);
-        historicalTrapProbability = Math.Clamp(historicalTrapProbability, 0.0m, 1.0m);
-        sessionHistoricalModifier = Math.Clamp(sessionHistoricalModifier, -1.0m, 1.0m);
-
-        return new HistoricalPatternResult(
-            historicalPatternTag,
-            historicalContinuationScore,
-            historicalReversalRisk,
-            historicalExtensionBandUsd,
-            historicalTrapProbability,
-            historicalBestPath,
-            sessionHistoricalModifier
-        );
+        // Historical pattern tag (simplified - actual would query 10+ year database)
+        var patternTag = DetermineHistoricalPatternTag(snapshot, indicators, structure, session);
+        
+        // Historical continuation score (0-1)
+        var continuationScore = CalculateContinuationScore(indicators, structure, session);
+        
+        // Historical reversal risk (0-1)
+        var reversalRisk = CalculateReversalRisk(indicators, structure, session);
+        
+        // Historical extension band USD
+        var extensionBand = CalculateExtensionBand(indicators, structure, session, continuationScore);
+        
+        // Historical trap probability (0-1)
+        var trapProbability = CalculateTrapProbability(indicators, structure, session);
+        
+        // Historical best path
+        var bestPath = DetermineBestPath(continuationScore, reversalRisk, trapProbability, structure);
+        
+        // Session historical modifier
+        var sessionModifier = CalculateSessionHistoricalModifier(session, indicators, structure);
+        
+        return new HistoricalPatternEngineResult(
+            HistoricalPatternTag: patternTag,
+            HistoricalContinuationScore: continuationScore,
+            HistoricalReversalRisk: reversalRisk,
+            HistoricalExtensionBandUSD: extensionBand,
+            HistoricalTrapProbability: trapProbability,
+            HistoricalBestPath: bestPath,
+            SessionHistoricalModifier: sessionModifier);
     }
 
-    private static (string PatternTag, decimal Modifier) AnalyzeSessionBehavior(
-        string session,
-        string sessionPhase,
-        DayOfWeek dayOfWeek)
+    private static string DetermineHistoricalPatternTag(
+        MarketSnapshotContract snapshot,
+        IndicatorEngineResult indicators,
+        StructureEngineResult structure,
+        SessionEngineResult session)
     {
-        // Session-specific historical modifiers
-        return session switch
+        // Simplified pattern detection based on current structure and indicators
+        // Actual implementation would query historical database
+        
+        if (structure.HasReclaim && indicators.IsCompression)
         {
-            "JAPAN" => ("CLEAN_RANGE_RELOAD", 0.1m),  // Cleaner range/reload
-            "INDIA" => ("CONTINUATION_REBUILD", 0.2m),  // Continuation/retest friendly
-            "LONDON" => ("STRONGEST_EXPANSION", 0.3m),  // Strongest directional expansion
-            "NEW_YORK" => ("HIGHEST_EVENT_POTENTIAL", -0.1m),  // Highest event/spike potential but also trap risk
-            "TRANSITION" => ("REGIME_HANDOVER_RISK", -0.2m),  // Regime handover risk
-            _ => ("UNKNOWN", 0.0m)
-        };
+            return "RECLAIM_COMPRESSION";
+        }
+        
+        if (structure.HasSweep && !structure.HasReclaim)
+        {
+            return "SWEEP_NO_RECLAIM";
+        }
+        
+        if (indicators.AdrUsedRatio >= 0.85m)
+        {
+            return "ADR_EXHAUSTION";
+        }
+        
+        if (session.Session == "LONDON" && indicators.IsExpansion)
+        {
+            return "LONDON_EXPANSION";
+        }
+        
+        return "STANDARD_ROTATION";
     }
 
-    private static (decimal ContinuationScore, decimal ReversalRisk, decimal ExtensionBandUsd, decimal TrapProbability) AnalyzeRegimePattern(
-        RegimeClassificationContract regime,
-        MarketSnapshotContract snapshot)
+    private static decimal CalculateContinuationScore(
+        IndicatorEngineResult indicators,
+        StructureEngineResult structure,
+        SessionEngineResult session)
     {
-        var continuationScore = 0.5m;
-        var reversalRisk = 0.5m;
-        var extensionBandUsd = 12.0m;
-        var trapProbability = 0.3m;
+        var score = 0.5m; // Base score
+        
+        // Boost if structure supports continuation
+        if (structure.HasReclaim && structure.HasShelf)
+        {
+            score += 0.2m;
+        }
+        
+        // Boost if compression present (energy building)
+        if (indicators.IsCompression && indicators.CompressionCountM15 >= 3)
+        {
+            score += 0.15m;
+        }
+        
+        // Boost for London session (strongest directional moves)
+        if (session.Session == "LONDON")
+        {
+            score += 0.1m;
+        }
+        
+        // Reduce if ADR exhausted
+        if (indicators.AdrUsedRatio >= 0.85m)
+        {
+            score -= 0.3m;
+        }
+        
+        return Math.Clamp(score, 0m, 1m);
+    }
 
-        // Regime-specific patterns
-        if (regime.RegimeTag == "RANGE" || regime.RegimeTag == "RANGE_RELOAD")
+    private static decimal CalculateReversalRisk(
+        IndicatorEngineResult indicators,
+        StructureEngineResult structure,
+        SessionEngineResult session)
+    {
+        var risk = 0.3m; // Base risk
+        
+        // Increase risk if no structure
+        if (!structure.HasShelf && !structure.HasReclaim)
         {
-            continuationScore = 0.6m;
-            reversalRisk = 0.3m;
-            extensionBandUsd = 10.0m;  // Standard rotation
-            trapProbability = 0.2m;
+            risk += 0.2m;
         }
-        else if (regime.RegimeTag == "CONTINUATION_REBUILD")
+        
+        // Increase risk if overextended
+        if (indicators.AdrUsedRatio >= 0.75m)
         {
-            continuationScore = 0.7m;
-            reversalRisk = 0.3m;
-            extensionBandUsd = 15.0m;
-            trapProbability = 0.25m;
+            risk += 0.2m;
         }
-        else if (regime.RegimeTag == "EXPANSION")
+        
+        // Increase risk in transition windows
+        if (session.IsTransition)
         {
-            continuationScore = 0.75m;
-            reversalRisk = 0.4m;
-            extensionBandUsd = 20.0m;  // Potential for impulse harvest
-            trapProbability = 0.35m;
+            risk += 0.15m;
         }
-        else if (regime.RegimeTag == "EXHAUSTION")
-        {
-            continuationScore = 0.3m;
-            reversalRisk = 0.7m;
-            extensionBandUsd = 8.0m;  // Reduced extension
-            trapProbability = 0.6m;
-        }
-        else if (regime.RegimeTag == "LIQUIDATION" || regime.RegimeTag == "SHOCK")
-        {
-            continuationScore = 0.2m;
-            reversalRisk = 0.8m;
-            extensionBandUsd = 8.0m;
-            trapProbability = 0.7m;
-        }
+        
+        return Math.Clamp(risk, 0m, 1m);
+    }
 
-        // Adjust based on market state
-        if (snapshot.HasPanicDropSequence)
+    private static decimal CalculateExtensionBand(
+        IndicatorEngineResult indicators,
+        StructureEngineResult structure,
+        SessionEngineResult session,
+        decimal continuationScore)
+    {
+        // Extension band based on continuation score and session
+        if (continuationScore < 0.6m)
         {
-            reversalRisk = Math.Min(1.0m, reversalRisk + 0.2m);
-            trapProbability = Math.Min(1.0m, trapProbability + 0.2m);
+            return 0m; // No extension
         }
-
-        if (snapshot.IsCompression && snapshot.HasLiquiditySweep)
+        
+        // Base extension for strong continuation
+        var baseExtension = 12m; // Standard +8 to +12
+        
+        // Add extension for very strong continuation
+        if (continuationScore >= 0.8m && session.Session == "LONDON")
         {
-            continuationScore = Math.Min(1.0m, continuationScore + 0.1m);
-            trapProbability = Math.Max(0.0m, trapProbability - 0.1m);
+            baseExtension = 30m; // +20 to +30
         }
+        
+        if (continuationScore >= 0.9m && structure.HasReclaim && indicators.IsCompression)
+        {
+            baseExtension = 50m; // +30 to +50
+        }
+        
+        return baseExtension;
+    }
 
-        return (continuationScore, reversalRisk, extensionBandUsd, trapProbability);
+    private static decimal CalculateTrapProbability(
+        IndicatorEngineResult indicators,
+        StructureEngineResult structure,
+        SessionEngineResult session)
+    {
+        var probability = 0.2m; // Base probability
+        
+        // Increase if mid-air
+        if (structure.IsMidAir)
+        {
+            probability += 0.3m;
+        }
+        
+        // Increase if no structure
+        if (!structure.HasShelf && !structure.HasReclaim)
+        {
+            probability += 0.2m;
+        }
+        
+        // Increase if exhausted
+        if (indicators.AdrUsedRatio >= 0.85m)
+        {
+            probability += 0.25m;
+        }
+        
+        return Math.Clamp(probability, 0m, 1m);
+    }
+
+    private static string DetermineBestPath(
+        decimal continuationScore,
+        decimal reversalRisk,
+        decimal trapProbability,
+        StructureEngineResult structure)
+    {
+        if (trapProbability > 0.6m)
+        {
+            return "AVOID";
+        }
+        
+        if (continuationScore >= 0.7m && reversalRisk < 0.4m)
+        {
+            return structure.HasShelf ? "BUY_LIMIT" : "BUY_STOP";
+        }
+        
+        if (structure.HasShelf)
+        {
+            return "BUY_LIMIT";
+        }
+        
+        return "WAIT";
+    }
+
+    private static decimal CalculateSessionHistoricalModifier(
+        SessionEngineResult session,
+        IndicatorEngineResult indicators,
+        StructureEngineResult structure)
+    {
+        // Session-specific historical behavior modifier
+        var modifier = 1.0m;
+        
+        switch (session.Session)
+        {
+            case "JAPAN":
+                modifier = 0.8m; // Softer moves
+                break;
+            case "INDIA":
+                modifier = 0.9m; // Moderate
+                break;
+            case "LONDON":
+                modifier = 1.2m; // Strongest directional expansion
+                break;
+            case "NEW_YORK":
+                modifier = 0.7m; // High event/spike potential but also trap risk
+                break;
+        }
+        
+        // Adjust based on structure quality
+        if (structure.StructureQuality == "STRONG")
+        {
+            modifier *= 1.1m;
+        }
+        else if (structure.StructureQuality == "WEAK")
+        {
+            modifier *= 0.9m;
+        }
+        
+        return modifier;
     }
 }
 
-// Supporting contract for historical pattern matches
-public record HistoricalPatternMatch(
-    string PatternTag,
-    decimal ContinuationScore,
-    decimal ReversalRisk,
-    decimal ExtensionBandUsd,
-    decimal TrapProbability,
-    DateTimeOffset MatchDate,
-    string Session,
-    string RegimeTag);
+/// <summary>
+/// Historical Pattern Engine output contract
+/// </summary>
+public sealed record HistoricalPatternEngineResult(
+    string HistoricalPatternTag,
+    decimal HistoricalContinuationScore,
+    decimal HistoricalReversalRisk,
+    decimal HistoricalExtensionBandUSD,
+    decimal HistoricalTrapProbability,
+    string HistoricalBestPath,
+    decimal SessionHistoricalModifier);

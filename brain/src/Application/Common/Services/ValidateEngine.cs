@@ -3,206 +3,276 @@ using Brain.Application.Common.Models;
 namespace Brain.Application.Common.Services;
 
 /// <summary>
-/// VALIDATE Engine per spec/00_instructions
-/// Position: after TABLE
-/// Role: scrub realism and coherence
-/// May downgrade, resize, reject but never invent a trade
+/// Engine 14: VALIDATE ENGINE
+/// Purpose: Reality scrub and coherence checks.
+/// 
+/// Checks:
+/// - expiry realism
+/// - size realism
+/// - session-phase realism
+/// - aggressiveness vs confidence
+/// - impulse mode coherence
+/// - net-edge realism
+/// 
+/// VALIDATE may:
+/// - downgrade
+/// - resize
+/// - reject
+/// but never invent a trade.
 /// </summary>
 public static class ValidateEngine
 {
-    public record ValidateResult(
-        bool IsValid,
-        string? OrderType,
-        decimal? EntryPrice,
-        decimal? Tp1,
-        decimal? Tp2,
-        decimal? Tp3,
-        decimal? StopLoss,
-        decimal? Grams,
-        DateTimeOffset? Expiry,
-        string? ReasonCode,
-        string? RejectionReason,
-        string? DowngradeReason
-    );
-
-    /// <summary>
-    /// Validates TABLE output for realism and coherence.
-    /// </summary>
-    public static ValidateResult Validate(
-        TableCompiler.TableResult tableResult,
+    public static ValidateEngineResult Validate(
         MarketSnapshotContract snapshot,
-        NewsEngineResult newsResult,
-        AnalyzeResult analyzeResult,
-        HistoricalPatternResult historicalResult)
+        TableCompilerResult table,
+        StructureEngineResult structure,
+        VolatilityRegimeEngineResult volatility,
+        NewsEngineResult news,
+        SessionEngineResult session)
     {
-        if (!tableResult.IsValid)
+        if (!table.IsValid)
         {
-            return new ValidateResult(
-                false,
-                null, null, null, null, null, null, null, null, null,
-                "TABLE_INVALID",
-                tableResult.RejectionReason,
-                null
-            );
+            return new ValidateEngineResult(
+                IsValid: false,
+                Reason: table.Reason,
+                ValidatedOrder: null,
+                Downgrades: Array.Empty<string>(),
+                ResizeApplied: false);
         }
-
+        
+        var downgrades = new List<string>();
+        var validatedOrder = table;
+        var resizeApplied = false;
+        
         // Check expiry realism
-        if (tableResult.Expiry.HasValue)
+        if (table.ExpiryUtc.HasValue)
         {
-            var expiryMinutes = (tableResult.Expiry.Value - snapshot.Timestamp).TotalMinutes;
-            
-            // Expiry too short
-            if (expiryMinutes < 30)
+            var expiryCheck = CheckExpiryRealism(table.ExpiryUtc.Value, session, news);
+            if (!expiryCheck.IsValid)
             {
-                return new ValidateResult(
-                    false,
-                    null, null, null, null, null, null, null, null, null,
-                    "EXPIRY_TOO_SHORT",
-                    $"Expiry {expiryMinutes:F0} minutes is too short",
-                    null
-                );
+                return new ValidateEngineResult(
+                    IsValid: false,
+                    Reason: expiryCheck.Reason,
+                    ValidatedOrder: null,
+                    Downgrades: Array.Empty<string>(),
+                    ResizeApplied: false);
             }
-
-            // Expiry too long for session phase
-            if (snapshot.SessionPhase == "END" && expiryMinutes > 90)
+            
+            if (expiryCheck.Downgrade != null)
             {
-                return new ValidateResult(
-                    false,
-                    tableResult.OrderType,
-                    tableResult.EntryPrice,
-                    tableResult.Tp1,
-                    tableResult.Tp2,
-                    tableResult.Tp3,
-                    tableResult.StopLoss,
-                    tableResult.Grams,
-                    snapshot.Timestamp.AddMinutes(60),  // Downgrade expiry
-                    "EXPIRY_DOWNGRADED",
-                    null,
-                    "Expiry too long for END phase, reduced to 60 minutes"
-                );
+                downgrades.Add(expiryCheck.Downgrade);
             }
         }
-
+        
         // Check size realism
-        if (tableResult.Grams.HasValue)
+        if (table.Grams.HasValue)
         {
-            var grams = tableResult.Grams.Value;
-            
-            // Size too large for current exposure
-            if (grams > 500m)  // Arbitrary large size threshold
+            var sizeCheck = CheckSizeRealism(table.Grams.Value, snapshot, volatility);
+            if (!sizeCheck.IsValid)
             {
-                return new ValidateResult(
-                    false,
-                    tableResult.OrderType,
-                    tableResult.EntryPrice,
-                    tableResult.Tp1,
-                    tableResult.Tp2,
-                    tableResult.Tp3,
-                    tableResult.StopLoss,
-                    300m,  // Downgrade size
-                    tableResult.Expiry,
-                    "SIZE_DOWNGRADED",
-                    null,
-                    "Size too large, reduced to 300g"
-                );
+                return new ValidateEngineResult(
+                    IsValid: false,
+                    Reason: sizeCheck.Reason,
+                    ValidatedOrder: null,
+                    Downgrades: downgrades,
+                    ResizeApplied: false);
+            }
+            
+            if (sizeCheck.ResizeRequired)
+            {
+                resizeApplied = true;
+                validatedOrder = validatedOrder with { Grams = sizeCheck.ResizedGrams };
+                downgrades.Add($"Size resized from {table.Grams.Value:0.##}g to {sizeCheck.ResizedGrams:0.##}g");
             }
         }
-
+        
         // Check session-phase realism
-        if (snapshot.SessionPhase == "START")
+        var phaseCheck = CheckSessionPhaseRealism(table, session, news);
+        if (!phaseCheck.IsValid)
         {
-            // START phase: structure forming, be cautious
-            if (tableResult.Template == "IMPULSE_HARVEST_CAPTURE")
-            {
-                return new ValidateResult(
-                    false,
-                    tableResult.OrderType,
-                    tableResult.EntryPrice,
-                    tableResult.Tp1,
-                    null,  // Remove TP3
-                    null,
-                    tableResult.StopLoss,
-                    tableResult.Grams,
-                    tableResult.Expiry,
-                    "AGGRESSIVENESS_DOWNGRADED",
-                    null,
-                    "START phase: removed extended TP targets"
-                );
-            }
+            downgrades.Add(phaseCheck.Reason);
         }
-
-        // Check aggressiveness vs confidence coherence
-        if (tableResult.Template == "IMPULSE_HARVEST_CAPTURE")
+        
+        // Check aggressiveness vs confidence
+        var aggressivenessCheck = CheckAggressivenessCoherence(table, structure, volatility);
+        if (!aggressivenessCheck.IsValid)
         {
-            if (analyzeResult.ConfidenceScore < 0.75m || historicalResult.HistoricalContinuationScore < 0.7m)
-            {
-                // Downgrade to standard rotation
-                return new ValidateResult(
-                    true,
-                    tableResult.OrderType,
-                    tableResult.EntryPrice,
-                    tableResult.Tp1,
-                    tableResult.Tp2,
-                    null,  // Remove TP3
-                    tableResult.StopLoss,
-                    tableResult.Grams,
-                    tableResult.Expiry,
-                    "IMPULSE_DOWNGRADED",
-                    null,
-                    "Confidence/continuation score insufficient for impulse harvest, downgraded to standard rotation"
-                );
-            }
+            downgrades.Add(aggressivenessCheck.Reason);
         }
-
-        // Check net-edge realism
-        if (tableResult.EntryPrice.HasValue && tableResult.Tp1.HasValue)
-        {
-            var netMove = Math.Abs(tableResult.Tp1.Value - tableResult.EntryPrice.Value) - snapshot.Spread;
-            
-            // After spread, move should still be meaningful
-            if (netMove < 5.0m)
-            {
-                return new ValidateResult(
-                    false,
-                    null, null, null, null, null, null, null, null, null,
-                    "NET_EDGE_TOO_SMALL",
-                    $"Net move after spread {netMove:F2} USD is too small",
-                    null
-                );
-            }
-        }
-
+        
         // Check impulse mode coherence
-        if (tableResult.Template == "IMPULSE_HARVEST_CAPTURE")
+        if (table.Template == "FLUSH_LIMIT_CAPTURE" || table.ProjectedMoveNetUSD > 20m)
         {
-            if (newsResult.WaterfallRisk == "HIGH" || 
-                analyzeResult.WaterfallRisk == "HIGH" ||
-                historicalResult.HistoricalTrapProbability > 0.5m)
+            var impulseCheck = CheckImpulseModeCoherence(table, volatility, news);
+            if (!impulseCheck.IsValid)
             {
-                return new ValidateResult(
-                    false,
-                    null, null, null, null, null, null, null, null, null,
-                    "IMPULSE_INCOHERENT",
-                    "Impulse harvest not coherent with high waterfall risk or trap probability",
-                    null
-                );
+                downgrades.Add(impulseCheck.Reason);
             }
         }
+        
+        // Check net-edge realism
+        var netEdgeCheck = CheckNetEdgeRealism(table, snapshot);
+        if (!netEdgeCheck.IsValid)
+        {
+            return new ValidateEngineResult(
+                IsValid: false,
+                Reason: netEdgeCheck.Reason,
+                ValidatedOrder: null,
+                Downgrades: downgrades,
+                ResizeApplied: resizeApplied);
+        }
+        
+        return new ValidateEngineResult(
+            IsValid: true,
+            Reason: downgrades.Count > 0 
+                ? $"Validated with downgrades: {string.Join(", ", downgrades)}"
+                : "Validated",
+            ValidatedOrder: validatedOrder,
+            Downgrades: downgrades,
+            ResizeApplied: resizeApplied);
+    }
 
-        // All checks passed
-        return new ValidateResult(
-            true,
-            tableResult.OrderType,
-            tableResult.EntryPrice,
-            tableResult.Tp1,
-            tableResult.Tp2,
-            tableResult.Tp3,
-            tableResult.StopLoss,
-            tableResult.Grams,
-            tableResult.Expiry,
-            "VALIDATED",
-            null,
-            null
-        );
+    private static (bool IsValid, string? Reason, string? Downgrade) CheckExpiryRealism(
+        DateTimeOffset expiry,
+        SessionEngineResult session,
+        NewsEngineResult news)
+    {
+        var minutesToExpiry = (expiry - DateTimeOffset.UtcNow).TotalMinutes;
+        
+        // Check if expiry is too short
+        if (minutesToExpiry < 30)
+        {
+            return (false, "Expiry too short (< 30 minutes)", null);
+        }
+        
+        // Check if expiry extends into next hazard window
+        if (news.NextTier1UltraWithin90m && minutesToExpiry > 90)
+        {
+            return (false, "Expiry extends into next hazard window", null);
+        }
+        
+        // Check session-appropriate expiry
+        var sessionExpiryRanges = session.Session switch
+        {
+            "JAPAN" => (90, 120),
+            "INDIA" => (90, 150),
+            "LONDON" => (60, 90),
+            "NEW_YORK" => (45, 60),
+            _ => (60, 90)
+        };
+        
+        if (minutesToExpiry < sessionExpiryRanges.Item1 || minutesToExpiry > sessionExpiryRanges.Item2)
+        {
+            return (true, null, $"Expiry {minutesToExpiry:0} minutes outside session range {sessionExpiryRanges.Item1}-{sessionExpiryRanges.Item2}");
+        }
+        
+        return (true, null, null);
+    }
+
+    private static (bool IsValid, string? Reason, bool ResizeRequired, decimal? ResizedGrams) CheckSizeRealism(
+        decimal grams,
+        MarketSnapshotContract snapshot,
+        VolatilityRegimeEngineResult volatility)
+    {
+        // Minimum grams check
+        if (grams < 100m)
+        {
+            return (false, $"Grams {grams:0.##} below 100g minimum", false, null);
+        }
+        
+        // Check if size is too large for volatility
+        if (volatility.VolatilityClass == "EXTREME" && grams > 200m)
+        {
+            return (true, null, true, 200m); // Resize to 200g max
+        }
+        
+        return (true, null, false, null);
+    }
+
+    private static (bool IsValid, string Reason) CheckSessionPhaseRealism(
+        TableCompilerResult table,
+        SessionEngineResult session,
+        NewsEngineResult news)
+    {
+        // Check if order is appropriate for session phase
+        if (session.Phase == "END" && table.Template == "FLUSH_LIMIT_CAPTURE")
+        {
+            return (true, "FLUSH_LIMIT_CAPTURE in session END phase - caution");
+        }
+        
+        if (session.IsTransition && table.OrderType == "BUY_STOP")
+        {
+            return (true, "BUY_STOP in transition window - caution");
+        }
+        
+        return (true, "Session phase appropriate");
+    }
+
+    private static (bool IsValid, string Reason) CheckAggressivenessCoherence(
+        TableCompilerResult table,
+        StructureEngineResult structure,
+        VolatilityRegimeEngineResult volatility)
+    {
+        // Check if order aggressiveness matches structure quality
+        if (table.OrderType == "BUY_STOP" && structure.StructureQuality == "WEAK")
+        {
+            return (true, "BUY_STOP with weak structure - caution");
+        }
+        
+        if (table.ProjectedMoveNetUSD > 20m && volatility.VolatilityClass == "NORMAL")
+        {
+            return (true, "Large TP target in normal volatility - verify impulse harvest mode");
+        }
+        
+        return (true, "Aggressiveness coherent");
+    }
+
+    private static (bool IsValid, string Reason) CheckImpulseModeCoherence(
+        TableCompilerResult table,
+        VolatilityRegimeEngineResult volatility,
+        NewsEngineResult news)
+    {
+        // Impulse harvest mode requires expansion volatility
+        if (table.ProjectedMoveNetUSD > 20m && volatility.VolatilityState != "EXPANSION")
+        {
+            return (true, "Impulse harvest target but volatility not expansion - verify");
+        }
+        
+        // Impulse harvest requires news not blocking
+        if (table.ProjectedMoveNetUSD > 20m && news.OverallMODE == "BLOCK")
+        {
+            return (false, "Impulse harvest blocked by news mode");
+        }
+        
+        return (true, "Impulse mode coherent");
+    }
+
+    private static (bool IsValid, string? Reason) CheckNetEdgeRealism(
+        TableCompilerResult table,
+        MarketSnapshotContract snapshot)
+    {
+        // Net edge must be >= 8 USD
+        if (table.ProjectedMoveNetUSD < 8m)
+        {
+            return (false, $"Projected move net {table.ProjectedMoveNetUSD:0.00} USD < 8 USD minimum");
+        }
+        
+        // Check if net edge is realistic (not too large)
+        if (table.ProjectedMoveNetUSD > 100m)
+        {
+            return (false, $"Projected move net {table.ProjectedMoveNetUSD:0.00} USD unrealistically large");
+        }
+        
+        return (true, null);
     }
 }
+
+/// <summary>
+/// Validate Engine output contract
+/// </summary>
+public sealed record ValidateEngineResult(
+    bool IsValid,
+    string Reason,
+    TableCompilerResult? ValidatedOrder,
+    IReadOnlyCollection<string> Downgrades,
+    bool ResizeApplied);

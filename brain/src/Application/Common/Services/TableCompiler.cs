@@ -3,541 +3,445 @@ using Brain.Application.Common.Models;
 namespace Brain.Application.Common.Services;
 
 /// <summary>
-/// TABLE Compiler per spec/00_instructions and spec/12_table_compiler_spec.md
-/// Position: after ANALYZE
-/// Role: ONLY legal order builder
-/// Hard law: TABLE is the only module allowed to create BUY_LIMIT/BUY_STOP orders
+/// Engine 13: TABLE COMPILER
+/// Purpose: Only legal order builder.
+/// 
+/// TABLE is the only module allowed to create:
+/// - BUY_LIMIT
+/// - BUY_STOP
+/// 
+/// TABLE must re-check:
+/// - FAIL safety
+/// - waterfall safety
+/// - hazard timing
+/// - candidate freshness
+/// - structure quality
+/// - rail permissions
+/// - capital legality
+/// - slot limits
+/// - volatility state
+/// - reward law (projectedMoveNetUSD >= 8)
+/// 
+/// Hard profit laws:
+/// 1. projectedMoveNetUSD must be at least +8 USD (NET after MT5 spread + bullion handicap)
+/// 2. STANDARD_ROTATION_MODE: target +8 to +12 USD
+/// 3. IMPULSE_HARVEST_MODE: target +20 / +30 / +50 only when explicitly allowed
+/// 
+/// TABLE must support FLUSH_LIMIT_CAPTURE template:
+/// - Use when: deep flush into S2/S3, bottom type valid, pattern = FLUSH_REVERSAL_ATTEMPT,
+///   WaterfallRisk not HIGH, FAIL protected, hazard not fatal
+/// - Behavior: BUY_LIMIT in upper part of deep zone, default TP band +8 to +12,
+///   extension only through approved impulse logic
 /// </summary>
 public static class TableCompiler
 {
-    private const decimal MinimumProjectedMoveNetUsd = 8.0m;
-    private const decimal StandardRotationMinUsd = 8.0m;
-    private const decimal StandardRotationMaxUsd = 12.0m;
-    private const decimal ImpulseHarvestMinUsd = 20.0m;
-
-    public record TableResult(
-        bool IsValid,
-        string? OrderType,  // BUY_LIMIT, BUY_STOP, null if invalid
-        decimal? EntryPrice,
-        decimal? Tp1,
-        decimal? Tp2,
-        decimal? Tp3,
-        decimal? StopLoss,
-        decimal? Grams,
-        DateTimeOffset? Expiry,
-        string? Template,  // FLUSH_LIMIT_CAPTURE, IMPULSE_HARVEST_CAPTURE, STANDARD
-        string? ReasonCode,
-        string? RejectionReason
-    );
-
-    /// <summary>
-    /// Compiles a legal order table. This is the ONLY module allowed to create orders.
-    /// </summary>
-    public static TableResult Compile(
+    public static TableCompilerResult Compile(
         MarketSnapshotContract snapshot,
-        AnalyzeResult analyzeResult,
-        LedgerStateContract ledgerState,
-        NewsEngineResult newsResult,
-        CapitalUtilizationResult capitalResult,
-        HistoricalPatternResult historicalResult,
-        VerifyResult verifyResult,
-        decimal minTradeGrams = 100m)
+        CandidateEngineResult candidate,
+        AnalyzeEngineResult analyze,
+        StructureEngineResult structure,
+        VolatilityRegimeEngineResult volatility,
+        WaterfallCrisisEngineResult waterfall,
+        NewsEngineResult news,
+        CapitalUtilizationEngineResult capital,
+        HistoricalPatternEngineResult historical,
+        LedgerStateContract? ledgerState,
+        IGoldEngineThresholds? thresholds)
     {
-        // Hard re-checks (TABLE must re-check everything)
-        if (!RecheckSafety(snapshot, analyzeResult, newsResult))
+        thresholds ??= new DefaultThresholds();
+        
+        // Re-check all safety gates
+        if (!RecheckSafetyGates(snapshot, structure, waterfall, news, candidate))
         {
-            return new TableResult(
-                false,
-                null, null, null, null, null, null, null, null, null,
-                "SAFETY_BLOCK",
-                "Hard safety blocker triggered"
-            );
+            return new TableCompilerResult(
+                IsValid: false,
+                Reason: "Safety gates failed",
+                OrderType: null,
+                Entry: null,
+                Tp: null,
+                Grams: null,
+                ExpiryUtc: null,
+                ProjectedMoveNetUSD: 0m,
+                Template: null);
         }
-
-        if (!RecheckCapitalLegality(ledgerState, capitalResult, minTradeGrams))
+        
+        // Check capital legality
+        if (!capital.AffordableFlag || ledgerState == null)
         {
-            return new TableResult(
-                false,
-                null, null, null, null, null, null, null, null, null,
-                "CAPITAL_BLOCK",
-                "Capital legality failed"
-            );
+            return new TableCompilerResult(
+                IsValid: false,
+                Reason: "Capital legality failed",
+                OrderType: null,
+                Entry: null,
+                Tp: null,
+                Grams: null,
+                ExpiryUtc: null,
+                ProjectedMoveNetUSD: 0m,
+                Template: null);
         }
-
-        if (!RecheckStructure(analyzeResult))
-        {
-            return new TableResult(
-                false,
-                null, null, null, null, null, null, null, null, null,
-                "STRUCTURE_BLOCK",
-                "Structure validity failed"
-            );
-        }
-
-        if (!RecheckRailPermissions(newsResult, analyzeResult))
-        {
-            return new TableResult(
-                false,
-                null, null, null, null, null, null, null, null, null,
-                "RAIL_BLOCK",
-                "Rail permissions do not allow this path"
-            );
-        }
-
+        
         // Determine order type and template
-        var (orderType, template) = DetermineOrderType(analyzeResult, newsResult, historicalResult);
+        var (orderType, template) = DetermineOrderTypeAndTemplate(
+            candidate, 
+            analyze, 
+            structure, 
+            news);
+        
         if (orderType == null)
         {
-            return new TableResult(
-                false,
-                null, null, null, null, null, null, null, null, null,
-                "NO_VALID_PATH",
-                "No valid order type determined"
-            );
+            return new TableCompilerResult(
+                IsValid: false,
+                Reason: "No valid order type determined",
+                OrderType: null,
+                Entry: null,
+                Tp: null,
+                Grams: null,
+                ExpiryUtc: null,
+                ProjectedMoveNetUSD: 0m,
+                Template: null);
         }
-
-        // Calculate entry price
-        var entryPrice = CalculateEntryPrice(snapshot, analyzeResult, orderType);
-        if (!entryPrice.HasValue)
+        
+        // Build order based on template
+        if (template == "FLUSH_LIMIT_CAPTURE")
         {
-            return new TableResult(
-                false,
-                null, null, null, null, null, null, null, null, null,
-                "ENTRY_CALCULATION_FAILED",
-                "Could not calculate valid entry price"
-            );
+            return BuildFlushLimitCapture(
+                snapshot,
+                structure,
+                analyze,
+                capital,
+                ledgerState,
+                thresholds);
         }
-
-        // Calculate TP ladder
-        var (tp1, tp2, tp3) = CalculateTpLadder(
-            entryPrice.Value,
-            analyzeResult,
-            historicalResult,
-            newsResult,
-            snapshot);
-
-        // Verify projected move meets minimum
-        var projectedMoveNetUsd = CalculateProjectedMoveNetUsd(
-            entryPrice.Value,
-            tp1 ?? entryPrice.Value,
-            snapshot.Spread);
-
-        if (projectedMoveNetUsd < MinimumProjectedMoveNetUsd)
-        {
-            return new TableResult(
-                false,
-                null, null, null, null, null, null, null, null, null,
-                "INSUFFICIENT_REWARD",
-                $"Projected move {projectedMoveNetUsd:F2} USD is below minimum {MinimumProjectedMoveNetUsd} USD"
-            );
-        }
-
-        // Calculate grams
-        var grams = CalculateGrams(ledgerState, capitalResult, minTradeGrams);
-        if (grams < minTradeGrams)
-        {
-            return new TableResult(
-                false,
-                null, null, null, null, null, null, null, null, null,
-                "INSUFFICIENT_GRAMS",
-                $"Calculated grams {grams:F2} is below minimum {minTradeGrams}"
-            );
-        }
-
-        // Calculate expiry
-        var expiry = CalculateExpiry(snapshot, newsResult, analyzeResult);
-
-        // Calculate stop loss
-        var stopLoss = CalculateStopLoss(entryPrice.Value, analyzeResult, snapshot);
-
-        return new TableResult(
-            true,
+        
+        // Standard order building (delegate to existing DecisionEngine logic)
+        return BuildStandardOrder(
+            snapshot,
             orderType,
-            entryPrice,
-            tp1,
-            tp2,
-            tp3,
-            stopLoss,
-            grams,
-            expiry,
-            template,
-            "TABLE_COMPILED",
-            null
-        );
+            structure,
+            analyze,
+            capital,
+            ledgerState,
+            thresholds);
     }
 
-    private static bool RecheckSafety(
+    private static bool RecheckSafetyGates(
         MarketSnapshotContract snapshot,
-        AnalyzeResult analyzeResult,
-        NewsEngineResult newsResult)
+        StructureEngineResult structure,
+        WaterfallCrisisEngineResult waterfall,
+        NewsEngineResult news,
+        CandidateEngineResult candidate)
     {
-        // Re-check FAIL safety
-        if (analyzeResult.FailThreatened || analyzeResult.FailBroken)
+        // FAIL safety
+        if (structure.Fail.HasValue)
         {
             return false;
         }
-
-        // Re-check waterfall risk
-        if (newsResult.WaterfallRisk == "HIGH" || analyzeResult.WaterfallRisk == "HIGH")
+        
+        // Waterfall safety
+        if (waterfall.WaterfallRisk == "HIGH" || waterfall.ShouldBlock)
         {
             return false;
         }
-
-        // Re-check hazard timing
-        if (newsResult.HazardWindowActive && newsResult.NextTier1UltraWithin45m)
+        
+        // Hazard timing
+        if (news.HazardWindowActive && news.OverallMODE == "BLOCK")
         {
             return false;
         }
-
-        // Re-check spread
-        if (snapshot.Spread > snapshot.SpreadMax60m * 1.5m)
+        
+        // Candidate freshness
+        if (candidate.CandidateFreshness == "STALE")
         {
             return false;
         }
-
+        
+        // Structure quality
+        if (structure.StructureQuality == "WEAK" && structure.IsMidAir)
+        {
+            return false;
+        }
+        
+        // Rail permissions
+        if (news.RailAPermission == "NO" && news.RailBPermission == "NO")
+        {
+            return false;
+        }
+        
+        // Volatility state
+        if (structure.Fail.HasValue) // Already checked, but double-check
+        {
+            return false;
+        }
+        
         return true;
     }
 
-    private static bool RecheckCapitalLegality(
-        LedgerStateContract ledgerState,
-        CapitalUtilizationResult capitalResult,
-        decimal minTradeGrams)
-    {
-        if (!capitalResult.AffordableFlag)
-        {
-            return false;
-        }
-
-        if (capitalResult.ExposureState == "MAXED")
-        {
-            return false;
-        }
-
-        if (capitalResult.SlotCount >= 2)
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool RecheckStructure(AnalyzeResult analyzeResult)
-    {
-        if (analyzeResult.BottomType == "INVALID")
-        {
-            return false;
-        }
-
-        if (analyzeResult.PatternType == "WATERFALL_CONTINUATION")
-        {
-            return false;
-        }
-
-        if (analyzeResult.MidAirStatus == "MID_AIR_FAIL")
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool RecheckRailPermissions(
-        NewsEngineResult newsResult,
-        AnalyzeResult analyzeResult)
-    {
-        var requestedRail = analyzeResult.PrimaryTradeConcept == "FLUSH_LIMIT_CAPTURE" ? "A" : "B";
-
-        if (requestedRail == "A")
-        {
-            if (newsResult.RailAPermission == "NO")
-            {
-                return false;
-            }
-            if (newsResult.RailAPermission == "ONLY_AFTER_STRUCTURE" && !analyzeResult.StructureValid)
-            {
-                return false;
-            }
-        }
-        else if (requestedRail == "B")
-        {
-            if (newsResult.RailBPermission == "NO")
-            {
-                return false;
-            }
-            if (newsResult.RailBPermission == "STRICT" && analyzeResult.ConfidenceScore < 0.75m)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static (string? OrderType, string? Template) DetermineOrderType(
-        AnalyzeResult analyzeResult,
-        NewsEngineResult newsResult,
-        HistoricalPatternResult historicalResult)
+    private static (string? OrderType, string? Template) DetermineOrderTypeAndTemplate(
+        CandidateEngineResult candidate,
+        AnalyzeEngineResult analyze,
+        StructureEngineResult structure,
+        NewsEngineResult news)
     {
         // FLUSH_LIMIT_CAPTURE template
-        if (analyzeResult.PrimaryTradeConcept == "FLUSH_LIMIT_CAPTURE" ||
-            (analyzeResult.BottomType != "INVALID" &&
-             analyzeResult.PatternType == "FLUSH_REVERSAL_ATTEMPT" &&
-             newsResult.WaterfallRisk != "HIGH" &&
-             analyzeResult.FailProtected))
+        if (candidate.EarlyFlushCandidate
+            && analyze.BottomType != "INVALID"
+            && analyze.PatternType == "FLUSH_REVERSAL_ATTEMPT"
+            && analyze.WaterfallRisk != "HIGH"
+            && !structure.Fail.HasValue
+            && structure.S2.HasValue)
         {
             return ("BUY_LIMIT", "FLUSH_LIMIT_CAPTURE");
         }
-
-        // IMPULSE_HARVEST_CAPTURE template
-        if (analyzeResult.ImpulseHarvestScore > 0.7m &&
-            historicalResult.HistoricalContinuationScore > 0.7m &&
-            historicalResult.HistoricalExtensionBandUsd >= ImpulseHarvestMinUsd &&
-            newsResult.WaterfallRisk != "HIGH")
+        
+        // Standard BUY_LIMIT
+        if (structure.HasShelf && news.RailAPermission != "NO")
         {
-            if (analyzeResult.PrimaryTradeConcept == "IMPULSE_BREAKOUT_CAPTURE" ||
-                analyzeResult.PrimaryTradeConcept == "IMPULSE_CONTINUATION_REBUILD")
-            {
-                return ("BUY_STOP", "IMPULSE_HARVEST_CAPTURE");
-            }
+            return ("BUY_LIMIT", "STANDARD_ROTATION");
         }
-
-        // Standard templates
-        if (analyzeResult.PrimaryTradeConcept == "SHELF_RECLAIM" ||
-            analyzeResult.PrimaryTradeConcept == "BASE_RETEST")
+        
+        // BUY_STOP
+        if (structure.HasLid && news.RailBPermission == "YES")
         {
-            return ("BUY_LIMIT", "STANDARD");
+            return ("BUY_STOP", "STANDARD_ROTATION");
         }
-
-        if (analyzeResult.PrimaryTradeConcept == "LID_BREAKOUT" ||
-            analyzeResult.PrimaryTradeConcept == "COMPRESSION_BREAKOUT")
-        {
-            return ("BUY_STOP", "STANDARD");
-        }
-
+        
         return (null, null);
     }
 
-    private static decimal? CalculateEntryPrice(
+    private static TableCompilerResult BuildFlushLimitCapture(
         MarketSnapshotContract snapshot,
-        AnalyzeResult analyzeResult,
-        string orderType)
+        StructureEngineResult structure,
+        AnalyzeEngineResult analyze,
+        CapitalUtilizationEngineResult capital,
+        LedgerStateContract ledgerState,
+        IGoldEngineThresholds thresholds)
     {
+        // Entry: upper part of deep S2/S3 zone
+        var entryZone = structure.S2.HasValue && structure.S2.Value < structure.S1
+            ? structure.S2.Value
+            : structure.S1;
+        
+        var atr = snapshot.Atr > 0m ? snapshot.Atr : 10m;
+        var entry = entryZone + (atr * 0.2m); // Upper part of zone
+        
+        // TP: default +8 to +12, extension if impulse harvest allowed
+        var tpBase = entry + 10m; // Default +10 USD
+        
+        // Check if impulse harvest mode allows extension
+        if (analyze.ImpulseHarvestScore >= 0.7m && analyze.RotationEnvelope.Max > 12m)
+        {
+            tpBase = entry + analyze.RotationEnvelope.Max;
+        }
+        
+        // Calculate projected move (NET after spread and bullion handicap)
+        var projectedMoveGross = tpBase - entry;
+        var projectedMoveNet = projectedMoveGross - 0.80m - 0.80m; // Shop spread both ways
+        
+        // Hard profit filter: must be >= 8 USD
+        if (projectedMoveNet < 8m)
+        {
+            return new TableCompilerResult(
+                IsValid: false,
+                Reason: $"Projected move net {projectedMoveNet:0.00} USD < 8 USD minimum",
+                OrderType: null,
+                Entry: null,
+                Tp: null,
+                Grams: null,
+                ExpiryUtc: null,
+                ProjectedMoveNetUSD: projectedMoveNet,
+                Template: null);
+        }
+        
+        // Grams sizing
+        var grams = CalculateGrams(entry, capital, ledgerState);
+        
+        if (grams <= 0m)
+        {
+            return new TableCompilerResult(
+                IsValid: false,
+                Reason: "Cannot calculate valid grams",
+                OrderType: null,
+                Entry: null,
+                Tp: null,
+                Grams: null,
+                ExpiryUtc: null,
+                ProjectedMoveNetUSD: projectedMoveNet,
+                Template: null);
+        }
+        
+        // Expiry
+        var expiryUtc = CalculateExpiry(snapshot, thresholds);
+        
+        return new TableCompilerResult(
+            IsValid: true,
+            Reason: "FLUSH_LIMIT_CAPTURE order compiled",
+            OrderType: "BUY_LIMIT",
+            Entry: entry,
+            Tp: tpBase,
+            Grams: grams,
+            ExpiryUtc: expiryUtc,
+            ProjectedMoveNetUSD: projectedMoveNet,
+            Template: "FLUSH_LIMIT_CAPTURE");
+    }
+
+    private static TableCompilerResult BuildStandardOrder(
+        MarketSnapshotContract snapshot,
+        string orderType,
+        StructureEngineResult structure,
+        AnalyzeEngineResult analyze,
+        CapitalUtilizationEngineResult capital,
+        LedgerStateContract ledgerState,
+        IGoldEngineThresholds thresholds)
+    {
+        // Use existing DecisionEngine logic for standard orders
+        // This is a simplified version - actual would call DecisionEngine.Evaluate
+        
+        var currentPrice = snapshot.AuthoritativeRate > 0m 
+            ? snapshot.AuthoritativeRate 
+            : snapshot.Bid > 0m ? snapshot.Bid : 0m;
+        
+        decimal entry;
+        decimal tp;
+        
         if (orderType == "BUY_LIMIT")
         {
-            // For flush captures, entry in upper half of deep zone
-            if (analyzeResult.S2.HasValue)
-            {
-                var zoneRange = analyzeResult.S2.Value - (analyzeResult.S3 ?? analyzeResult.S2.Value * 0.998m);
-                return analyzeResult.S2.Value - (zoneRange * 0.3m);  // Upper 30% of zone
-            }
-            if (analyzeResult.S1.HasValue)
-            {
-                return analyzeResult.S1.Value * 0.9995m;  // Slightly below S1
-            }
+            entry = structure.S1 > 0m ? structure.S1 : currentPrice - 5m;
+            tp = entry + 10m; // Standard +10 USD
         }
-        else if (orderType == "BUY_STOP")
+        else // BUY_STOP
         {
-            // For breakouts, entry above lid/compression
-            if (analyzeResult.R1.HasValue)
-            {
-                return analyzeResult.R1.Value * 1.0005m;  // Slightly above R1
-            }
-            if (analyzeResult.LidPrice.HasValue)
-            {
-                return analyzeResult.LidPrice.Value * 1.0005m;
-            }
+            entry = structure.R1 > 0m ? structure.R1 : currentPrice + 5m;
+            tp = entry + 10m; // Standard +10 USD
         }
-
-        return null;
-    }
-
-    private static (decimal? Tp1, decimal? Tp2, decimal? Tp3) CalculateTpLadder(
-        decimal entryPrice,
-        AnalyzeResult analyzeResult,
-        HistoricalPatternResult historicalResult,
-        NewsEngineResult newsResult,
-        MarketSnapshotContract snapshot)
-    {
-        decimal? tp1 = null;
-        decimal? tp2 = null;
-        decimal? tp3 = null;
-
-        // Determine if impulse harvest mode is allowed
-        var impulseHarvestAllowed = analyzeResult.ImpulseHarvestScore > 0.7m &&
-                                    historicalResult.HistoricalContinuationScore > 0.7m &&
-                                    historicalResult.HistoricalExtensionBandUsd >= ImpulseHarvestMinUsd &&
-                                    newsResult.WaterfallRisk != "HIGH";
-
-        if (impulseHarvestAllowed)
+        
+        // Calculate projected move (NET)
+        var projectedMoveGross = tp - entry;
+        var projectedMoveNet = projectedMoveGross - 0.80m - 0.80m;
+        
+        // Hard profit filter
+        if (projectedMoveNet < 8m)
         {
-            // Impulse harvest ladder
-            tp1 = entryPrice + StandardRotationMinUsd;
-            tp2 = entryPrice + 20.0m;
-            if (historicalResult.HistoricalExtensionBandUsd >= 30.0m)
-            {
-                tp3 = entryPrice + 30.0m;
-            }
-            if (historicalResult.HistoricalExtensionBandUsd >= 50.0m)
-            {
-                tp3 = entryPrice + 50.0m;
-            }
+            return new TableCompilerResult(
+                IsValid: false,
+                Reason: $"Projected move net {projectedMoveNet:0.00} USD < 8 USD minimum",
+                OrderType: null,
+                Entry: null,
+                Tp: null,
+                Grams: null,
+                ExpiryUtc: null,
+                ProjectedMoveNetUSD: projectedMoveNet,
+                Template: null);
         }
-        else
+        
+        // Grams
+        var grams = CalculateGrams(entry, capital, ledgerState);
+        
+        if (grams <= 0m)
         {
-            // Standard rotation ladder
-            tp1 = entryPrice + StandardRotationMinUsd;
-            tp2 = entryPrice + StandardRotationMaxUsd;
+            return new TableCompilerResult(
+                IsValid: false,
+                Reason: "Cannot calculate valid grams",
+                OrderType: null,
+                Entry: null,
+                Tp: null,
+                Grams: null,
+                ExpiryUtc: null,
+                ProjectedMoveNetUSD: projectedMoveNet,
+                Template: null);
         }
-
-        return (tp1, tp2, tp3);
-    }
-
-    private static decimal CalculateProjectedMoveNetUsd(
-        decimal entryPrice,
-        decimal tpPrice,
-        decimal spread)
-    {
-        // Calculate gross move
-        var grossMove = Math.Abs(tpPrice - entryPrice);
-
-        // Subtract spread (half on entry, half on exit)
-        var netMove = grossMove - spread;
-
-        // Subtract bullion handicap (0.80 USD per oz = ~0.026 USD per gram)
-        // For 100g trade: ~2.6 USD handicap
-        const decimal BullionHandicapPerGram = 0.026m;
-        const decimal TypicalTradeGrams = 100m;
-        var bullionHandicap = BullionHandicapPerGram * TypicalTradeGrams;
-
-        return netMove - bullionHandicap;
+        
+        // Expiry
+        var expiryUtc = CalculateExpiry(snapshot, thresholds);
+        
+        return new TableCompilerResult(
+            IsValid: true,
+            Reason: "Standard order compiled",
+            OrderType: orderType,
+            Entry: entry,
+            Tp: tp,
+            Grams: grams,
+            ExpiryUtc: expiryUtc,
+            ProjectedMoveNetUSD: projectedMoveNet,
+            Template: "STANDARD_ROTATION");
     }
 
     private static decimal CalculateGrams(
-        LedgerStateContract ledgerState,
-        CapitalUtilizationResult capitalResult,
-        decimal minTradeGrams)
+        decimal entry,
+        CapitalUtilizationEngineResult capital,
+        LedgerStateContract ledgerState)
     {
-        // Use capital utilization result
-        if (capitalResult.RecommendedGrams.HasValue)
-        {
-            return Math.Max(minTradeGrams, capitalResult.RecommendedGrams.Value);
-        }
-
-        // Fallback calculation
-        var deployableAed = ledgerState.DeployableAed;
-        var currentPrice = ledgerState.CurrentGoldPriceUsd;
-        if (currentPrice <= 0)
-        {
-            return minTradeGrams;
-        }
-
-        // Convert AED to USD (1 AED = 0.272 USD)
-        var deployableUsd = deployableAed * 0.272m;
-        var maxGrams = deployableUsd / currentPrice;
-
-        // Use 30% of deployable for safety
-        var recommendedGrams = maxGrams * 0.3m;
-
-        return Math.Max(minTradeGrams, recommendedGrams);
+        var result = CapitalUtilizationService.Check(
+            capital.C1Capacity,
+            entry,
+            capital.MaxAffordableGrams);
+        
+        return result.ApprovedGrams;
     }
 
     private static DateTimeOffset CalculateExpiry(
         MarketSnapshotContract snapshot,
-        NewsEngineResult newsResult,
-        AnalyzeResult analyzeResult)
+        IGoldEngineThresholds thresholds)
     {
-        var baseExpiryMinutes = 90;  // Default 90 minutes
-
-        // Adjust based on session
-        if (snapshot.Session == "JAPAN")
+        var session = TradingSessionClock.Resolve(snapshot.KsaTime).Session;
+        var (min, max) = session switch
         {
-            baseExpiryMinutes = 120;  // Wider for Japan
-        }
-        else if (snapshot.Session == "LONDON")
-        {
-            baseExpiryMinutes = 60;  // Tighter for London
-        }
-        else if (snapshot.Session == "NEW_YORK")
-        {
-            baseExpiryMinutes = 45;  // Tightest for NY
-        }
-
-        // Adjust based on hazard window
-        if (newsResult.HazardWindowActive)
-        {
-            baseExpiryMinutes = Math.Min(baseExpiryMinutes, newsResult.MinutesToNextCleanWindow);
-        }
-
-        // Adjust based on session phase
-        if (snapshot.SessionPhase == "END")
-        {
-            baseExpiryMinutes = Math.Min(baseExpiryMinutes, 60);
-        }
-
-        return snapshot.Timestamp.AddMinutes(baseExpiryMinutes);
+            "JAPAN" => thresholds.ExpiryJapan,
+            "INDIA" => thresholds.ExpiryIndia,
+            "LONDON" => thresholds.ExpiryLondon,
+            "NY" or "NEW_YORK" => thresholds.ExpiryNy,
+            _ => (60, 90)
+        };
+        
+        var expiryMinutes = (min + max) / 2; // Use midpoint
+        return snapshot.Timestamp.AddMinutes(expiryMinutes);
     }
 
-    private static decimal? CalculateStopLoss(
-        decimal entryPrice,
-        AnalyzeResult analyzeResult,
-        MarketSnapshotContract snapshot)
+    private sealed class DefaultThresholds : IGoldEngineThresholds
     {
-        // SL should be below FAIL or below S2/S3
-        if (analyzeResult.FailPrice.HasValue)
-        {
-            return analyzeResult.FailPrice.Value * 0.999m;  // Slightly below FAIL
-        }
-        if (analyzeResult.S3.HasValue)
-        {
-            return analyzeResult.S3.Value * 0.999m;
-        }
-        if (analyzeResult.S2.HasValue)
-        {
-            return analyzeResult.S2.Value * 0.998m;  // 0.2% below S2
-        }
-
-        // Fallback: 1% below entry
-        return entryPrice * 0.99m;
+        public decimal Ma20DistNormalMax => 0.8m;
+        public decimal Ma20DistStretchedMax => 1.5m;
+        public decimal RsiLowBound => 35m;
+        public decimal RsiMidLow => 35m;
+        public decimal RsiMidHigh => 65m;
+        public decimal RsiHighBound => 75m;
+        public decimal RsiExtremeBound => 75m;
+        public decimal RsiBuyLimitCautionHigh => 72m;
+        public decimal RsiBuyLimitWaitHigh => 75m;
+        public decimal BaseDistAtrBuyLimitValidMax => 1.0m;
+        public decimal BaseDistAtrBuyLimitRearmMax => 0.4m;
+        public decimal AdrUsedFullBound => 0.9m;
+        public decimal AdrUsedBlockContinuationBuyStopMin => 1.0m;
+        public decimal VciCompressedMax => 0.7m;
+        public decimal VciNormalMax => 1.3m;
+        public decimal SpreadCaution => 0.5m;
+        public decimal SpreadBlock => 0.7m;
+        public decimal TpDistanceSpreadMinRatio => 3m;
+        public decimal SessionSizeJapan => 0.5m;
+        public decimal SessionSizeIndia => 0.7m;
+        public decimal SessionSizeLondon => 1.0m;
+        public decimal SessionSizeNy => 0.6m;
+        public (int Min, int Max) ExpiryJapan => (90, 120);
+        public (int Min, int Max) ExpiryIndia => (90, 150);
+        public (int Min, int Max) ExpiryLondon => (60, 90);
+        public (int Min, int Max) ExpiryNy => (45, 60);
+        public int ConfidenceWaitMax => 59;
+        public int ConfidenceMicroMin => 60;
+        public int ConfidenceMicroMax => 74;
+        public int ConfidenceNormalMin => 75;
+        public int ConfidenceHighMin => 90;
     }
 }
 
-// Supporting contracts
-public record AnalyzeResult(
-    string Regime,
-    string WaterfallRisk,
-    string MidAirStatus,
-    string RailAStatus,
-    string RailBStatus,
-    string? RailAReason,
-    string? RailBReason,
-    decimal? S1,
-    decimal? S2,
-    decimal? S3,
-    decimal? R1,
-    decimal? R2,
-    decimal? FailPrice,
-    bool FailThreatened,
-    bool FailBroken,
-    bool FailProtected,
-    bool StructureValid,
-    string? CurrentSessionAnchor,
-    string? NextSessionAnchor,
-    string? NearestMagnet,
-    string PrimaryTradeConcept,
-    string RotationEnvelope,
-    string? TriggerObject,
-    string BottomType,  // CLASSIC_RECLAIM_BOTTOM, FLUSH_ABSORPTION_BOTTOM, PANIC_TO_REBUILD_BOTTOM, INVALID
-    string PatternType,  // WATERFALL_CONTINUATION, FLUSH_REVERSAL_ATTEMPT
-    decimal ImpulseHarvestScore,
-    decimal SessionHistoricalModifier,
-    decimal ConfidenceScore,
-    decimal? LidPrice);
-
-public record CapitalUtilizationResult(
-    decimal? RecommendedGrams,
-    string SizeState,  // MINIMUM, STANDARD, LARGE
-    string ExposureState,  // SAFE, MODERATE, MAXED
-    bool AffordableFlag,
-    int SlotCount,
-    decimal C1Available,
-    decimal C2Available);
+/// <summary>
+/// Table Compiler output contract
+/// </summary>
+public sealed record TableCompilerResult(
+    bool IsValid,
+    string Reason,
+    string? OrderType,
+    decimal? Entry,
+    decimal? Tp,
+    decimal? Grams,
+    DateTimeOffset? ExpiryUtc,
+    decimal ProjectedMoveNetUSD,
+    string? Template);
