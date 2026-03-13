@@ -36,15 +36,16 @@ public static class RegimeRiskClassifier
         var session = (snapshot.Session ?? string.Empty).Trim().ToUpperInvariant();
         var phase = (snapshot.SessionPhase ?? string.Empty).Trim().ToUpperInvariant();
         var isNySession = session is "NY" or "NEW_YORK";
+        var isNyLateOrEnd = phase is "LATE" or "END" or "NY_END" || phase.Contains("LATE", StringComparison.OrdinalIgnoreCase) || phase.Contains("END", StringComparison.OrdinalIgnoreCase);
         var t = snapshot.Mt5ServerTime.TimeOfDay;
         var ksaTime = TradingSessionClock.ServerTimeToKsa(snapshot.Mt5ServerTime);
         var ksaTimeOfDay = ksaTime.TimeOfDay;
 
-        // 1) HARD BLOCK only: Friday AND exact late-NY time window (18:00-20:10 server = 18:50-20:60 KSA)
+        // 1) HARD BLOCK only: Friday AND exact late-NY time window AND LATE/END phase
         // Client requirement: "only late New York should be blocked, not generic NEW_YORK END"
-        // Use exact clock-based window instead of sessionPhase to avoid blocking too early
+        // Use exact clock-based window plus phase so we only block in LATE/END phase
         var isInLateNyWindow = IsWithin(t, FridayLateNyStartServer, FridayLateNyEndServer);
-        if (isFriday && isNySession && isInLateNyWindow)
+        if (isFriday && isNySession && isInLateNyWindow && isNyLateOrEnd)
         {
             return new RegimeClassificationContract(
                 Regime: "FRIDAY_NY_LATE_BLOCK",

@@ -1364,8 +1364,8 @@ public sealed class SignalPollingBackgroundService(
                     tradeId: null,
                     payload: new
                     {
-                        verifyState = verifyForAnalyze.VerifyState,
-                        verifyReason = verifyForAnalyze.VerifyReason,
+                        verifyState = verifyForAnalyze.CredibilityClass,
+                        verifyReason = verifyForAnalyze.CredibilityReason,
                         newsState = newsForAnalyze.OverallMODE,
                         newsHazardWindowActive = newsForAnalyze.HazardWindowActive,
                         newsRailAPermission = newsForAnalyze.RailAPermission,
@@ -1374,7 +1374,7 @@ public sealed class SignalPollingBackgroundService(
                         telegramState = snapshot.TelegramState,
                         telegramImpactTag = snapshot.TelegramImpactTag,
                         riskRailLockdown = waterfallForAnalyze.ShouldBlock ? "BLOCKED" : "ALLOWED",
-                        riskRailReason = waterfallForAnalyze.ShouldBlock ? waterfallForAnalyze.Reason : null,
+                        riskRailReason = waterfallForAnalyze.ShouldBlock ? waterfallForAnalyze.CrisisReason : null,
                     },
                     cancellationToken: stoppingToken);
 
