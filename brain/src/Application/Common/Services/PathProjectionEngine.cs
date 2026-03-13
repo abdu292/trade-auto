@@ -21,7 +21,8 @@ public static class PathProjectionEngine
                 InvalidationShelf: null,
                 SessionTargetCorridor: null,
                 ConfidenceBand: "LOW",
-                SummaryLine: "No context — wait for structure.");
+                SummaryLine: "No context — wait for structure.",
+                NearestLegalBuyZone: null);
         }
 
         var pathState = decisionStackResult.PathState ?? string.Empty;
@@ -74,6 +75,8 @@ public static class PathProjectionEngine
             _ => "Range — wait for structure",
         };
 
+        var nearestLegalBuyZone = s1; // S1 base shelf = nearest legal buy zone for BUY_LIMIT path
+
         return new PathProjectionContract(
             PathBias: pathBias,
             KeyMagnets: keyMagnets,
@@ -81,6 +84,7 @@ public static class PathProjectionEngine
             InvalidationShelf: invalidationShelf,
             SessionTargetCorridor: sessionTargetCorridor,
             ConfidenceBand: confidenceBand,
-            SummaryLine: summaryLine);
+            SummaryLine: summaryLine,
+            NearestLegalBuyZone: nearestLegalBuyZone);
     }
 }

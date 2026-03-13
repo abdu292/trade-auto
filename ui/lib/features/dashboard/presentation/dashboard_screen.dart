@@ -204,7 +204,7 @@ class DashboardScreen extends ConsumerWidget {
                               value: panel.biasState.toUpperCase()),
                           _MetricChip(
                               label: 'Path',
-                              value: panel.pathState.toUpperCase()),
+                              value: panel.pathStateDisplay.toUpperCase()),
                           _MetricChip(
                               label: 'Overextension',
                               value: panel.overextensionState.toUpperCase()),
@@ -231,6 +231,67 @@ class DashboardScreen extends ConsumerWidget {
                 error: (e, _) => Text('Factor state error: $e'),
               ),
             ),
+          ),
+          const SizedBox(height: 12),
+
+          // A2a2) Path Map card — market bias, current path state (ladder), next likely move, nearest legal entry zone, why blocked/armed
+          goldDashboard.when(
+            data: (dash) {
+              final pathMap = dash.pathMap;
+              if (pathMap == null) return const SizedBox.shrink();
+              return _AnimatedCard(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Path Map',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      Text(
+                        'Market bias, current path state, next likely move, nearest legal entry zone, why blocked/armed.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _MetricChip(
+                            label: 'Market Bias',
+                            value: pathMap.marketBias.toUpperCase(),
+                          ),
+                          _MetricChip(
+                            label: 'Path State',
+                            value: pathMap.currentPathState.toUpperCase(),
+                          ),
+                          _MetricChip(
+                            label: 'Next Likely Move',
+                            value: pathMap.nextLikelyMove,
+                          ),
+                          if (pathMap.nearestLegalEntryZone != null)
+                            _MetricChip(
+                              label: 'Nearest Legal Entry Zone',
+                              value: pathMap.nearestLegalEntryZone!.toStringAsFixed(2),
+                            ),
+                          if (pathMap.whyBlockedOrArmed != null &&
+                              pathMap.whyBlockedOrArmed!.isNotEmpty)
+                            _MetricChip(
+                              label: 'Why Blocked / Armed',
+                              value: pathMap.whyBlockedOrArmed!,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
           ),
           const SizedBox(height: 12),
 

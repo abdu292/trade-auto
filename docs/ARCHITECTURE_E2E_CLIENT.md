@@ -440,26 +440,26 @@ This architecture is aligned with:
 ### 📋 Architecture Complete
 The full 20-engine architecture is implemented and integrated. Runtime logs provide complete visibility into the decision pipeline from ingest through execution.
 
-## Implementation Status
+### Proof logs from non-blocked sessions (sign-off)
+For full integration sign-off, capture runtime timeline logs from **allowed** (non-blocked) sessions so the full path STATE_06 → STATE_12 is evidenced. Recommended windows (KSA time; session is canonical from brain):
 
-### ✅ Fully Implemented
-- MT5 market snapshot ingestion with multi-timeframe data
-- Session/time conversions (UTC, MT5 server, KSA, UAE, India)
-- Cycle creation and state machine flow
-- Regime veto layer with exact Friday late-NY time window (18:00-20:10 server)
-- Rate fallback plumbing (SYSTEM_FETCHED / MT5_FALLBACK)
-- Open position awareness
-- State machine runtime logs (ZONE_WATCH_ACTIVE, EARLY_FLUSH_CANDIDATE, CANDIDATE, ARMED)
-- ANALYZE layer with full payload visibility
-- VALIDATE layer with full payload visibility
-- TABLE compiler with TABLE_READY/NO_TRADE events
-- Governance/VERIFY/NEWS visibility logs
-- UI direction/heading panel showing path bias, state, pattern, nearest zone, concept
+| Session | KSA window (approx) | Notes |
+|--------|-----------------------|--------|
+| **Japan** | 03:00–07:00 | Safe pocket; no Friday late-NY block |
+| **India** | 07:00–10:00 | Safe pocket |
+| **London safe** | 10:00–15:00 (avoid 14:55–15:25 overlap if testing pure London) | London mid or early |
+| **NY mid** | 15:00–18:00 KSA (not late) | Avoid Friday 18:00–21:00 KSA (late-NY block) |
 
-### 🔄 Partially Implemented / In Progress
-- Historical pattern engine outputs (engine exists, runtime visibility may need enhancement)
-- Full ledger/SLIPS decision enforcement (ledger awareness exists, full SLIPS sync may need verification)
-- MT5 execution compiler logs (execution exists, detailed logs may need enhancement)
+**How to capture**: Use the runtime timeline API or app live feed during the above windows. Look for events: `STATE_06_STRUCTURE`, `STATE_07_PATTERN`, `STATE_08_PATH_DECISION`, `STATE_09_ANALYZE`, `STATE_10_VALIDATE`, `STATE_11_TABLE_READY` or `STATE_11_STAND_DOWN`, and (when a trade is dispatched) `STATE_12_EXECUTION_DISPATCH`. Session in all payloads is the **canonical** session from the brain (single session engine); MT5 packet session is overwritten at ingest.
 
-### 📋 Architecture Complete
-The full 20-engine architecture is implemented and integrated. Runtime logs provide complete visibility into the decision pipeline from ingest through execution.
+### Proof logs from non-blocked sessions (sign-off)
+For full integration sign-off, capture runtime timeline logs from **allowed** (non-blocked) sessions so the full path STATE_06 → STATE_12 is evidenced. Recommended windows (KSA time; session is canonical from brain):
+
+| Session | KSA window (approx) | Notes |
+|--------|-----------------------|--------|
+| **Japan** | 03:00–07:00 | Safe pocket; no Friday late-NY block |
+| **India** | 07:00–10:00 | Safe pocket |
+| **London safe** | 10:00–15:00 (avoid 14:55–15:25 overlap if testing pure London) | London mid or early |
+| **NY mid** | 15:00–18:00 KSA (not late) | Avoid Friday 18:00–21:00 KSA (late-NY block) |
+
+**How to capture**: Use the runtime timeline API or app live feed during the above windows. Look for events: `STATE_06_STRUCTURE`, `STATE_07_PATTERN`, `STATE_08_PATH_DECISION`, `STATE_09_ANALYZE`, `STATE_10_VALIDATE`, `STATE_11_TABLE_READY` or `STATE_11_STAND_DOWN`, and (when a trade is dispatched) `STATE_12_EXECUTION_DISPATCH`. Session in all payloads is the **canonical** session from the brain (single session engine); MT5 packet session is overwritten at ingest.

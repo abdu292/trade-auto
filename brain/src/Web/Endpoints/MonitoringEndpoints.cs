@@ -57,6 +57,7 @@ public static class MonitoringEndpoints
                 ILastGoldEngineStateStore engineStateStore,
                 ISetupLifecycleStore setupLifecycleStore,
                 IPendingTradeStore pendingTrades,
+                IPathProjectionStore pathProjectionStore,
                 IConfiguration configuration,
                 IApplicationDbContext db,
                 CancellationToken cancellationToken) =>
@@ -66,6 +67,7 @@ public static class MonitoringEndpoints
                 var ask = snapshot?.Ask ?? 0m;
                 var ledgerState = ledger.GetExtendedState(bid);
                 var (engineStates, pathRouting, _) = engineStateStore.GetLast();
+                var (pathProjection, _) = pathProjectionStore.Get();
                 var modeRaw = (configuration["Execution:Mode"] ?? "AUTO").Trim().ToUpperInvariant();
                 var executionMode = modeRaw is "HYBRID" or "MANUAL" ? modeRaw : "AUTO";
                 var pricePerGramAed = bid > 0m ? bid * 3.674m / 31.1035m : 0m;
@@ -146,6 +148,14 @@ public static class MonitoringEndpoints
                         legalityState = engineStates.LegalityState,
                         biasState = engineStates.BiasState,
                         pathState = engineStates.PathState,
+                        pathStateLadder = engineStates != null
+                            ? CycleStateMachine.PathStateLadder.From(
+                                engineStates.PathState,
+                                false,
+                                string.Equals(lifecycleStatus.LifecycleState, SetupLifecycleState.Armed, StringComparison.OrdinalIgnoreCase),
+                                !string.IsNullOrEmpty(lifecycleStatus.LifecycleState) && lifecycleStatus.LifecycleState != "NONE",
+                                false)
+                            : null,
                         reasonCode = engineStates.ReasonCode,
                         overextensionState = engineStates.OverextensionState,
                         waterfallRisk = engineStates.WaterfallRisk,
@@ -198,6 +208,22 @@ public static class MonitoringEndpoints
                         expectedPath = engineStates?.PathState,
                         alternatePath = engineStates?.PathState == PathState.BuyLimit ? PathState.BuyStop : PathState.BuyLimit,
                         invalidationPath = engineStates?.ReasonCode,
+                    },
+                    // Path map card: market bias, current path state (ladder), next likely move, nearest legal entry zone, why blocked/armed
+                    pathMap = new
+                    {
+                        marketBias = pathProjection?.PathBias ?? engineStates?.BiasState ?? "UNKNOWN",
+                        currentPathState = engineStates != null
+                            ? CycleStateMachine.PathStateLadder.From(
+                                engineStates.PathState,
+                                false,
+                                string.Equals(lifecycleStatus.LifecycleState, SetupLifecycleState.Armed, StringComparison.OrdinalIgnoreCase),
+                                !string.IsNullOrEmpty(lifecycleStatus.LifecycleState) && lifecycleStatus.LifecycleState != "NONE",
+                                false)
+                            : CycleStateMachine.PathStateLadder.StandDown,
+                        nextLikelyMove = pathProjection?.SummaryLine ?? pathProjection?.NextTestZone ?? "—",
+                        nearestLegalEntryZone = pathProjection?.NearestLegalBuyZone,
+                        whyBlockedOrArmed = engineStates?.ReasonCode ?? (string.Equals(lifecycleStatus.LifecycleState, SetupLifecycleState.Armed, StringComparison.OrdinalIgnoreCase) ? "ARMED" : null),
                     },
                     validationSummary,
                     executionMode,
@@ -577,7 +603,7 @@ public static class MonitoringEndpoints
                 var (projection, atUtc) = pathProjectionStore.Get();
                 if (projection is null)
                 {
-                    return TypedResults.Ok(new { pathBias = "TWO_WAY", keyMagnets = (string?)null, nextTestZone = (string?)null, invalidationShelf = (string?)null, sessionTargetCorridor = (string?)null, confidenceBand = "LOW", summaryLine = "No projection yet.", atUtc = (DateTimeOffset?)null });
+                    return TypedResults.Ok(new { pathBias = "TWO_WAY", keyMagnets = (string?)null, nextTestZone = (string?)null, invalidationShelf = (string?)null, sessionTargetCorridor = (string?)null, confidenceBand = "LOW", summaryLine = "No projection yet.", nearestLegalBuyZone = (decimal?)null, atUtc = (DateTimeOffset?)null });
                 }
                 return TypedResults.Ok(new
                 {
@@ -588,6 +614,7 @@ public static class MonitoringEndpoints
                     sessionTargetCorridor = projection.SessionTargetCorridor,
                     confidenceBand = projection.ConfidenceBand,
                     summaryLine = projection.SummaryLine,
+                    nearestLegalBuyZone = projection.NearestLegalBuyZone,
                     atUtc,
                 });
             })

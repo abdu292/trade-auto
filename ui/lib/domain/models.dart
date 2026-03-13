@@ -875,6 +875,32 @@ class KpiStats {
 // Spec v7 §10 — Gold Engine dashboard contracts (Flutter side)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Path map card: market bias, current path state (ladder), next likely move, nearest legal entry zone, why blocked/armed.
+class PathMapSummary {
+  const PathMapSummary({
+    required this.marketBias,
+    required this.currentPathState,
+    required this.nextLikelyMove,
+    this.nearestLegalEntryZone,
+    this.whyBlockedOrArmed,
+  });
+
+  final String marketBias;
+  final String currentPathState;
+  final String nextLikelyMove;
+  final double? nearestLegalEntryZone;
+  final String? whyBlockedOrArmed;
+
+  factory PathMapSummary.fromJson(Map<String, dynamic> json) =>
+      PathMapSummary(
+        marketBias: _readString(json, 'marketBias'),
+        currentPathState: _readString(json, 'currentPathState'),
+        nextLikelyMove: _readString(json, 'nextLikelyMove'),
+        nearestLegalEntryZone: _readDoubleOrNull(json, 'nearestLegalEntryZone'),
+        whyBlockedOrArmed: json['whyBlockedOrArmed']?.toString(),
+      );
+}
+
 class GoldDashboard {
   const GoldDashboard({
     required this.physicalLedger,
@@ -883,6 +909,7 @@ class GoldDashboard {
     required this.tradeMapChart,
     required this.executionMode,
     this.validationSummary,
+    this.pathMap,
   });
 
   final PhysicalLedgerCard physicalLedger;
@@ -891,6 +918,7 @@ class GoldDashboard {
   final TradeMapSummary tradeMapChart;
   final String executionMode;
   final ValidationSummary? validationSummary;
+  final PathMapSummary? pathMap;
 
   factory GoldDashboard.fromJson(Map<String, dynamic> json) => GoldDashboard(
         physicalLedger: PhysicalLedgerCard.fromJson(
@@ -909,6 +937,9 @@ class GoldDashboard {
             ? null
             : ValidationSummary.fromJson(
                 _readMap(json, 'validationSummary')),
+        pathMap: json['pathMap'] == null
+            ? null
+            : PathMapSummary.fromJson(_readMap(json, 'pathMap')),
       );
 }
 
@@ -1059,6 +1090,7 @@ class FactorStatePanel {
     required this.session,
     required this.sessionPhase,
     this.efficiencyState = 'LOW',
+    this.pathStateLadder,
   });
 
   final String legalityState;
@@ -1070,6 +1102,11 @@ class FactorStatePanel {
   final String sessionPhase;
   // Spec v8 §11 — Rotation Efficiency state
   final String efficiencyState;
+  /// Normalized ladder: STAND_DOWN | WATCH | EARLY_FLUSH_CANDIDATE | CANDIDATE | ARMED | TABLE_READY
+  final String? pathStateLadder;
+
+  /// Display path state: prefer ladder when available for consistency across cards.
+  String get pathStateDisplay => pathStateLadder ?? pathState;
 
   factory FactorStatePanel.fromJson(Map<String, dynamic> json) =>
       FactorStatePanel(
@@ -1081,6 +1118,7 @@ class FactorStatePanel {
         session: _readString(json, 'session'),
         sessionPhase: _readString(json, 'sessionPhase'),
         efficiencyState: json['efficiencyState'] as String? ?? 'LOW',
+        pathStateLadder: json['pathStateLadder']?.toString(),
       );
 }
 
@@ -1209,6 +1247,14 @@ double _readDouble(Map<String, dynamic> json, String key) {
     return value.toDouble();
   }
   return double.tryParse(value.toString()) ?? 0;
+}
+
+double? _readDoubleOrNull(Map<String, dynamic> json, String key) {
+  final value = json[key] ?? json[_pascal(key)];
+  if (value == null) return null;
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString());
 }
 
 DateTime _readDateTime(Map<String, dynamic> json, String key) {

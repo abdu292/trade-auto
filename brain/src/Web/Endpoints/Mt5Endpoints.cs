@@ -167,7 +167,8 @@ public static class Mt5Endpoints
                 var uaeTime = ksaTime.ToOffset(TimeSpan.FromHours(4));
                 var indiaTime = ksaTime.ToOffset(TimeSpan.FromMinutes(330));
                 var volatilityExpansion = request.VolatilityExpansion ?? (request.Adr <= 0 ? 0 : request.Atr / request.Adr);
-                var (resolvedSession, resolvedPhase) = TradingSessionClock.Resolve(ksaTime);
+                // Canonical session from server time only (single session engine; do not use EA-provided session)
+                var (resolvedSession, resolvedPhase) = TradingSessionClock.Resolve(mt5ServerTime);
                 // London/NY overlap: Server 14:55–15:25 (spec). Derive from time so regime labels match.
                 var serverTod = mt5ServerTime.TimeOfDay;
                 var isLondonNyOverlap = serverTod >= TimeSpan.FromMinutes(14 * 60 + 55) && serverTod < TimeSpan.FromMinutes(15 * 60 + 25);

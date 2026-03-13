@@ -11,4 +11,5 @@ public sealed record PathProjectionContract(
     string? InvalidationShelf,
     string? SessionTargetCorridor,
     string? ConfidenceBand,
-    string? SummaryLine);
+    string? SummaryLine,
+    decimal? NearestLegalBuyZone = null);
