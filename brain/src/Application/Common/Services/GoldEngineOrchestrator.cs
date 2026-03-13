@@ -88,7 +88,7 @@ public class GoldEngineOrchestrator
         var crisisVeto = waterfallRisk == "HIGH";
 
         // 7. Hard legality checks
-        var ledgerState = await _ledgerService.GetLedgerStateAsync(cancellationToken);
+        var ledgerState = _ledgerService.GetState();
         var legalityResult = HardLegalityEngine.Check(
             snapshot,
             ledgerState,
@@ -106,9 +106,11 @@ public class GoldEngineOrchestrator
         var telegramSignals = _telegramSignalStore != null
             ? await _telegramSignalStore.GetRecentSignalsAsync(TimeSpan.FromHours(1), cancellationToken)
             : null;
-        var tradingViewSignal = _tradingViewSignalStore != null
-            ? await _tradingViewSignalStore.GetLatestAsync(cancellationToken)
-            : null;
+        TradingViewSignalContract? tradingViewSignal = null;
+        if (_tradingViewSignalStore != null && _tradingViewSignalStore.TryGetLatest(out var tvSignal))
+        {
+            tradingViewSignal = tvSignal;
+        }
 
         var verifyResult = VerifyEngine.Verify(
             snapshot,
@@ -122,17 +124,7 @@ public class GoldEngineOrchestrator
                 s.StopLoss,
                 s.TpPips,
                 s.CommentTags)).ToList(),
-            tradingViewSignal != null ? new TradingViewSignalContract(
-                tradingViewSignal.Timestamp,
-                tradingViewSignal.Symbol,
-                tradingViewSignal.Signal,
-                tradingViewSignal.Bias,
-                tradingViewSignal.RiskTag,
-                tradingViewSignal.Score,
-                tradingViewSignal.Volatility,
-                tradingViewSignal.EntryZoneLow,
-                tradingViewSignal.EntryZoneHigh,
-                tradingViewSignal.Notes) : null,
+            tradingViewSignal,
             new StructureLevelsContract(
                 structureResult.S1,
                 structureResult.S2,
@@ -193,7 +185,8 @@ public class GoldEngineOrchestrator
             historicalMatches);
 
         // 12. Candidate Engine
-        var candidateState = await _candidateStore.GetCurrentStateAsync(symbol, cancellationToken);
+        var candidate = _candidateStore.GetCandidate(symbol);
+        var candidateState = candidate?.State ?? "NONE";
         var candidateResult = CandidateEngine.UpdateCandidate(
             candidateState,
             snapshot,
@@ -203,20 +196,8 @@ public class GoldEngineOrchestrator
             historicalResult);
 
         // 13. ANALYZE (via AI Worker)
-        var analyzeRequest = BuildAnalyzeRequest(
-            snapshot,
-            indicatorResult,
-            structureResult,
-            regimeResult,
-            volatilityState,
-            waterfallRisk,
-            verifyResult,
-            newsResult,
-            capitalUtilResult,
-            historicalResult,
-            candidateResult);
-
-        var aiAnalyzeResult = await _aiWorkerClient.AnalyzeAsync(analyzeRequest, cancellationToken);
+        // The AI Worker receives the snapshot and builds its own context packet
+        var aiAnalyzeResult = await _aiWorkerClient.AnalyzeAsync(snapshot, snapshot.CycleId, cancellationToken);
 
         // Convert AI result to AnalyzeResult
         var analyzeResult = ConvertAiResultToAnalyzeResult(aiAnalyzeResult, structureResult);
@@ -286,24 +267,6 @@ public class GoldEngineOrchestrator
     }
 
     // Helper methods...
-    private static MarketSnapshotContract BuildAnalyzeRequest(
-        MarketSnapshotContract snapshot,
-        IndicatorEngine.IndicatorResult indicatorResult,
-        RuleEngine.StructureResult structureResult,
-        RegimeClassificationContract regimeResult,
-        string volatilityState,
-        string waterfallRisk,
-        VerifyEngine.VerifyResult verifyResult,
-        NewsEngine.NewsEngineResult newsResult,
-        CapitalUtilizationResult capitalResult,
-        HistoricalPatternEngine.HistoricalPatternResult historicalResult,
-        CandidateEngine.CandidateResult candidateResult)
-    {
-        // Build comprehensive context for AI analysis
-        // This would include all the context packet fields from spec
-        return snapshot;
-    }
-
     private static AnalyzeResult ConvertAiResultToAnalyzeResult(
         TradeSignalContract aiResult,
         RuleEngine.StructureResult structureResult)
@@ -313,8 +276,8 @@ public class GoldEngineOrchestrator
             Regime: aiResult.RegimeTag ?? "UNKNOWN",
             WaterfallRisk: aiResult.SafetyTag == "BLOCK" ? "HIGH" : "LOW",
             MidAirStatus: "NONE",
-            RailAStatus: aiResult.RailA == "BUY_LIMIT" ? "YES" : "NO",
-            RailBStatus: aiResult.RailB == "BUY_STOP" ? "YES" : "NO",
+            RailAStatus: aiResult.Rail == "BUY_LIMIT" ? "YES" : "NO",
+            RailBStatus: aiResult.Rail == "BUY_STOP" ? "YES" : "NO",
             RailAReason: null,
             RailBReason: null,
             S1: structureResult.S1,
@@ -323,14 +286,14 @@ public class GoldEngineOrchestrator
             R1: structureResult.R1,
             R2: structureResult.R2,
             FailPrice: structureResult.Fail,
-            FailThreatened: false,
-            FailBroken: false,
+            FailThreatened: structureResult.FailThreatened,
+            FailBroken: structureResult.FailBroken,
             FailProtected: structureResult.Fail.HasValue && structureResult.Fail.Value > 0,
-            StructureValid: true,
+            StructureValid: !structureResult.FailBroken && structureResult.HasShelf,
             CurrentSessionAnchor: null,
             NextSessionAnchor: null,
             NearestMagnet: null,
-            PrimaryTradeConcept: aiResult.Path == "BUY_LIMIT" ? "SHELF_RECLAIM" : "LID_BREAKOUT",
+            PrimaryTradeConcept: aiResult.Rail == "BUY_LIMIT" ? "SHELF_RECLAIM" : "LID_BREAKOUT",
             RotationEnvelope: "+8 to +12",
             TriggerObject: null,
             BottomType: "CLASSIC_RECLAIM_BOTTOM",

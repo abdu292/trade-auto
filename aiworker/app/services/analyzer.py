@@ -207,6 +207,46 @@ class AnalyzerService:
             "rate_delta_usd": snapshot.rateDeltaUsd,
             "rate_authority": snapshot.rateAuthority,
             "authoritative_rate": authoritative_rate,
+            # Structure levels (S/R) - these should come from Brain's Structure Engine
+            "s1": None,  # Will be populated from Brain if available
+            "s2": None,
+            "s3": None,
+            "r1": None,
+            "r2": None,
+            "fail": None,
+            # Structure flags
+            "has_shelf": snapshot.hasLiquiditySweep and snapshot.isCompression,
+            "has_lid": snapshot.isBreakoutConfirmed,
+            "has_sweep": snapshot.hasLiquiditySweep,
+            "has_reclaim": snapshot.hasOverlapCandles and snapshot.hasLiquiditySweep,
+            "has_compression": snapshot.isCompression,
+            "is_mid_air": snapshot.freezeGapDetected,
+            # Ledger state (should come from Brain)
+            "ledger_cash_aed": None,
+            "ledger_gold_grams": None,
+            "deployable_aed": None,
+            # Market states (should come from Brain's Factor Engine)
+            "dxy_state": None,
+            "yield_pressure_state": None,
+            "geo_risk_state": None,
+            "oil_state": None,
+            "cb_demand_state": None,
+            "institutional_demand_state": None,
+            # Historical patterns (should come from Brain's Historical Pattern Engine)
+            "historical_pattern_tag": None,
+            "historical_continuation_score": None,
+            "historical_reversal_risk": None,
+            "historical_extension_band_usd": None,
+            "historical_trap_probability": None,
+            "historical_best_path": None,
+            "session_historical_modifier": None,
+            # Candidate state (should come from Brain's Candidate Engine)
+            "candidate_state": None,
+            "candidate_freshness": None,
+            # Risk metrics
+            "news_persistence_score": None,
+            "cross_market_alignment": None,
+            "crowd_late_risk": None,
         }
         market_context["_ai_provider_traces"] = []
 

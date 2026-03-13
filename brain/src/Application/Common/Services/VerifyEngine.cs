@@ -207,11 +207,12 @@ public static class VerifyEngine
         var confidenceScoreModifier = 0.0m;
         var impulseHarvestScoreModifier = 0.0m;
 
-        // Parse zone from TradingView signal
-        if (signal.EntryZoneLow.HasValue && signal.EntryZoneHigh.HasValue)
+        // TradingView signals don't have explicit zones, but we can infer from signal direction
+        // For BUY signals, use current price area as zone
+        if (signal.Signal == "BUY" && snapshot.Bid > 0)
         {
-            zoneLow = signal.EntryZoneLow.Value;
-            zoneHigh = signal.EntryZoneHigh.Value;
+            zoneLow = snapshot.Bid * 0.998m;  // 0.2% below current
+            zoneHigh = snapshot.Bid * 1.002m;  // 0.2% above current
 
             if (structureLevels != null)
             {
@@ -227,7 +228,7 @@ public static class VerifyEngine
         }
 
         // TradingView signals are generally more structured
-        if (signal.Score.HasValue && signal.Score.Value > 0.7m)
+        if (signal.Score > 0.7m)
         {
             credibilityClass = "HIGH";
             advisoryWeight = 0.8m;
@@ -309,17 +310,7 @@ public record TelegramSignalContract(
     decimal? TpPips,
     IReadOnlyList<string>? CommentTags);
 
-public record TradingViewSignalContract(
-    DateTimeOffset Timestamp,
-    string Symbol,
-    string Signal,
-    string? Bias,
-    string? RiskTag,
-    decimal? Score,
-    decimal? Volatility,
-    decimal? EntryZoneLow,
-    decimal? EntryZoneHigh,
-    string? Notes);
+// TradingViewSignalContract is defined in Brain.Application.Common.Models.Contracts
 
 public record StructureLevelsContract(
     decimal? S1,
