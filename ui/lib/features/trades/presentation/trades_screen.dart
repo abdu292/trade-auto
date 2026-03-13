@@ -255,59 +255,42 @@ class _TradesScreenState extends ConsumerState<TradesScreen> {
           const SizedBox(height: 12),
           _SectionCard(
             title: 'Live Runtime',
+            subtitle:
+                'Current symbol, session, execution mode, queues, and market snapshot.',
             child: runtime.when(
-              data: (state) => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              data: (state) => Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _RuntimeChip(label: 'Symbol', value: state.symbol),
-                      _RuntimeChip(label: 'Session', value: state.session),
-                      _RuntimeChip(
-                        label: 'Execution',
-                        value: state.executionMode.toUpperCase(),
-                      ),
-                      _RuntimeChip(
-                        label: 'Auto Sessions',
-                        value: state.hybridAutoSessions,
-                      ),
-                      _RuntimeChip(
-                        label: 'Pending Queue',
-                        value: state.pendingQueueDepth.toString(),
-                      ),
-                      _RuntimeChip(
-                        label: 'Approval Queue',
-                        value: state.approvalQueueDepth.toString(),
-                      ),
-                      _RuntimeChip(
-                        label: 'Bid',
-                        value: state.bid.toStringAsFixed(2),
-                      ),
-                      _RuntimeChip(
-                        label: 'Ask',
-                        value: state.ask.toStringAsFixed(2),
-                      ),
-                      _RuntimeChip(
-                        label: 'Spread',
-                        value: state.spread.toStringAsFixed(3),
-                      ),
-                      _RuntimeChip(label: 'Telegram', value: state.telegramState),
-                      _RuntimeChip(label: 'TV', value: state.tvAlertType),
-                      _RuntimeChip(
-                        label: 'Macro',
-                        value: '${state.macroBias}/${state.institutionalBias}',
-                      ),
-                      _RuntimeChip(
-                        label: 'Hazards',
-                        value: state.activeBlockedHazardWindows.toString(),
-                      ),
-                      _RuntimeChip(
-                        label: 'Cache Age',
-                        value: '${state.macroCacheAgeMinutes}m',
-                      ),
-                    ],
+                  _RuntimeChip(label: 'Symbol', value: state.symbol),
+                  _RuntimeChip(label: 'Session', value: state.session),
+                  _RuntimeChip(
+                    label: 'Execution',
+                    value: state.executionMode.toUpperCase(),
+                  ),
+                  _RuntimeChip(
+                    label: 'Pending Queue',
+                    value: state.pendingQueueDepth.toString(),
+                  ),
+                  _RuntimeChip(
+                    label: 'Approval Queue',
+                    value: state.approvalQueueDepth.toString(),
+                  ),
+                  _RuntimeChip(
+                    label: 'Bid',
+                    value: state.bid.toStringAsFixed(2),
+                  ),
+                  _RuntimeChip(
+                    label: 'Ask',
+                    value: state.ask.toStringAsFixed(2),
+                  ),
+                  _RuntimeChip(
+                    label: 'Spread',
+                    value: state.spread.toStringAsFixed(3),
+                  ),
+                  _RuntimeChip(
+                    label: 'Blocked Hazards',
+                    value: state.activeBlockedHazardWindows.toString(),
                   ),
                 ],
               ),

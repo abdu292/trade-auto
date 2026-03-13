@@ -443,7 +443,6 @@ public static class MonitoringEndpoints
                     pendingQueueDepth = pendingTrades.Count(),
                     approvalQueueDepth = approvals.GetPending(200).Count,
                     executionMode = (configuration["Execution:Mode"] ?? "auto").Trim().ToLowerInvariant(),
-                    hybridAutoSessions = (configuration["Execution:HybridAutoSessions"] ?? "JAPAN,INDIA").Trim(),
                     macroBias = macro?.MacroBias ?? "UNKNOWN",
                     institutionalBias = macro?.InstitutionalBias ?? "UNKNOWN",
                     cbFlowFlag = macro?.CbFlowFlag ?? "UNKNOWN",
