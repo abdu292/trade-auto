@@ -308,6 +308,104 @@ class DashboardScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
 
+          // A2c) Market Direction / Heading Panel — shows where rates are heading
+          _AnimatedCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Market Direction / Heading',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Text(
+                    'Current bias, next path, and nearest legal trade zone',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  liveFeed.when(
+                    data: (feed) {
+                      // Find latest ANALYZE_STARTED or PATH_PROJECTION event
+                      final analyzeEvent = feed.events.firstWhere(
+                        (e) => e.eventType == 'ANALYZE_STARTED' ||
+                            e.eventType == 'STATE_06B_PATH_PROJECTION',
+                        orElse: () => feed.events.first,
+                      );
+                      
+                      final payload = analyzeEvent.payload;
+                      final pathBias = payload?['pathBias']?.toString() ?? 
+                          payload?['nextLikelyPath']?.toString() ?? 'UNKNOWN';
+                      final patternType = payload?['patternType']?.toString() ?? 'NONE';
+                      final bottomType = payload?['bottomType']?.toString() ?? 'NONE';
+                      final compressionState = payload?['compressionState']?.toString() ?? 'UNKNOWN';
+                      final expansionState = payload?['expansionState']?.toString() ?? 'UNKNOWN';
+                      final nearestMagnet = payload?['nearestMagnet'];
+                      final primaryTradeConcept = payload?['primaryTradeConcept']?.toString() ?? 'STANDARD';
+                      
+                      // Determine state: attack / reject / reclaim / stall
+                      String stateLabel = 'STALL';
+                      Color stateColor = colorScheme.onSurfaceVariant;
+                      if (compressionState == 'COMPRESSION') {
+                        stateLabel = 'COMPRESSION';
+                        stateColor = colorScheme.primary;
+                      } else if (expansionState == 'EXPANSION') {
+                        stateLabel = 'EXPANSION';
+                        stateColor = colorScheme.tertiary;
+                      }
+                      if (patternType.contains('RECLAIM') || bottomType.contains('RECLAIM')) {
+                        stateLabel = 'RECLAIM';
+                        stateColor = colorScheme.primary;
+                      }
+                      if (patternType.contains('WATERFALL')) {
+                        stateLabel = 'ATTACK';
+                        stateColor = colorScheme.error;
+                      }
+                      
+                      final nearestMagnetValue = nearestMagnet != null
+                          ? (nearestMagnet is num
+                              ? nearestMagnet.toStringAsFixed(2)
+                              : nearestMagnet.toString())
+                          : 'N/A';
+                      
+                      return Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _MetricChip(
+                            label: 'Path Bias',
+                            value: pathBias,
+                          ),
+                          Chip(
+                            visualDensity: VisualDensity.compact,
+                            label: Text('State: $stateLabel', style: TextStyle(color: stateColor)),
+                          ),
+                          _MetricChip(
+                            label: 'Pattern',
+                            value: patternType,
+                          ),
+                          _MetricChip(
+                            label: 'Nearest Zone',
+                            value: nearestMagnetValue,
+                          ),
+                          _MetricChip(
+                            label: 'Concept',
+                            value: primaryTradeConcept,
+                          ),
+                        ],
+                      );
+                    },
+                    loading: () => const LinearProgressIndicator(),
+                    error: (_, __) => const Text('Direction data unavailable'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
           // B) Engine Status — Rail permissions, hazard, TABLE/approval (doc: Final Decision, Rail permissions)
           _AnimatedCard(
             child: Padding(

@@ -620,6 +620,27 @@ public sealed class SignalPollingBackgroundService(
                     },
                     cancellationToken: stoppingToken);
 
+                // State machine: ZONE_WATCH_ACTIVE detection
+                var refreshedCandidateForState = setupLifecycleStore.GetCandidate(snapshot.Symbol);
+                if (refreshedCandidateForState != null && decisionStackResult.PathState == PathState.Overextended)
+                {
+                    await timeline.WriteAsync(
+                        eventType: "ZONE_WATCH_ACTIVE",
+                        stage: "state_machine",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            state = "ZONE_WATCH_ACTIVE",
+                            pathState = decisionStackResult.PathState,
+                            reasonCode = decisionStackResult.ReasonCode,
+                            note = "Price approaching valid zone, waiting for flush",
+                        },
+                        cancellationToken: stoppingToken);
+                }
+
                 var todayUtc = DateTimeOffset.UtcNow.Date;
                 if (todayUtc > _lastDailySummaryDate)
                 {
@@ -825,6 +846,41 @@ public sealed class SignalPollingBackgroundService(
                             candidateBase = candidateBase,
                             candidateLid = candidateLid,
                             expiryMinutes = candidateExpiryMinutes,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    // State machine: CANDIDATE -> ARMED
+                    await timeline.WriteAsync(
+                        eventType: "CANDIDATE",
+                        stage: "state_machine",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            state = "CANDIDATE",
+                            pathType = decisionStackResult.PathState,
+                            candidateBase = candidateBase,
+                            candidateLid = candidateLid,
+                            confidenceScore = decisionStackResult.ConfidenceScore.Score,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    await timeline.WriteAsync(
+                        eventType: "ARMED",
+                        stage: "state_machine",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            state = "ARMED",
+                            pathType = decisionStackResult.PathState,
+                            candidateBase = candidateBase,
+                            candidateLid = candidateLid,
+                            expiryWindow = DateTimeOffset.UtcNow.AddMinutes(candidateExpiryMinutes),
                         },
                         cancellationToken: stoppingToken);
                 }
@@ -1117,6 +1173,210 @@ public sealed class SignalPollingBackgroundService(
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
+
+                // ── ANALYZE ENGINE integration ────────────────────────────────────────────────
+                // Run ANALYZE engine to produce intelligence layer output
+                var sessionForAnalyze = SessionEngine.Resolve(snapshot.Mt5ServerTime);
+                var indicatorsForAnalyze = IndicatorEngine.Calculate(snapshot, sessionForAnalyze);
+                var structureForAnalyze = StructureEngine.Analyze(snapshot, indicatorsForAnalyze, sessionForAnalyze);
+                var volatilityForAnalyze = VolatilityRegimeEngine.Analyze(snapshot, indicatorsForAnalyze, structureForAnalyze);
+                var waterfallForAnalyze = WaterfallCrisisEngine.Analyze(snapshot, indicatorsForAnalyze, structureForAnalyze, volatilityForAnalyze);
+                var newsForAnalyze = NewsEngine.Process(snapshot, waterfallForAnalyze, volatilityForAnalyze, sessionForAnalyze);
+                var historicalForAnalyze = HistoricalPatternEngine.Process(snapshot, indicatorsForAnalyze, structureForAnalyze, sessionForAnalyze);
+                var verifyForAnalyze = VerifyEngine.Process(snapshot, structureForAnalyze, sessionForAnalyze);
+                var capitalForAnalyze = CapitalUtilizationEngine.Process(snapshot, stackLedgerState, indicatorsForAnalyze);
+                var candidateForAnalyze = CandidateEngine.Process(
+                    snapshot,
+                    structureForAnalyze,
+                    volatilityForAnalyze,
+                    waterfallForAnalyze,
+                    newsForAnalyze,
+                    capitalForAnalyze,
+                    historicalForAnalyze,
+                    verifyForAnalyze,
+                    sessionForAnalyze);
+
+                // State machine: EARLY_FLUSH_CANDIDATE detection
+                if (candidateForAnalyze.EarlyFlushCandidate)
+                {
+                    await timeline.WriteAsync(
+                        eventType: "EARLY_FLUSH_CANDIDATE",
+                        stage: "state_machine",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            state = "EARLY_FLUSH_CANDIDATE",
+                            reason = candidateForAnalyze.Reason,
+                            note = "Price flushes into defended deep shelf",
+                        },
+                        cancellationToken: stoppingToken);
+                }
+
+                var analyzeResult = AnalyzeEngine.Process(
+                    snapshot,
+                    structureForAnalyze,
+                    volatilityForAnalyze,
+                    waterfallForAnalyze,
+                    newsForAnalyze,
+                    historicalForAnalyze,
+                    candidateForAnalyze,
+                    indicatorsForAnalyze,
+                    sessionForAnalyze);
+
+                await timeline.WriteAsync(
+                    eventType: "ANALYZE_STARTED",
+                    stage: "analyze",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        bottomType = analyzeResult.BottomType,
+                        patternType = analyzeResult.PatternType,
+                        sweepDetected = structureForAnalyze.HasSweep,
+                        reclaimConfirmed = structureForAnalyze.HasReclaim,
+                        retestHeld = indicatorsForAnalyze.IsCompression,
+                        compressionState = indicatorsForAnalyze.IsCompression ? "COMPRESSION" : "EXPANSION",
+                        expansionState = volatilityForAnalyze.VolatilityState == "EXPANSION" ? "EXPANSION" : "NORMAL",
+                        waterfallRisk = analyzeResult.WaterfallRisk,
+                        railPermission = $"{analyzeResult.RailAStatus}/{analyzeResult.RailBStatus}",
+                        nextLikelyPath = pathProjection.PathBias,
+                        regime = analyzeResult.Regime,
+                        midAirStatus = analyzeResult.MidAirStatus,
+                        railAStatus = analyzeResult.RailAStatus,
+                        railAReason = analyzeResult.RailAReason,
+                        railBStatus = analyzeResult.RailBStatus,
+                        railBReason = analyzeResult.RailBReason,
+                        s1 = analyzeResult.S1,
+                        s2 = analyzeResult.S2,
+                        r1 = analyzeResult.R1,
+                        r2 = analyzeResult.R2,
+                        fail = analyzeResult.Fail,
+                        nearestMagnet = analyzeResult.NearestMagnet,
+                        primaryTradeConcept = analyzeResult.PrimaryTradeConcept,
+                        impulseHarvestScore = analyzeResult.ImpulseHarvestScore,
+                        sessionHistoricalModifier = analyzeResult.SessionHistoricalModifier,
+                    },
+                    cancellationToken: stoppingToken);
+
+                // ── TABLE COMPILER integration ────────────────────────────────────────────────
+                var tableResult = TableCompiler.Compile(
+                    snapshot,
+                    candidateForAnalyze,
+                    analyzeResult,
+                    structureForAnalyze,
+                    volatilityForAnalyze,
+                    waterfallForAnalyze,
+                    newsForAnalyze,
+                    capitalForAnalyze,
+                    historicalForAnalyze,
+                    stackLedgerState,
+                    null);
+
+                if (tableResult.IsValid)
+                {
+                    await timeline.WriteAsync(
+                        eventType: "TABLE_READY",
+                        stage: "table",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            isValid = true,
+                            orderType = tableResult.OrderType,
+                            entry = tableResult.Entry,
+                            tp = tableResult.Tp,
+                            grams = tableResult.Grams,
+                            expiryUtc = tableResult.ExpiryUtc,
+                            projectedMoveNetUSD = tableResult.ProjectedMoveNetUSD,
+                            template = tableResult.Template,
+                        },
+                        cancellationToken: stoppingToken);
+                }
+                else
+                {
+                    await timeline.WriteAsync(
+                        eventType: "NO_TRADE",
+                        stage: "table",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            isValid = false,
+                            reason = tableResult.Reason,
+                        },
+                        cancellationToken: stoppingToken);
+                }
+
+                // ── VALIDATE ENGINE integration ──────────────────────────────────────────────
+                var validateResult = ValidateEngine.Validate(
+                    snapshot,
+                    tableResult,
+                    structureForAnalyze,
+                    volatilityForAnalyze,
+                    newsForAnalyze,
+                    sessionForAnalyze);
+
+                await timeline.WriteAsync(
+                    eventType: "VALIDATE_STARTED",
+                    stage: "validate",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        isValid = validateResult.IsValid,
+                        reason = validateResult.Reason,
+                        expiryValid = tableResult.ExpiryUtc.HasValue && (tableResult.ExpiryUtc.Value - DateTimeOffset.UtcNow).TotalMinutes >= 30,
+                        tpValid = tableResult.Tp.HasValue && tableResult.Tp.Value > snapshot.Bid,
+                        sizeLegal = tableResult.Grams.HasValue && tableResult.Grams.Value >= 100m,
+                        regimeCoherent = validateResult.IsValid,
+                        capacityLegal = capitalForAnalyze.AffordableFlag,
+                        safetyPass = validateResult.IsValid && !waterfallForAnalyze.ShouldBlock,
+                        downgrades = validateResult.Downgrades,
+                        resizeApplied = validateResult.ResizeApplied,
+                        validatedOrder = validateResult.ValidatedOrder != null ? new
+                        {
+                            orderType = validateResult.ValidatedOrder.OrderType,
+                            entry = validateResult.ValidatedOrder.Entry,
+                            tp = validateResult.ValidatedOrder.Tp,
+                            grams = validateResult.ValidatedOrder.Grams,
+                        } : null,
+                    },
+                    cancellationToken: stoppingToken);
+
+                // ── Governance / VERIFY / NEWS visibility ────────────────────────────────────
+                await timeline.WriteAsync(
+                    eventType: "GOVERNANCE_STATE",
+                    stage: "governance",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        verifyState = verifyForAnalyze.VerifyState,
+                        verifyReason = verifyForAnalyze.VerifyReason,
+                        newsState = newsForAnalyze.OverallMODE,
+                        newsHazardWindowActive = newsForAnalyze.HazardWindowActive,
+                        newsRailAPermission = newsForAnalyze.RailAPermission,
+                        newsRailBPermission = newsForAnalyze.RailBPermission,
+                        macroState = snapshot.TelegramState,
+                        telegramState = snapshot.TelegramState,
+                        telegramImpactTag = snapshot.TelegramImpactTag,
+                        riskRailLockdown = waterfallForAnalyze.ShouldBlock ? "BLOCKED" : "ALLOWED",
+                        riskRailReason = waterfallForAnalyze.ShouldBlock ? waterfallForAnalyze.Reason : null,
+                    },
+                    cancellationToken: stoppingToken);
 
                 var newsRisk = await economicNews.AssessAsync(snapshot.Timestamp, stoppingToken);
                 await timeline.WriteAsync(
