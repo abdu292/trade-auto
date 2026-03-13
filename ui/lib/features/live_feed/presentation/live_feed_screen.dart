@@ -374,6 +374,7 @@ final _preferredKeys = <String, List<String>>{
   'AI_ANALYZE_RESPONSE': ['rail', 'disagreementReason'],
   'MT5_MARKET_SNAPSHOT_RECEIVED': ['session', 'sessionPhase', 'bid', 'ask'],
   'CYCLE_STARTED': ['symbol'],
+  'CYCLE_ABORTED': ['reason', 'regime', 'regimeReason', 'snapshotSession', 'mappedSession'],
   'BLOCKED_VALID_SETUP_CANDIDATE': ['cause', 'tradeScore', 'session'],
   'RULE_ENGINE_ABORT': ['abortReason'],
   'STUDY_REFINEMENT_RESULT': [

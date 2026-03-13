@@ -259,6 +259,20 @@ public sealed class SignalPollingBackgroundService(
                         "NO_TRADE due to disabled session. SnapshotSession={SnapshotSession} MappedSession={MappedSession}",
                         snapshot.Session,
                         normalizedSession.Value);
+                    await timeline.WriteAsync(
+                        eventType: "CYCLE_ABORTED",
+                        stage: "session",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            reason = "SESSION_DISABLED",
+                            snapshotSession = snapshot.Session,
+                            mappedSession = normalizedSession.Value,
+                        },
+                        cancellationToken: stoppingToken);
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -273,6 +287,20 @@ public sealed class SignalPollingBackgroundService(
                         snapshot.Symbol,
                         regime.Regime,
                         regime.Reason);
+                    await timeline.WriteAsync(
+                        eventType: "CYCLE_ABORTED",
+                        stage: "regime",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            reason = "REGIME_BLOCKED",
+                            regime = regime.Regime,
+                            regimeReason = regime.Reason,
+                        },
+                        cancellationToken: stoppingToken);
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
