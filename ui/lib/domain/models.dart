@@ -1120,56 +1120,6 @@ class PendingLevelSummary {
         expiry: _readNullableDateTime(json, 'expiry'),
       );
 }
-/// Single OHLCV candle for chart (from MT5 M15).
-class CandlePoint {
-  const CandlePoint({
-    required this.time,
-    required this.open,
-    required this.high,
-    required this.low,
-    required this.close,
-    this.volume = 0,
-  });
-
-  final DateTime time;
-  final double open;
-  final double high;
-  final double low;
-  final double close;
-  final int volume;
-
-  factory CandlePoint.fromJson(Map<String, dynamic> json) => CandlePoint(
-        time: _readDateTime(json, 'time'),
-        open: _readDouble(json, 'open'),
-        high: _readDouble(json, 'high'),
-        low: _readDouble(json, 'low'),
-        close: _readDouble(json, 'close'),
-        volume: _readInt(json, 'volume'),
-      );
-}
-
-class ChartData {
-  const ChartData({required this.m15});
-
-  final List<CandlePoint> m15;
-
-  factory ChartData.fromJson(Map<String, dynamic> json) {
-    final raw = json['m15'];
-    final list = <CandlePoint>[];
-    if (raw is List) {
-      for (final e in raw) {
-        if (e is Map<String, dynamic>) {
-          list.add(CandlePoint.fromJson(e));
-        } else if (e is Map) {
-          list.add(CandlePoint.fromJson(
-              e.map((k, v) => MapEntry(k.toString(), v))));
-        }
-      }
-    }
-    return ChartData(m15: list);
-  }
-}
-
 String _readString(Map<String, dynamic> json, String key) {
   final value = json[key] ?? json[_pascal(key)] ?? '';
   return value.toString();

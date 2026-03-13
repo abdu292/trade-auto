@@ -322,12 +322,6 @@ class BrainApi {
     final response = await _dio.get('/api/monitoring/dashboard');
     return GoldDashboard.fromJson(_asMap(response.data));
   }
-
-  /// M15 candlestick data from MT5 for dashboard chart.
-  Future<ChartData> getChartData() async {
-    final response = await _dio.get('/api/monitoring/chart-data');
-    return ChartData.fromJson(_asMap(response.data));
-  }
 }
 
 Map<String, dynamic> _asMap(dynamic data) {

@@ -32,7 +32,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       ..invalidate(timelineProvider)
       ..invalidate(sessionsProvider)
       ..invalidate(runtimeStatusProvider)
-      ..invalidate(kpiProvider);
+      ..invalidate(kpiProvider)
+      ..invalidate(goldDashboardProvider);
   }
 
   @override

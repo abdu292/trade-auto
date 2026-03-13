@@ -53,7 +53,9 @@ class FilterDialog extends ConsumerWidget {
 
               // determine current session from runtime status
               final curr = runtime.maybeWhen(
-                  data: (rs) => rs.session.toUpperCase(), orElse: () => null);
+                data: (rs) => rs.session.toUpperCase(),
+                orElse: () => null,
+              );
 
               return Column(
                 mainAxisSize: MainAxisSize.min,
@@ -70,31 +72,34 @@ class FilterDialog extends ConsumerWidget {
                       }
                     },
                   ),
-                  if (curr != null && curr.isNotEmpty)
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('Only current session ($curr)'),
-                      value: settings.sessions.length == 1 &&
-                          settings.sessions.contains(curr),
-                      onChanged: (v) {
-                        if (v == true) {
-                          ref
-                              .read(liveFeedFilterProvider.notifier)
-                              .clearSessions();
-                          ref
-                              .read(liveFeedFilterProvider.notifier)
-                              .toggleSession(curr);
-                        } else {
-                          ref
-                              .read(liveFeedFilterProvider.notifier)
-                              .clearSessions();
-                        }
-                      },
-                    ),
                   for (final s in sorted)
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text(s),
+                      title: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(child: Text(s)),
+                          if (curr != null && curr.isNotEmpty && curr == s)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Material(
+                                color: Theme.of(context).colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(10),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  child: Text(
+                                    'Current session',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                       value: settings.sessions.contains(s),
                       onChanged: (v) {
                         ref

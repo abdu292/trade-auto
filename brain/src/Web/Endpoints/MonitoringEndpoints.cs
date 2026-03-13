@@ -26,25 +26,6 @@ public static class MonitoringEndpoints
             .WithName("GetLedgerState")
             .WithDescription("Returns deterministic ledger state with extended capital metrics (cash, gold, equity, compounding).");
 
-        monitoring.MapGet(
-            "/chart-data",
-            IResult (IChartDataStore chartDataStore) =>
-            {
-                var candles = chartDataStore.GetM15Candles();
-                var payload = candles.Select(c => new
-                {
-                    time = c.Time,
-                    open = c.Open,
-                    high = c.High,
-                    low = c.Low,
-                    close = c.Close,
-                    volume = c.Volume,
-                }).ToList();
-                return TypedResults.Ok(new { m15 = payload });
-            })
-            .WithName("GetChartData")
-            .WithDescription("Returns recent M15 candlestick data from MT5 for dashboard chart.");
-
         // Spec v7 §10 — Gold Engine dashboard: Physical Ledger card, MT5 Execution card, factor state panel, trade-map, validation summary, execution mode
         monitoring.MapGet(
             "/dashboard",

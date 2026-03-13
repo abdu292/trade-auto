@@ -1,38 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fl_chart/fl_chart.dart';
 
 import '../../../presentation/app_providers.dart';
-import '../../../domain/models.dart';
-
-String _sessionPhase(String session, DateTime? ksaTime) {
-  if (ksaTime == null) return '';
-  final h = ksaTime.hour;
-  switch (session) {
-    case 'JAPAN':
-      if (h >= 3 && h < 5) return 'EARLY';
-      if (h >= 5 && h < 8) return 'MID';
-      if (h >= 8 && h < 10) return 'PEAK';
-      return 'LATE';
-    case 'INDIA':
-      if (h >= 7 && h < 9) return 'EARLY';
-      if (h >= 9 && h < 11) return 'MID';
-      if (h >= 11 && h < 14) return 'PEAK';
-      return 'LATE';
-    case 'LONDON':
-      if (h >= 10 && h < 12) return 'EARLY';
-      if (h >= 12 && h < 14) return 'MID';
-      if (h >= 14 && h < 17) return 'PEAK';
-      return 'LATE';
-    case 'NY':
-      if (h >= 15 && h < 16) return 'EARLY';
-      if (h >= 16 && h < 18) return 'MID';
-      if (h >= 18 && h < 22) return 'PEAK';
-      return 'LATE';
-    default:
-      return '';
-  }
-}
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key, required this.isEmergencyPaused});
@@ -51,8 +20,6 @@ class DashboardScreen extends ConsumerWidget {
     final goldDashboard = ref.watch(goldDashboardProvider);
     final hazardWindows = ref.watch(hazardWindowsProvider);
 
-    final chartData = ref.watch(chartDataProvider);
-
     Future<void> refresh() async {
       ref
         ..invalidate(healthProvider)
@@ -62,8 +29,7 @@ class DashboardScreen extends ConsumerWidget {
         ..invalidate(notificationsProvider)
         ..invalidate(kpiProvider)
         ..invalidate(hazardWindowsProvider)
-        ..invalidate(goldDashboardProvider)
-        ..invalidate(chartDataProvider);
+        ..invalidate(goldDashboardProvider);
     }
 
     return RefreshIndicator(
@@ -98,171 +64,6 @@ class DashboardScreen extends ConsumerWidget {
                           ? 'Emergency pause is ON'
                           : 'Automation is active',
                       style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Live Market & EA View — rate, indicators, DXY/Silver, levels (client validation)
-          _AnimatedCard(
-            child: goldDashboard.when(
-              data: (dash) {
-                final v = dash.validationSummary;
-                final mt5 = dash.mt5ExecutionAccount;
-                final map = dash.tradeMapChart;
-                return Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Live Market & EA View',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Rate now at ${mt5.bid.toStringAsFixed(2)}. EA plants BUY_LIMIT below market for V-setups; BUY_STOP for breakouts. Multi-timeframe (not M5 only).',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 10, horizontal: 12),
-                              decoration: BoxDecoration(
-                                color: colorScheme.errorContainer
-                                    .withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                    color: colorScheme.error, width: 1),
-                              ),
-                              child: Text(
-                                'SELL ${mt5.bid.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.error),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 10, horizontal: 12),
-                              decoration: BoxDecoration(
-                                color: colorScheme.primaryContainer
-                                    .withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                    color: colorScheme.primary, width: 1),
-                              ),
-                              child: Text(
-                                'BUY ${mt5.ask.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.primary),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (v != null) ...[
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            _MetricChip(
-                                label: 'RSI H1',
-                                value: v.indicators.rsiH1.toStringAsFixed(1)),
-                            _MetricChip(
-                                label: 'RSI M15',
-                                value: v.indicators.rsiM15.toStringAsFixed(1)),
-                            _MetricChip(
-                                label: 'MA20 H1',
-                                value: v.indicators.ma20H1.toStringAsFixed(2)),
-                            _MetricChip(
-                                label: 'ATR M15',
-                                value: v.indicators.atrM15.toStringAsFixed(2)),
-                            _MetricChip(
-                                label: 'DXY',
-                                value: v.dxyState),
-                            _MetricChip(
-                                label: 'Silver/Cross-metal',
-                                value: v.silverCrossMetalState),
-                          ],
-                        ),
-                        if (v.historicalComparison != null &&
-                            v.historicalComparison!.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            v.historicalComparison!,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ],
-                      const SizedBox(height: 8),
-                      Text(
-                        'Levels: Bases ${map.bases.map((e) => e.toStringAsFixed(0)).join(', ')}; Session ${map.sessionLow.toStringAsFixed(0)}–${map.sessionHigh.toStringAsFixed(0)}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      if (map.pendingBuyLimit.isNotEmpty)
-                        Text(
-                          'BUY_LIMIT: ${map.pendingBuyLimit.map((p) => p.price.toStringAsFixed(0)).join(', ')} (below market)',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      if (map.pendingBuyStop.isNotEmpty)
-                        Text(
-                          'BUY_STOP: ${map.pendingBuyStop.map((p) => p.price.toStringAsFixed(0)).join(', ')} (flying rates)',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                    ],
-                  ),
-                );
-              },
-              loading: () => const Padding(
-                padding: EdgeInsets.all(16),
-                child: LinearProgressIndicator(),
-              ),
-              error: (e, _) => Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text('Market view error: $e'),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // M15 candlestick chart (data from MT5)
-          _AnimatedCard(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'XAUUSD M15',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 220,
-                    child: chartData.when(
-                      data: (data) {
-                        if (data.m15.isEmpty) {
-                          return const Center(
-                              child: Text(
-                                  'No chart data yet. Attach EA to MT5 chart.'));
-                        }
-                        return _CandlestickChart(candles: data.m15);
-                      },
-                      loading: () =>
-                          const Center(child: LinearProgressIndicator()),
-                      error: (e, _) => Center(child: Text('Chart: $e')),
                     ),
                   ),
                 ],
@@ -428,15 +229,21 @@ class DashboardScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
 
-          // B) Quick Decision Panel
+          // B) Engine Status — Rail permissions, hazard, TABLE/approval (doc: Final Decision, Rail permissions)
           _AnimatedCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Quick Decision',
+                  Text('Engine Status',
                       style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'Rail permissions, hazard windows, and TABLE/approval state. Pull to refresh for latest.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                  ),
                   const SizedBox(height: 8),
                   runtime.when(
                     data: (rt) {
@@ -476,8 +283,6 @@ class DashboardScreen extends ConsumerWidget {
                       final noTrade =
                           rt.panicSuspected || hazardActive || isSellSignal;
 
-                      final phase = _sessionPhase(rt.session, rt.ksaTime);
-
                       // Next hazard window – show start time (static, no stale countdown)
                       final nextHazardText = hazardWindows.whenOrNull(
                         data: (windows) {
@@ -509,10 +314,15 @@ class DashboardScreen extends ConsumerWidget {
                             runSpacing: 8,
                             children: [
                               _MetricChip(
-                                  label: 'Session',
-                                  value: phase.isNotEmpty
-                                      ? '${rt.session} · $phase'
-                                      : rt.session),
+                                label: 'Session',
+                                value: rt.session,
+                              ),
+                              if (rt.ksaTime != null)
+                                _MetricChip(
+                                  label: 'KSA Time',
+                                  value:
+                                      '${rt.ksaTime!.hour.toString().padLeft(2, '0')}:${rt.ksaTime!.minute.toString().padLeft(2, '0')}',
+                                ),
                               _MetricChip(
                                   label: 'Mode', value: rt.macroBias),
                               _MetricChip(
@@ -617,72 +427,7 @@ class DashboardScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
 
-          // E) Compounding Tracker
-          _AnimatedCard(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Compounding Tracker (4x)',
-                      style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  kpi.when(
-                    data: (stats) {
-                      final c = stats.compounding;
-                      final progress = (c.multiple / 4.0).clamp(0.0, 1.0);
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _RowLabel(
-                              label: 'Starting Investment',
-                              value:
-                                  'AED ${c.startingInvestmentAed.toStringAsFixed(2)}'),
-                          _RowLabel(
-                              label: 'Current Equity',
-                              value:
-                                  'AED ${c.currentEquityAed.toStringAsFixed(2)}'),
-                          _RowLabel(
-                              label: 'Multiple',
-                              value: '${c.multiple.toStringAsFixed(2)}x'),
-                          const SizedBox(height: 8),
-                          LinearProgressIndicator(
-                            value: progress,
-                            backgroundColor:
-                                colorScheme.surfaceContainerHighest,
-                            color: c.milestoneReached
-                                ? colorScheme.tertiary
-                                : colorScheme.primary,
-                            minHeight: 10,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          const SizedBox(height: 6),
-                          if (c.milestoneReached)
-                            Text(
-                              '🎉 4x REACHED — Ready to Pull Original Capital',
-                              style: TextStyle(
-                                  color: colorScheme.tertiary,
-                                  fontWeight: FontWeight.bold),
-                            )
-                          else
-                            Text(
-                              '4x Target: AED ${c.neededForFourXAed.toStringAsFixed(2)} remaining',
-                              style:
-                                  Theme.of(context).textTheme.bodySmall,
-                            ),
-                        ],
-                      );
-                    },
-                    loading: () => const LinearProgressIndicator(),
-                    error: (error, _) => Text('KPI error: $error'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // F) Today's Performance
+          // E) Today's Performance
           _AnimatedCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -926,27 +671,6 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-class _RowLabel extends StatelessWidget {
-  const _RowLabel({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-}
-
 class _MetricChip extends StatelessWidget {
   const _MetricChip({required this.label, required this.value});
 
@@ -973,104 +697,6 @@ class _AnimatedCard extends StatelessWidget {
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       child: Card(child: child),
-    );
-  }
-}
-
-class _CandlestickChart extends StatelessWidget {
-  const _CandlestickChart({required this.candles});
-
-  final List<CandlePoint> candles;
-
-  @override
-  Widget build(BuildContext context) {
-    if (candles.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    final minPrice = candles.map((c) => c.low).reduce((a, b) => a < b ? a : b);
-    final maxPrice = candles.map((c) => c.high).reduce((a, b) => a > b ? a : b);
-    final padding = (maxPrice - minPrice) * 0.05;
-    final minY = (minPrice - padding).toDouble();
-    final maxY = (maxPrice + padding).toDouble();
-    final colorScheme = Theme.of(context).colorScheme;
-
-    final barGroups = <BarChartGroupData>[];
-    for (var i = 0; i < candles.length; i++) {
-      final c = candles[i];
-      final isUp = c.close >= c.open;
-      final bodyTop = (c.close > c.open ? c.close : c.open).toDouble();
-      final bodyBottom = (c.close < c.open ? c.close : c.open).toDouble();
-      final wickColor = colorScheme.outline.withValues(alpha: 0.6);
-      final bodyColor = isUp ? colorScheme.primary : colorScheme.error;
-      barGroups.add(
-        BarChartGroupData(
-          x: i,
-          barRods: [
-            BarChartRodData(
-              fromY: c.low.toDouble(),
-              toY: c.high.toDouble(),
-              width: 2,
-              color: wickColor,
-            ),
-            BarChartRodData(
-              fromY: bodyBottom,
-              toY: bodyTop,
-              width: 6,
-              color: bodyColor,
-            ),
-          ],
-          showingTooltipIndicators: [],
-        ),
-      );
-    }
-
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        minY: minY,
-        maxY: maxY,
-        barGroups: barGroups,
-        titlesData: FlTitlesData(
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 42,
-              getTitlesWidget: (value, meta) => Text(
-                value.toStringAsFixed(0),
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          ),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 24,
-              getTitlesWidget: (value, meta) {
-                final idx = value.toInt();
-                if (idx >= 0 && idx < candles.length) {
-                  final t = candles[idx].time;
-                  return Text(
-                    '${t.month}/${t.day} ${t.hour}:${t.minute.toString().padLeft(2, '0')}',
-                    style: TextStyle(
-                      color: colorScheme.onSurface,
-                      fontSize: 9,
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
-          ),
-        ),
-        gridData: FlGridData(show: true, drawVerticalLine: false),
-        borderData: FlBorderData(show: false),
-      ),
-      duration: Duration.zero,
     );
   }
 }
