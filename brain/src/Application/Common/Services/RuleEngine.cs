@@ -142,6 +142,75 @@ public static class RuleEngine
     /// <summary>Spec v7 — Layer 2 exposed for path-aware decision stack.</summary>
     public static M15SetupResult EvaluateM15Setup(MarketSnapshotContract snapshot) => EvaluateM15SetupImpl(snapshot);
 
+    /// <summary>
+    /// Structure Engine per spec/00_instructions
+    /// Builds S1, S2, R1, R2, FAIL and detects shelf, lid, sweep, reclaim, mid-air zones
+    /// </summary>
+    public static StructureResult EvaluateStructure(MarketSnapshotContract snapshot)
+    {
+        // Calculate support levels (S1, S2, S3)
+        var s1 = snapshot.SessionLow > 0m ? snapshot.SessionLow : snapshot.PreviousSessionLow;
+        decimal? s2 = null;
+        decimal? s3 = null;
+
+        if (snapshot.PreviousSessionLow > 0m && snapshot.PreviousSessionLow < s1)
+        {
+            s2 = snapshot.PreviousSessionLow;
+        }
+        if (snapshot.PreviousDayLow > 0m && snapshot.PreviousDayLow < (s2 ?? s1))
+        {
+            s3 = snapshot.PreviousDayLow;
+        }
+
+        // Calculate resistance levels (R1, R2)
+        var r1 = snapshot.SessionHigh > 0m ? snapshot.SessionHigh : snapshot.PreviousSessionHigh;
+        decimal? r2 = null;
+
+        if (snapshot.PreviousSessionHigh > 0m && snapshot.PreviousSessionHigh > r1)
+        {
+            r2 = snapshot.PreviousSessionHigh;
+        }
+        if (snapshot.WeeklyHigh > 0m && snapshot.WeeklyHigh > (r2 ?? r1))
+        {
+            r2 = snapshot.WeeklyHigh;
+        }
+
+        // Calculate FAIL (ADR exhaustion threshold)
+        decimal? fail = null;
+        var failThreatened = snapshot.AdrUsedPct >= 85m;
+        var failBroken = snapshot.AdrUsedPct >= 100m;
+
+        if (failThreatened || failBroken)
+        {
+            // FAIL is typically below the lowest support
+            fail = s3 ?? s2 ?? (s1 > 0m ? s1 * 0.995m : null);
+        }
+
+        // Detect structure elements
+        var hasShelf = s1 > 0m || s2.HasValue;
+        var hasLid = r1 > 0m;
+        var hasSweep = snapshot.HasLiquiditySweep;
+        var hasReclaim = snapshot.HasOverlapCandles && hasSweep;
+        var hasCompression = snapshot.IsCompression;
+        var isMidAir = !hasShelf && snapshot.Bid < snapshot.Ma20;
+
+        return new StructureResult(
+            S1: s1 > 0m ? s1 : null,
+            S2: s2,
+            S3: s3,
+            R1: r1 > 0m ? r1 : null,
+            R2: r2,
+            Fail: fail,
+            FailThreatened: failThreatened,
+            FailBroken: failBroken,
+            HasShelf: hasShelf,
+            HasLid: hasLid,
+            HasSweep: hasSweep,
+            HasReclaim: hasReclaim,
+            HasCompression: hasCompression,
+            IsMidAir: isMidAir);
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // Layer 2 — M15 Setup
     // Identifies structural trade opportunities via compression or base formation.

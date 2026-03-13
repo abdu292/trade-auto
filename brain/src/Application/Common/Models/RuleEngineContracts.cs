@@ -85,6 +85,22 @@ public sealed record ReplayCandle(
     decimal Close,
     long Volume);
 
+public sealed record StructureResult(
+    decimal? S1,
+    decimal? S2,
+    decimal? S3,
+    decimal? R1,
+    decimal? R2,
+    decimal? Fail,
+    bool FailThreatened,
+    bool FailBroken,
+    bool HasShelf,
+    bool HasLid,
+    bool HasSweep,
+    bool HasReclaim,
+    bool HasCompression,
+    bool IsMidAir);
+
 public sealed record ReplayStartRequest(
     string Symbol = "XAUUSD.gram",
     DateTimeOffset? From = null,
