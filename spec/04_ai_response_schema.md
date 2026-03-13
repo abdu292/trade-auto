@@ -1,0 +1,54 @@
+# بسم الله الرحمن الرحيم
+# SHARED AI RESPONSE SCHEMA
+Version: FINAL-v2.0
+
+All models must return JSON only.
+
+## Common Enums
+decision:
+- NO_TRADE
+- TRADE_TABLE
+- SAFE_TABLE
+- KEEP_TABLE
+- NO_EXECUTION
+- EXECUTE_OK
+
+path:
+- BUY_LIMIT
+- BUY_STOP
+
+rail_a_legal:
+- YES
+- ONLY_AFTER_STRUCTURE
+- NO
+
+rail_b_legal:
+- YES
+- STRICT
+- NO
+
+candidate_state:
+- NONE
+- FORMING
+- ZONE_WATCH_ACTIVE
+- EARLY_FLUSH_CANDIDATE
+- CANDIDATE
+- ARMED
+- PENDING_PLANTED
+- FILLED
+- PASSED
+- OVEREXTENDED
+- REQUALIFIED
+- INVALIDATED
+
+bottom_type:
+- CLASSIC_RECLAIM_BOTTOM
+- FLUSH_ABSORPTION_BOTTOM
+- PANIC_TO_REBUILD_BOTTOM
+- NONE
+
+volatility_state:
+- COMPRESSED
+- NORMAL
+- EXPANSION
+- EXHAUSTION

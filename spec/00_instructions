@@ -1,0 +1,1154 @@
+
+Use BOT (set 1 & 2), but they serve different purposes.
+
+========== set 2 starts here =========
+
+The Physical Gold Final Pack is the MASTER SPECIFICATION.
+The new Integration Map + Final Patch I sent is the IMPLEMENTATION CLARIFICATION.
+
+Think of it like this:
+
+Physical Gold Final Pack = SYSTEM CONSTITUTION
+Integration Map + Final Patch = ENGINEERING WIRING GUIDE
+
+They are not competing documents.
+
+--------------------------------------------------
+
+1) PHYSICAL GOLD FINAL PACK
+
+This is the source of truth for the system itself.
+
+It defines:
+
+• trading philosophy
+• buy-only physical bullion model
+• capital and ledger law
+• SLIPS accounting
+• decision state machine
+• waterfall detection
+• TABLE compiler logic
+• AI orchestration hierarchy
+• external signal policy
+• safety rules
+• profit model philosophy
+
+Example files in the pack:
+
+01_master_constitution.md  
+02_ea_architecture_blueprint.md  
+03_decision_state_machine.md  
+12_table_compiler_spec.md  
+13_waterfall_detection_engine.md  
+10_external_signal_integration.md  
+
+So this pack defines WHAT the system is.
+
+--------------------------------------------------
+
+2) INTEGRATION MAP + FINAL PATCH
+
+This does not replace the Final Pack.
+
+It only clarifies HOW the modules connect in runtime
+and includes later refinements that were added after the pack was written.
+
+Specifically it adds explicit implementation details for:
+
+• ZONE_WATCH_ACTIVE
+• EARLY_FLUSH_CANDIDATE
+• bottom grammar
+• FLUSH_LIMIT_CAPTURE template
+• HISTORICAL_PATTERN_ENGINE
+• IMPULSE_HARVEST_MODE
+• VERIFY as external-signal parser
+• projectedMoveNetUSD profit filter
+• exact runtime module ordering
+
+It basically explains how the pack should be wired into the EA.
+
+--------------------------------------------------
+
+3) HOW TO USE THEM TOGETHER
+
+Implementation rule:
+
+1) Use the Physical Gold Final Pack as the system law.
+2) Use the Integration Map / Patch as the coding architecture layer.
+
+So your workflow should be:
+
+Final Pack
+→ defines system rules and modules
+
+Integration Map
+→ defines runtime flow and module connections
+
+EA Code
+→ implements both.
+
+--------------------------------------------------
+
+4) PRIORITY RULE
+
+If there is ever a conflict:
+
+Physical Gold Final Pack > Integration Patch
+
+because the pack is the constitutional spec.
+
+But in practice they should not conflict — the patch only clarifies missing wiring details.
+
+--------------------------------------------------
+
+5) SIMPLE SUMMARY
+
+Final Pack = WHAT the system must do.
+
+Integration Patch = HOW the modules should be wired.
+
+EA code = IMPLEMENTATION of both.
+
+--------------------------------------------------
+
+So please use BOTH together when building the EA.
+
+
+Set 1 = Spec 01 to 14 under spec folder
+Set 2 = below message.
+
+
+
+بسم الله الرحمن الرحيم
+
+Please treat this as the final unified implementation note together with the attached “FINAL INTEGRATION MAP”.
+
+This is the complete integration direction for the physical-gold EA, including:
+- deterministic execution spine,
+- short-prompt roles,
+- later flush/zone-watch refinements,
+- historical pattern engine,
+- impulse harvest mode,
+- external signal handling,
+- hard profit filters,
+- management / learning loops.
+
+============================================================
+1) CORE PRINCIPLE
+============================================================
+
+The system must remain:
+
+- deterministic EA core first,
+- prompt layers second,
+- TABLE as the only execution compiler,
+- MT5 as the final order placement layer.
+
+Meaning:
+
+- no raw AI output may create an order,
+- no Telegram / TradingView message may create an order,
+- no single module may bypass FAIL / waterfall / hazard / capital legality.
+
+The prompt stack exists to:
+- interpret,
+- classify,
+- prioritize,
+- validate,
+- learn,
+not to replace the deterministic spine.
+
+============================================================
+2) FINAL LIVE FLOW
+============================================================
+
+Use this exact runtime flow:
+
+1. MT5 snapshot ingestion
+2. Session engine
+3. Indicator engine
+4. Structure engine
+5. Volatility / regime engine
+6. Waterfall / crisis engine
+7. Hard legality checks
+8. VERIFY
+9. NEWS
+10. CAPITAL UTILIZATION
+11. HISTORICAL_PATTERN_ENGINE
+12. Candidate Engine
+13. ANALYZE
+14. TABLE
+15. VALIDATE
+16. Final Decision Engine
+17. MT5 Execution
+18. MANAGE / RE-ANALYZE
+19. SLIPS
+20. STUDY / SELF-CROSSCHECK / ENGINE HEALTH
+
+============================================================
+3) WHAT EACH LAYER DOES
+============================================================
+
+A) MT5 / FEEDS / LEDGER / HISTORY INPUTS
+Inputs:
+- MT5 ticks, OHLC, spread, slippage, open/pending orders
+- structured calendar/news feed
+- Telegram / TradingView advisory signals
+- ledger + slips
+- 10+ year historical behavior store
+
+These are raw inputs only.
+
+------------------------------------------------------------
+
+B) SESSION ENGINE
+Purpose:
+- convert server/KSA/India time into:
+  - Japan
+  - India
+  - London
+  - New York
+  - transition
+- tag phase:
+  - start
+  - mid
+  - end
+
+This is contextual only.
+Session never overrides safety.
+
+------------------------------------------------------------
+
+C) INDICATOR ENGINE
+Purpose:
+- calculate ATR, RSI, MA20, Bands, ADR used, overlap/compression behavior, session highs/lows
+- produce local deterministic features used by structure and volatility engines
+
+------------------------------------------------------------
+
+D) STRUCTURE ENGINE
+Purpose:
+- build:
+  - S1
+  - S2
+  - R1
+  - R2
+  - FAIL
+- detect:
+  - shelf
+  - lid
+  - sweep
+  - reclaim
+  - mid-air zones
+
+This is the geometric truth layer of the system.
+
+------------------------------------------------------------
+
+E) VOLATILITY / REGIME ENGINE
+Purpose:
+- classify:
+  - RANGE
+  - RANGE-RELOAD
+  - EXPANSION
+  - EXHAUSTION
+  - LIQUIDATION / SHOCK
+- classify volatility:
+  - NORMAL
+  - EXPANDED
+  - EXTREME
+
+If volatility is EXTREME, new trades should normally be blocked.
+
+------------------------------------------------------------
+
+F) WATERFALL / CRISIS ENGINE
+Purpose:
+- distinguish:
+  - WATERFALL_CONTINUATION
+  - FLUSH_REVERSAL_ATTEMPT
+- trigger crisis veto when needed
+
+This is a hard blocker.
+If waterfall/crisis says NO, nothing below may force a trade.
+
+------------------------------------------------------------
+
+G) HARD LEGALITY LAYER
+Purpose:
+- enforce:
+  - exposure law
+  - slots law
+  - ledger legality
+  - pre-block windows
+  - hazard veto
+  - affordability
+
+If legality fails, the path ends there.
+
+============================================================
+4) SHORT PROMPTS → EXACT RUNTIME ROLES
+============================================================
+
+A) VERIFY
+Position:
+- after deterministic engines, before NEWS / candidate prioritization
+
+Role:
+- credibility filter
+- external signal parser
+
+Inputs:
+- Telegram
+- TradingView
+- other external advisory items
+
+Outputs:
+- credibility_class
+- style_tag
+- advisory_weight
+- zone_low / zone_high
+- sl_hint
+- tp_pips_list
+- telegramZoneAligned / tvZoneAligned
+- candidatePriority modifier
+- confidenceScore modifier
+- impulseHarvestScore modifier
+
+Hard law:
+- VERIFY never creates a trade
+- VERIFY never overrides FAIL / waterfall / hazard
+- VERIFY may only help already-legal candidates get attention first
+
+------------------------------------------------------------
+
+B) NEWS
+Position:
+- after VERIFY
+
+Role:
+- environment and permission interpreter
+
+NEWS must output:
+- VerificationDepth
+- LiquidityQuality
+- hazardWindowActive
+- NextTier1UltraWithin90m / 45m
+- GlobalRegime
+- TradingRegime
+- SpikeState
+- WaterfallRisk
+- OverallMODE
+- MacroBiasForGold
+- Rail-A permission
+- Rail-B permission
+- MinutesToNextCleanWindow
+
+Important:
+The raw feed tells us when news exists.
+NEWS tells us what that environment means for gold.
+
+------------------------------------------------------------
+
+C) CAPITAL UTILIZATION
+Position:
+- before candidate arming and again inside TABLE
+
+Role:
+- enforce:
+  - ledger truth
+  - C1 / C2
+  - capacity clamp
+  - slot discipline
+  - sizeState
+  - exposureState
+  - affordableFlag
+
+Hard law:
+- no ARMED candidate if capital is illegal
+- TABLE must reject unaffordable trades
+
+------------------------------------------------------------
+
+D) HISTORICAL_PATTERN_ENGINE
+Position:
+- before candidate promotion and before ANALYZE/TABLE decisioning
+
+Role:
+- inject 10+ year memory into today’s decision
+
+Outputs:
+- historicalPatternTag
+- historicalContinuationScore
+- historicalReversalRisk
+- historicalExtensionBandUSD
+- historicalTrapProbability
+- historicalBestPath
+- sessionHistoricalModifier
+
+Meaning:
+This engine decides whether today is more likely to:
+- rotate normally +8 to +12,
+- continue into +20 / +30 / +50,
+- or trap/exhaust.
+
+------------------------------------------------------------
+
+E) CANDIDATE ENGINE
+Position:
+- after NEWS + CAPITAL + HISTORY
+
+This must now include the later refinements explicitly.
+
+States:
+- NONE
+- FORMING
+- ZONE_WATCH_ACTIVE
+- EARLY_FLUSH_CANDIDATE
+- CANDIDATE
+- ARMED
+- PENDING_PLANTED
+- FILLED
+- PASSED
+- OVEREXTENDED
+- REQUALIFIED
+- INVALIDATED
+
+Meaning:
+- ZONE_WATCH_ACTIVE:
+  when price is approaching S1 / S2 / S3 or aligned external zone
+- EARLY_FLUSH_CANDIDATE:
+  when price flushes into a defended deep shelf and shows provisional bottom behavior before full confirmation
+
+Important mapping rule:
+- if pathState = OVEREXTENDED and reasonCode = WAITPULLBACKBASE but structure remains valid,
+  map this to ZONE_WATCH_ACTIVE rather than pure NOTRADE,
+  so the next flush can promote to EARLY_FLUSH_CANDIDATE instead of starting from zero
+
+This is the key safe-and-early refinement.
+
+------------------------------------------------------------
+
+F) ANALYZE
+Position:
+- after candidate engine
+
+Role:
+- convert environment + structure + history into a TABLE-ready trade map
+
+Must output:
+- Regime
+- WaterfallRisk
+- MID_AIR_STATUS
+- Rail-A status + reason
+- Rail-B status + reason
+- S1 / S2 / R1 / R2 / FAIL
+- current-session anchors
+- next-session anchors
+- nearest magnet
+- primary trade concept
+- rotation envelope
+- trigger objects
+- bottomType
+- patternType
+- impulseHarvestScore
+- sessionHistoricalModifier
+
+Bottom grammar:
+- CLASSIC_RECLAIM
+- FLUSH_ABSORPTION
+- PANIC_TO_REBUILD
+- INVALID
+
+Pattern classifier:
+- WATERFALL_CONTINUATION
+- FLUSH_REVERSAL_ATTEMPT
+
+------------------------------------------------------------
+
+G) TABLE
+Position:
+- after ANALYZE
+
+Role:
+- only legal order builder
+
+TABLE is the only module allowed to create:
+- BUY_LIMIT
+- BUY_STOP
+
+TABLE must re-check:
+- FAIL safety
+- waterfall safety
+- hazard timing
+- candidate freshness
+- structure quality
+- rail permissions
+- capital legality
+- slot limits
+- volatility state
+- reward law
+
+Hard profit laws:
+1. projectedMoveNetUSD must be at least +8 USD
+   - use NET after MT5 spread + bullion handicap
+   - do not use raw price distance only
+
+2. STANDARD_ROTATION_MODE
+   - target +8 to +12 USD
+   - default
+
+3. IMPULSE_HARVEST_MODE
+   - target +20 / +30 / +50 only when explicitly allowed
+
+4. historical extension allowed only when:
+   - IMPULSE_HARVEST_MODE = TRUE
+   - historicalExtensionBandUSD supports it
+   - all safety gates pass
+   - news / volatility / session / cross-asset state agree
+
+TABLE must support a dedicated template:
+
+FLUSH_LIMIT_CAPTURE
+Use when:
+- deep flush into S2 / S3 or equivalent defended shelf
+- bottom type valid
+- pattern = FLUSH_REVERSAL_ATTEMPT
+- WaterfallRisk not HIGH
+- FAIL protected
+- hazard not fatal
+
+Behavior:
+- BUY_LIMIT in upper part of the deep zone
+- default TP band +8 to +12
+- extension only through approved impulse logic
+
+------------------------------------------------------------
+
+H) VALIDATE
+Position:
+- after TABLE
+
+Role:
+- scrub realism and coherence
+
+Checks:
+- expiry realism
+- size realism
+- session-phase realism
+- aggressiveness vs confidence
+- impulse mode coherence
+- net-edge realism
+
+VALIDATE may:
+- downgrade
+- resize
+- reject
+but never invent a trade.
+
+------------------------------------------------------------
+
+I) FINAL DECISION ENGINE
+Position:
+- after VALIDATE
+
+Role:
+- produce only:
+  - YES
+  - NO
+  - WAIT
+with reason codes.
+
+------------------------------------------------------------
+
+J) MT5 EXECUTION
+Position:
+- after final decision
+
+Role:
+- place pending orders only
+- no market buys
+- local final recheck before placement
+
+------------------------------------------------------------
+
+K) MANAGE / RE-ANALYZE
+Position:
+- after execution
+
+Role:
+- supervise pending/live trades
+- keep / cancel / replace
+- re-check TP realism
+- react to hazard or structure changes
+- prevent zombie orders
+
+RE-ANALYZE is for supervision, not fresh entry generation.
+
+------------------------------------------------------------
+
+L) SLIPS
+Position:
+- after fills / exits
+
+Role:
+- create buy/sell slips
+- update ledger
+- preserve bullion truth
+
+------------------------------------------------------------
+
+M) STUDY / SELF-CROSSCHECK / ENGINE HEALTH
+Position:
+- post-trade / post-session / maintenance
+
+Roles:
+- STUDY:
+  blocked-valid setups, missed rotations, waterfall forensics
+- SELF-CROSSCHECK:
+  detect overblocking, excessive paranoia, drift, profit leaks
+- ENGINE HEALTH:
+  regression, rebuild, non-live tuning, architecture preservation
+
+============================================================
+5) IMPULSE HARVEST MODE
+============================================================
+
+Add as an explicit mode with score:
+
+- IMPULSE_BLOCKED
+- CAUTION
+- ALLOWED
+- HIGH_CONFIDENCE
+
+Use in:
+- ANALYZE
+- TABLE
+- VALIDATE
+
+Allow only if:
+- historicalContinuationScore strong
+- sessionHistoricalModifier supportive
+- volatility not exhausted
+- macro and cross-asset context not contradictory
+- safety gates fully pass
+
+This is how the system captures large spikes safely without converting every breakout into reckless chasing.
+
+============================================================
+6) HOW EACH FACTOR AFFECTS GOLD AND WHERE IT IS READ
+============================================================
+
+A) Scheduled USD news
+Examples:
+- CPI
+- Core CPI
+- NFP
+- FOMC
+- Powell
+- PCE
+
+Effect:
+- hazard windows
+- first-leg trap risk
+- post-news harvest opportunities
+- liquidity distortion
+
+Read by:
+- NEWS
+- ANALYZE
+- TABLE
+- MANAGE
+
+------------------------------------------------------------
+
+B) DXY
+Effect:
+- strong DXY often pressures gold
+- weak DXY often supports gold
+
+Read by:
+- NEWS
+- ANALYZE
+- historical / factor layer
+
+------------------------------------------------------------
+
+C) Yields / real yields
+Effect:
+- rising yields often pressure gold
+- falling yields often support gold
+
+Read by:
+- NEWS
+- ANALYZE
+- factor logic
+
+------------------------------------------------------------
+
+D) Oil / silver / cross-assets
+Effect:
+- help confirm or contradict gold impulse quality
+- useful for impulse permission and contradiction checks
+
+Read by:
+- NEWS
+- ANALYZE
+- HISTORICAL_PATTERN_ENGINE
+- impulse score logic
+
+------------------------------------------------------------
+
+E) Geopolitics / shock headlines
+Effect:
+- can create violent safe-haven spikes
+- can also create waterfall/panic traps
+
+Read by:
+- NEWS
+- waterfall/crisis engine
+- ANALYZE
+
+------------------------------------------------------------
+
+F) Session / phase
+Effect:
+- Japan: cleaner range/reload
+- India: retest/rebuild / physical flow character
+- London: stop-hunt / strongest directional expansion
+- New York: highest event/spike potential and trap risk
+
+Read by:
+- session engine
+- ANALYZE
+- TABLE
+- MANAGE
+- HISTORICAL_PATTERN_ENGINE
+
+------------------------------------------------------------
+
+G) Structure itself
+Effect:
+- determines whether a trade is legal at all
+- defines shelves, lids, FAIL, and safe entry zones
+
+Read by:
+- structure engine
+- ANALYZE
+- TABLE
+- MANAGE
+
+============================================================
+7) HOW THIS IMPROVES THE MACHINE
+============================================================
+
+This full integration improves the machine in six direct ways:
+
+1. Earlier safe detection
+- ZONE_WATCH_ACTIVE and EARLY_FLUSH_CANDIDATE stop the engine from being safe-but-late
+
+2. Better reversal discrimination
+- bottom grammar + pattern classifier separate waterfall from valid absorption
+
+3. Better large-spike monetization
+- IMPULSE_HARVEST_MODE + HISTORICAL_PATTERN_ENGINE allow safe extension only when justified
+
+4. Better external signal use
+- VERIFY can absorb Telegram / TradingView without allowing random channels to dictate trades
+
+5. Hard profit discipline
+- TABLE enforces projectedMoveNetUSD >= +8 and blocks weak micro-scalps
+
+6. Better self-improvement
+- STUDY + SELF-CROSSCHECK + ENGINE HEALTH make the system improve after every blocked setup, trade, miss, or trap
+
+============================================================
+8) FINAL IMPLEMENTATION RULES
+============================================================
+
+Please hard-lock these rules:
+
+- deterministic engine finds legality first
+- VERIFY cannot override FAIL / waterfall / hazard
+- NEWS interprets environment and permissions
+- CAPITAL UTILIZATION protects affordability and exposure
+- HISTORICAL_PATTERN_ENGINE adds long-memory behavior
+- Candidate Engine watches zones and promotes valid flushes early
+- ANALYZE turns all of that into a legal trade map
+- TABLE compiles only trades with enough NET reward
+- VALIDATE scrubs unrealistic aggressiveness
+- MT5 executes only after all of that
+- MANAGE / RE-ANALYZE protect live and pending trades
+- SLIPS preserve capital truth
+- STUDY / SELF-CROSSCHECK / ENGINE HEALTH improve the machine without drifting from the master framework
+
+This is the final implementation direction for:
+- zone watch
+- early flush capture
+- bottom grammar
+- FLUSH_LIMIT_CAPTURE
+- historical memory
+- impulse harvest
+- external signal alignment
+- minimum +8 to +12 USD rotation law
+- safe large-spike monetization
+- net-reward discipline after spread and bullion handicap
+
+If you implement it exactly this way, the system will be:
+- earlier on valid setups
+- stricter against waterfall traps
+- better at post-news and impulse monetization
+- more profitable without adding reckless behavior
+- and more consistent with the full master framework we built.
+
+والحمد لله رب العالمين
+
+=== Set 2 ends where =====
+
+===    Important Notes start here =======
+بسم الله الرحمن الرحيم
+
+SESSION LOGIC + HIERARCHY — FINAL HARD-LOCK
+(WITH EXPLICIT TIME SCHEMA)
+
+السلام عليكم ورحمة الله وبركاته
+
+Please treat this as the final hard-locked direction for session logic, time schema, and decision hierarchy.
+
+We will keep the current version as the base because it is correct on the key principles:
+
+- Session = context, never permission.
+- Safety and legality sit above session labels.
+- Volatility is an explicit layer.
+- Rail permissions are explicit outputs.
+- TABLE is the final compiler/veto.
+- The “multiplication model” is conceptual, not literal code.
+- Candidate lifecycle may begin early, but execution cannot.
+
+One additional implementation lock:
+- The EA may classify sessions from Server Time directly, or from IST derived from Server Time,
+  but it must never classify from host machine local time, browser time, app UI time, or developer timezone.
+
+============================================================
+1) MASTER TIME RELATION (HARD-LOCK)
+============================================================
+
+Time relationships:
+
+- MT5 Server Time = KSA − 50 minutes
+- IST (India) = KSA + 2h30m
+- Therefore:
+  IST = Server Time + 3h20m
+
+In code, you may classify sessions from either:
+
+- Server Time, OR
+- IST (after converting from server),
+
+but you must pick ONE base clock and use it consistently everywhere.
+
+Do NOT classify from:
+- host machine local time
+- browser/app local time
+- developer timezone
+- dashboard-rendered time
+
+============================================================
+2) SESSION WINDOWS – EXPLICIT TIME ARRAYS
+============================================================
+
+For clarity we define both IST and Server windows.
+
+------------------------------------------------------------
+A) JAPAN SESSION
+------------------------------------------------------------
+
+IST:
+- Start Window: 05:30–06:30
+- Mid Window:   06:30–08:30
+- End Window:   08:30–09:30
+
+Server:
+- Start Window: 02:10–03:10
+- Mid Window:   03:10–05:10
+- End Window:   05:10–06:10
+
+Behavior defaults:
+- Cleaner range / reload
+- Softer than London/NY
+- Good for defended shelf BUY_LIMITs
+- Good for RANGE / RANGE_RELOAD / gentle rebuild
+- Weak for aggressive BUY_STOP unless compression is excellent
+
+Path/module default:
+- Rail-A (BUY_LIMIT): preferred
+- Rail-B (BUY_STOP): selective only
+
+Expiry default:
+- Slightly wider (≈90–120m when structure clean)
+
+Trap profile:
+- false urgency
+- mid-range overtrading
+
+------------------------------------------------------------
+B) INDIA SESSION
+------------------------------------------------------------
+
+IST:
+- Start Window: 09:30–10:30
+- Mid Window:   10:30–12:30
+- End Window:   12:30–13:30
+
+Server:
+- Start Window: 06:10–07:10
+- Mid Window:   07:10–09:10
+- End Window:   09:10–10:10
+
+Behavior defaults:
+- Continuation / retest / rebuild friendly
+- Good for CONTINUATION_REBUILD and shelf retests
+- Good for second-leg continuation
+
+Path/module default:
+- Rail-A: strong (BUY_LIMIT on rebuilt shelves)
+- Rail-B: allowed only with real compression lids
+
+Expiry default:
+- Moderate (≈90–150m if no hazard nearby)
+
+Trap profile:
+- late continuation
+- over-strict bottom filters blocking safe rebuilds
+
+------------------------------------------------------------
+C) LONDON SESSION
+------------------------------------------------------------
+
+IST:
+- Start Window: 13:30–14:30
+- Mid Window:   14:30–17:00
+- End Window:   17:00–18:30
+
+Server:
+- Start Window: 10:10–11:10
+- Mid Window:   11:10–13:40
+- End Window:   13:40–15:10
+
+Behavior defaults:
+- strongest directional expansion
+- highest liquidity-hunt probability
+- best for true sweeps and breakouts
+- high false-break risk
+
+Path/module default:
+- Rail-A: valid after proper sweep/reclaim
+- Rail-B: strongest session for it, but only with real compression and non-exhausted structure
+
+Expiry default:
+- tighter (≈60–90m)
+
+Trap profile:
+- liquidity raid
+- false breakout
+- late chase
+- London-open euphoria
+
+------------------------------------------------------------
+D) NEW YORK SESSION
+------------------------------------------------------------
+
+IST:
+- Start Window: 18:30–19:30
+- Mid Window:   19:30–22:00
+- End Window:   22:00–23:30
+
+Server:
+- Start Window: 15:10–16:10
+- Mid Window:   16:10–18:40
+- End Window:   18:40–20:10
+
+Behavior defaults:
+- highest event/headline/liquidation risk
+- best only when structure + macro are A+
+- worst session for careless chasing
+
+Path/module default:
+- Rail-A: preferred after shock stabilizes and shelf rebuilds
+- Rail-B: only when exceptionally clean, not late/extended
+
+Expiry default:
+- tightest (≈45–60m, sometimes less near events)
+
+Trap profile:
+- headline spike
+- first-leg waterfall
+- post-news whipsaw
+- late-session exhaustion
+
+------------------------------------------------------------
+E) TRANSITION WINDOWS (SPECIAL CAUTION)
+------------------------------------------------------------
+
+Japan → India:
+- IST:    09:15–09:45
+- Server: 05:55–06:25
+
+India → London:
+- IST:    13:15–13:45
+- Server: 09:55–10:25
+
+London → New York:
+- IST:    18:15–18:45
+- Server: 14:55–15:25
+
+Behavior:
+- regime handover risk
+- false continuation / failed shelf risk
+- spread/impulse distortions
+
+Effects:
+- reduce confidence tier
+- tighten expiry caps
+- prefer fresh confirmation over stale setups
+- stronger cancellation of old pendings
+- avoid new breakouts exactly inside transition windows unless extremely clean
+
+============================================================
+3) PHASE TAGS (START / MID / END)
+============================================================
+
+For each session, tag the phase:
+
+- START:
+  structure forming; open sweeps; noisy impulses; tradable only with strict structure confirmation.
+
+- MID:
+  main rotation block; best for continuation/reload when everything aligns.
+
+- END:
+  exhaustion risk; restrict new breakouts; shorten expiry; tighten cancellation rules for stale pendings.
+
+These phase tags must be visible to NEWS, ANALYZE, TABLE, RE-ANALYZE, and the candidate lifecycle.
+
+============================================================
+4) FINAL PRIORITY STACK (NON-NEGOTIABLE ORDER)
+============================================================
+
+The engine must evaluate in this order:
+
+1. HARD SAFETY BLOCKERS
+   - waterfallRisk = HIGH
+   - FAIL threatened or broken
+   - hazardWindowActive
+   - midAirFail
+   - spreadBlock
+
+2. LEGALITY / CAPITAL BLOCKERS
+   - exposure clamp / two slots
+   - capacity clamp (SLIPS vs shop price)
+   - stale context (NEWS / ANALYZE TTL)
+
+3. STRUCTURE VALIDITY
+   - S1 / S2 / R1 / R2 / FAIL
+   - base / shelf / sweep / reclaim
+   - lid / compression / void
+
+4. REGIME + VOLATILITY
+   - RegimeTag:
+     RANGE, RANGE_RELOAD, CONTINUATION_REBUILD,
+     EXPANSION, EXHAUSTION, LIQUIDATION,
+     NEWS_SPIKE, SHOCK
+   - VolatilityState:
+     COMPRESSED / NORMAL / EXPANSION / EXHAUSTION
+
+5. SESSION CONTEXT + PHASE
+   - Session inferred from explicit time arrays above
+   - Phase: START / MID / END / TRANSITION
+
+6. BIAS STATE
+   - BULLISH / NEUTRAL / BEARISH / SHOCK
+
+7. FACTOR MODIFIERS
+   - Macro: DXY, yields, geoRiskState, oilState, CBDemandState, newsPersistence
+   - Cross-market alignment
+   - Telegram: crowdLateRisk, sentimentBias (advisory only)
+
+8. CANDIDATE LIFECYCLE
+   - NONE, FORMING, CANDIDATE, ARMED,
+     PENDING_PLANTED, FILLED, PASSED,
+     OVEREXTENDED, REQUALIFIED, INVALIDATED
+   - CandidateFreshness: FRESH / AGING / STALE
+
+9. RAIL PERMISSIONS
+   - RailA_Legal: YES / ONLY_AFTER_STRUCTURE / NO
+   - RailB_Legal: YES / STRICT / NO
+
+10. TABLE COMPILER
+    - entry / TP
+    - grams sizing
+    - PE/ML expiry (Server + KSA)
+    - final vetoes
+
+If a higher layer blocks, lower layers cannot unblock it.
+Session always sits at layer 5, under safety, legality, structure, and regime/volatility.
+
+============================================================
+5) CANDIDATE VS RAIL VS TABLE (HARD LAWS)
+============================================================
+
+- Candidate lifecycle may begin before final rail legality:
+  - FORMING, CANDIDATE can exist when structure appears and safety is not blocking.
+
+- ARMED / PENDING_PLANTED are allowed only when BOTH:
+  1) RailA_Legal or RailB_Legal is not NO, AND
+  2) TABLE returns valid orders after all its own checks.
+
+No order may be armed or placed until rail permissions and TABLE legality pass.
+
+============================================================
+6) MULTIPLICATION MODEL = CONCEPT, NOT CODE
+============================================================
+
+Keep the “×” formula as a mental model only.
+In code, implement:
+
+sessionAdjustedConfidence =
+  session_base_score
++ bias_modifier
++ regime_modifier
++ structure_modifier
++ volatility_modifier
++ crossMarket_modifier
+- overextension_penalty
+- hazard_penalty
+- waterfall_penalty
+- crowdLate_penalty
+- staleness_penalty
+
+Clamp to [0,100], then convert into discrete decisions:
+
+- RailA_Legal / RailB_Legal
+- expiry_style
+- sizeState
+
+Hard blockers (layers 1–2) override this score completely.
+
+============================================================
+7) FINAL PRINCIPLE
+============================================================
+
+With the explicit time schema and this hierarchy, the rules are:
+
+- Session and time arrays give context (behavior & traps).
+- Safety, legality, structure, regime, and volatility decide what is allowed.
+- Factors and crowd adjust confidence and rail bias.
+- Candidate lifecycle remembers early opportunities.
+- Rail permissions control which rails may be armed.
+- TABLE is the last gate before any order hits MT5.
+
+This keeps the system safe, time-aware, session-aware, and still early enough to capture rotations without waterfall or euphoric session misuse.
+
+جزاك الله خيراً
+والحمد لله
+===    Important Notes  ends here =======
