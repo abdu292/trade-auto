@@ -6,6 +6,7 @@ public readonly record struct SessionType
     public static readonly SessionType India = new("India");
     public static readonly SessionType London = new("London");
     public static readonly SessionType NewYork = new("NewYork");
+    public static readonly SessionType LateNewYork = new("LateNewYork");
     public static readonly SessionType OffHours = new("OffHours");
 
     public string Value { get; }
@@ -21,6 +22,8 @@ public readonly record struct SessionType
             "NY" => "NewYork",
             "NEWYORK" => "NewYork",
             "NEW_YORK" => "NewYork",
+            "LATE_NY" => "LateNewYork",
+            "LATENEWYORK" => "LateNewYork",
             "ASIA" => "Japan",
             "ASIAN" => "Japan",
             "EUROPE" => "London",

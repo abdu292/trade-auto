@@ -26,6 +26,28 @@ public static class MonitoringEndpoints
             .WithName("GetLedgerState")
             .WithDescription("Returns deterministic ledger state with extended capital metrics (cash, gold, equity, compounding).");
 
+        // Market state only — always available from latest snapshot (no regime/trade pipeline). Use for "where rates are heading" chart even when cycle aborts.
+        monitoring.MapGet(
+            "/market-state",
+            IResult (ILatestMarketSnapshotStore snapshotStore) =>
+            {
+                snapshotStore.TryGet(out var snapshot);
+                if (snapshot == null)
+                    return TypedResults.Ok(new { bid = 0m, ask = 0m, session = "", sessionPhase = "", sessionHigh = 0m, sessionLow = 0m, timestamp = (DateTimeOffset?)null });
+                return TypedResults.Ok(new
+                {
+                    bid = snapshot.Bid,
+                    ask = snapshot.Ask,
+                    session = snapshot.Session ?? "",
+                    sessionPhase = snapshot.SessionPhase ?? "",
+                    sessionHigh = snapshot.SessionHigh,
+                    sessionLow = snapshot.SessionLow,
+                    timestamp = snapshot.Timestamp,
+                });
+            })
+            .WithName("GetMarketState")
+            .WithDescription("Always-available market state for rates/session chart. Does not depend on regime or trade decision pipeline.");
+
         // Spec v7 §10 — Gold Engine dashboard: Physical Ledger card, MT5 Execution card, factor state panel, trade-map, validation summary, execution mode
         monitoring.MapGet(
             "/dashboard",
@@ -547,6 +569,30 @@ public static class MonitoringEndpoints
             })
             .WithName("GetRuntimeTimelineMarkdown")
             .WithDescription("Returns human-readable timeline markdown with UTC, KSA(AST), Dubai(GST), and India(IST) times.");
+
+        monitoring.MapGet(
+            "/path-projection",
+            IResult (IPathProjectionStore pathProjectionStore) =>
+            {
+                var (projection, atUtc) = pathProjectionStore.Get();
+                if (projection is null)
+                {
+                    return TypedResults.Ok(new { pathBias = "TWO_WAY", keyMagnets = (string?)null, nextTestZone = (string?)null, invalidationShelf = (string?)null, sessionTargetCorridor = (string?)null, confidenceBand = "LOW", summaryLine = "No projection yet.", atUtc = (DateTimeOffset?)null });
+                }
+                return TypedResults.Ok(new
+                {
+                    pathBias = projection.PathBias,
+                    keyMagnets = projection.KeyMagnets,
+                    nextTestZone = projection.NextTestZone,
+                    invalidationShelf = projection.InvalidationShelf,
+                    sessionTargetCorridor = projection.SessionTargetCorridor,
+                    confidenceBand = projection.ConfidenceBand,
+                    summaryLine = projection.SummaryLine,
+                    atUtc,
+                });
+            })
+            .WithName("GetPathProjection")
+            .WithDescription("Returns latest path projection (STATE_06B) for app UI — chart / where rates are heading. Not for execution.");
 
         monitoring.MapGet(
             "/runtime-settings",
@@ -1112,6 +1158,32 @@ public static class MonitoringEndpoints
             "FINAL_DECISION" => "Final cycle verdict: trade approved or rejected with primary reason.",
             "MT5_PENDING_TRADE_DEQUEUED" => "MT5 EA pulled a pending trade from Brain.",
             "MT5_TRADE_STATUS_RECEIVED" => "MT5 sent execution status back to Brain.",
+            "NEWS_DETECTED" => "News check result (blocked/nearby events) — state machine transition.",
+            "POST_NEWS_LOCKOUT" => "Cycle aborted due to news risk; lockout active.",
+            "POST_NEWS_REBUILD_SCAN" => "News passed; scan continues after rebuild.",
+            "ENGINE_STATES_ACTIVE" => "STRUCTURE_STATE, WATERFALL_STATE, VOLATILITY_STATE — controls whether trades allowed.",
+            "FLUSH_CAPTURE_SCAN" => "Path BUY_LIMIT flush-capture scan.",
+            "BREAKOUT_SCAN" => "Path BUY_STOP breakout scan.",
+            "CANDIDATE_CREATED" => "Candidate created (CandidateCreated lifecycle).",
+            "CANDIDATE_VALIDATED" => "Candidate validated; proceeding to place.",
+            "CANDIDATE_CANCELLED" => "Candidate cancelled with reason (e.g. Cancelled_Waterfall, Cancelled_Expiry).",
+            "PENDING_PLACED" => "Pending order placed (routed to MT5 or approval queue).",
+            "TABLE_COMPILER" => "Final structured record: EventType, Session, StructureState, VolatilityState, Entry, TP, Expiry, Outcome.",
+            "TRADE_TRIGGERED" => "Trade filled (TradeActive); includes ExpectedEntry, ActualFill, SlippageUSD.",
+            "TRADE_CLOSED" => "Trade closed (TP hit or cancelled).",
+            "DAILY_SUMMARY" => "Daily summary: ADR_used%, Session, VolatilityState, TotalTradesToday.",
+            "STATE_00_IDLE" => "State machine: idle, waiting for snapshot.",
+            "STATE_01_SNAPSHOT_RECEIVED" => "State machine: latest market packet accepted.",
+            "STATE_02_CYCLE_STARTED" => "State machine: cycle_id assigned, context attached.",
+            "STATE_03_PRECHECK" => "State machine: sanity checks (stale, spread, session).",
+            "STATE_04_SESSION_CLASSIFICATION" => "State machine: session/phase (JAPAN/INDIA/LONDON/NEW_YORK, OPEN/EARLY/MID/LATE/END).",
+            "STATE_05_REGIME_GATE" => "State machine: regime gate (REGIME_ALLOWED / REGIME_HIGH_CAUTION / REGIME_BLOCKED).",
+            "STATE_06_CONTEXT_BUILD" => "State machine: deterministic engines build context.",
+            "STATE_06B_PATH_PROJECTION" => "State machine: path projection for UI (pathBias, magnets, zones). Not for execution.",
+            "STATE_07_CANDIDATE_SCAN" => "State machine: candidate scan.",
+            "ABORT_PRECHECK" => "State machine: abort at precheck (reason code in payload).",
+            "ABORT_REGIME" => "State machine: abort at regime gate (reason code in payload).",
+            "STATE_17_CYCLE_CLOSED" => "State machine: cycle closed, return to idle.",
             _ => $"Recorded event {item.EventType} at stage {item.Stage}.",
         };
     }

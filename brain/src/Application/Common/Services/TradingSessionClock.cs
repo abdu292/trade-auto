@@ -83,6 +83,14 @@ public static class TradingSessionClock
             return ("JAPAN", ResolvePhase(t, JapanStartServer, JapanMidStartServer, JapanMidEndServer, JapanEndServer));
         }
 
+        // Late NY: 00:00–03:00 KSA = 23:10–02:10 server (we don't deal in this window)
+        var lateNyStartServer = new TimeSpan(23, 10, 0);
+        var lateNyEndServer = new TimeSpan(2, 10, 0);
+        if (t >= lateNyStartServer || t < lateNyEndServer)
+        {
+            return ("LATE_NY", "UNKNOWN");
+        }
+
         return ("OFFHOURS", "UNKNOWN");
     }
 
@@ -91,21 +99,37 @@ public static class TradingSessionClock
         return value >= start && value < end;
     }
 
+    /// <summary>
+    /// Granular phase per client spec: OPEN, EARLY, MID, LATE, END.
+    /// Enables precise rules e.g. "Friday NY LATE/END only = hard block".
+    /// </summary>
     private static string ResolvePhase(TimeSpan now, TimeSpan startWindow, TimeSpan midStart, TimeSpan midEnd, TimeSpan endWindow)
     {
-        if (now >= startWindow && now < midStart)
-        {
-            return "START";
-        }
+        var sessionDuration = endWindow - startWindow;
+        var openEnd = startWindow.Add(TimeSpan.FromMinutes(Math.Min(15, sessionDuration.TotalMinutes * 0.15)));
+        var lateStart = endWindow.Subtract(TimeSpan.FromMinutes(Math.Min(10, sessionDuration.TotalMinutes * 0.1)));
+
+        if (now >= startWindow && now < openEnd)
+            return "OPEN";
+        if (now >= openEnd && now < midStart)
+            return "EARLY";
         if (now >= midStart && now < midEnd)
-        {
             return "MID";
-        }
-        if (now >= midEnd && now < endWindow)
-        {
+        if (now >= midEnd && now < lateStart)
+            return "LATE";
+        if (now >= lateStart && now < endWindow)
             return "END";
-        }
         return "UNKNOWN";
+    }
+
+    /// <summary>
+    /// Returns true when session is NEW_YORK and phase is LATE or END (for Friday hard block rule).
+    /// </summary>
+    public static bool IsNewYorkLateOrEnd(string session, string phase)
+    {
+        var s = (session ?? string.Empty).Trim().ToUpperInvariant();
+        var p = (phase ?? string.Empty).Trim().ToUpperInvariant();
+        return (s == "NEW_YORK" || s == "NY") && (p == "LATE" || p == "END");
     }
 
     /// <summary>

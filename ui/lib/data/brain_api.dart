@@ -322,6 +322,12 @@ class BrainApi {
     final response = await _dio.get('/api/monitoring/dashboard');
     return GoldDashboard.fromJson(_asMap(response.data));
   }
+
+  /// Always-available market state from latest snapshot. Use for rates/session chart even when cycle aborts.
+  Future<MarketState> getMarketState() async {
+    final response = await _dio.get('/api/monitoring/market-state');
+    return MarketState.fromJson(_asMap(response.data));
+  }
 }
 
 Map<String, dynamic> _asMap(dynamic data) {

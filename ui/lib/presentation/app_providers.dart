@@ -69,6 +69,11 @@ final goldDashboardProvider = FutureProvider<GoldDashboard>((ref) {
   return ref.watch(brainApiProvider).getGoldEngineDashboard();
 });
 
+// Always-available market state (no regime/trade pipeline). For "where rates are heading" chart.
+final marketStateProvider = FutureProvider<MarketState>((ref) {
+  return ref.watch(brainApiProvider).getMarketState();
+});
+
 final replayStatusProvider = FutureProvider<ReplayStatusResponse>((ref) {
   return ref.watch(brainApiProvider).getReplayStatus();
 });

@@ -19,7 +19,9 @@ public sealed class SignalPollingBackgroundService(
     IConfiguration configuration,
     ILogger<SignalPollingBackgroundService> logger,
     DynamicSessionRiskService dynamicSessionRisk,
-    ISetupLifecycleStore setupLifecycleStore) : BackgroundService
+    ISetupLifecycleStore setupLifecycleStore,
+    IExpectedEntryStore expectedEntryStore,
+    IPathProjectionStore pathProjectionStore) : BackgroundService
 {
     private static DateTimeOffset _lastArmedAtUtc = DateTimeOffset.MinValue;
     private static readonly Lock _transitionGate = new();
@@ -50,6 +52,7 @@ public sealed class SignalPollingBackgroundService(
     private static DateTimeOffset? _lastM5CandleTime = null;
     private static DateTimeOffset? _lastM15CandleTime = null;
     private static readonly TimeSpan CandleCheckInterval = TimeSpan.FromSeconds(10);
+    private static DateTime _lastDailySummaryDate = DateTime.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -193,7 +196,14 @@ public sealed class SignalPollingBackgroundService(
                 var m5CandleForMa = (rawSnapshot.TimeframeData ?? []).FirstOrDefault(x =>
                     string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase));
                 var enrichedMa20M5 = m5CandleForMa?.Ma20Value ?? 0m;
-                var snapshot = rawSnapshot with { CycleId = cycleId, Ma20M5 = enrichedMa20M5 };
+                var (sessionResolved, phaseResolved) = TradingSessionClock.Resolve(rawSnapshot.Mt5ServerTime);
+                var snapshot = rawSnapshot with
+                {
+                    CycleId = cycleId,
+                    Ma20M5 = enrichedMa20M5,
+                    Session = sessionResolved,
+                    SessionPhase = phaseResolved,
+                };
 
                 // Candle-aligned gate: only run the strategy when a new M5 or M15 candle has closed.
                 var currentM5Time = snapshot.TimeframeData
@@ -219,6 +229,42 @@ public sealed class SignalPollingBackgroundService(
                     if (currentM5Time.HasValue) _lastM5CandleTime = currentM5Time;
                     if (currentM15Time.HasValue) _lastM15CandleTime = currentM15Time;
                 }
+
+                await timeline.WriteAsync(
+                    eventType: CycleStateMachine.State_01_SnapshotReceived,
+                    stage: "state_machine",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        currentState = CycleStateMachine.State_01_SnapshotReceived,
+                        nextState = CycleStateMachine.State_02_CycleStarted,
+                        symbol = snapshot.Symbol,
+                        timestamp = snapshot.Timestamp,
+                        spread = snapshot.Spread,
+                    },
+                    cancellationToken: stoppingToken);
+
+                await timeline.WriteAsync(
+                    eventType: CycleStateMachine.State_02_CycleStarted,
+                    stage: "state_machine",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        currentState = CycleStateMachine.State_02_CycleStarted,
+                        nextState = CycleStateMachine.State_03_Precheck,
+                        cycleId,
+                        session = snapshot.Session,
+                        phase = snapshot.SessionPhase,
+                        rateAuthority = snapshot.RateAuthority,
+                        telegramState = snapshot.TelegramState,
+                    },
+                    cancellationToken: stoppingToken);
 
                 await timeline.WriteAsync(
                     eventType: "CYCLE_STARTED",
@@ -247,14 +293,65 @@ public sealed class SignalPollingBackgroundService(
                         snapshot.AuthoritativeRate,
                     },
                     cancellationToken: stoppingToken);
+
+                await timeline.WriteAsync(
+                    eventType: CycleStateMachine.State_03_Precheck,
+                    stage: "state_machine",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        currentState = CycleStateMachine.State_03_Precheck,
+                        nextState = CycleStateMachine.State_04_SessionClassification,
+                        spread = snapshot.Spread,
+                        symbolMatch = string.Equals(snapshot.Symbol, symbol, StringComparison.OrdinalIgnoreCase),
+                    },
+                    cancellationToken: stoppingToken);
+
                 var normalizedSession = MapSessionType(snapshot.Session);
                 var sessionEnabled = await db.SessionStates
                     .AsNoTracking()
                     .Where(x => x.Session == normalizedSession)
                     .Select(x => (bool?)x.IsEnabled)
                     .FirstOrDefaultAsync(stoppingToken);
-                if (sessionEnabled == false)
+                // Late NY (00:00–03:00 KSA): block by default unless explicitly enabled
+                var effectiveDisabled = sessionEnabled == false
+                    || (normalizedSession == SessionType.LateNewYork && sessionEnabled != true);
+                if (effectiveDisabled)
                 {
+                    var reasonMessage = normalizedSession == SessionType.LateNewYork
+                        ? "Late NY (00:00–03:00 KSA) session disabled"
+                        : "Session disabled";
+                    await timeline.WriteAsync(
+                        eventType: CycleStateMachine.AbortPrecheck,
+                        stage: "state_machine",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            currentState = CycleStateMachine.State_03_Precheck,
+                            nextState = CycleStateMachine.State_17_CycleClosed,
+                            reasonCode = CycleStateMachine.ReasonSessionDisabled,
+                            vetoSource = "session_gate",
+                            hardBlock = true,
+                            reason = reasonMessage,
+                            snapshotSession = snapshot.Session,
+                            mappedSession = normalizedSession.Value,
+                        },
+                        cancellationToken: stoppingToken);
+                    await timeline.WriteAsync(
+                        eventType: CycleStateMachine.State_17_CycleClosed,
+                        stage: "state_machine",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new { currentState = CycleStateMachine.State_17_CycleClosed, nextState = CycleStateMachine.State_00_Idle },
+                        cancellationToken: stoppingToken);
                     logger.LogInformation(
                         "NO_TRADE due to disabled session. SnapshotSession={SnapshotSession} MappedSession={MappedSession}",
                         snapshot.Session,
@@ -268,7 +365,7 @@ public sealed class SignalPollingBackgroundService(
                         tradeId: null,
                         payload: new
                         {
-                            reason = "SESSION_DISABLED",
+                            reason = reasonMessage,
                             snapshotSession = snapshot.Session,
                             mappedSession = normalizedSession.Value,
                         },
@@ -277,11 +374,75 @@ public sealed class SignalPollingBackgroundService(
                     continue;
                 }
 
+                await timeline.WriteAsync(
+                    eventType: CycleStateMachine.State_04_SessionClassification,
+                    stage: "state_machine",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        currentState = CycleStateMachine.State_04_SessionClassification,
+                        nextState = CycleStateMachine.State_05_RegimeGate,
+                        session = snapshot.Session,
+                        phase = snapshot.SessionPhase,
+                        isFriday = snapshot.IsFriday,
+                        dayOfWeek = snapshot.DayOfWeek,
+                    },
+                    cancellationToken: stoppingToken);
+
                 var regime = RegimeRiskClassifier.Classify(snapshot);
                 var forceWhereToTrade = ShouldForceWhereToTrade(snapshot, regime);
 
+                await timeline.WriteAsync(
+                    eventType: CycleStateMachine.State_05_RegimeGate,
+                    stage: "state_machine",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        currentState = CycleStateMachine.State_05_RegimeGate,
+                        nextState = regime.IsBlocked ? CycleStateMachine.AbortRegime : CycleStateMachine.State_06_ContextBuild,
+                        regimeOutput = regime.IsBlocked ? CycleStateMachine.RegimeBlocked : (regime.RiskTag == "CAUTION" ? CycleStateMachine.RegimeHighCaution : CycleStateMachine.RegimeAllowed),
+                        regime = regime.Regime,
+                        reason = regime.Reason,
+                        isBlocked = regime.IsBlocked,
+                        vetoSource = regime.IsBlocked ? "RegimeRiskClassifier" : null,
+                    },
+                    cancellationToken: stoppingToken);
+
                 if (regime.IsBlocked)
                 {
+                    await timeline.WriteAsync(
+                        eventType: CycleStateMachine.AbortRegime,
+                        stage: "state_machine",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            currentState = CycleStateMachine.State_05_RegimeGate,
+                            nextState = CycleStateMachine.State_17_CycleClosed,
+                            reasonCode = regime.Regime,
+                            vetoSource = "RegimeRiskClassifier",
+                            hardBlock = true,
+                            regime = regime.Regime,
+                            reason = regime.Reason,
+                        },
+                        cancellationToken: stoppingToken);
+                    await timeline.WriteAsync(
+                        eventType: CycleStateMachine.State_17_CycleClosed,
+                        stage: "state_machine",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new { currentState = CycleStateMachine.State_17_CycleClosed, nextState = CycleStateMachine.State_00_Idle },
+                        cancellationToken: stoppingToken);
                     logger.LogInformation(
                         "NO TRADE - HIGH RISK. Symbol={Symbol}, Regime={Regime}, Reason={Reason}",
                         snapshot.Symbol,
@@ -309,6 +470,21 @@ public sealed class SignalPollingBackgroundService(
                 {
                     logger.LogInformation("Watch/Waste kill-switch forcing cycle search (no ARMED order for >=25 minutes).");
                 }
+
+                await timeline.WriteAsync(
+                    eventType: CycleStateMachine.State_06_ContextBuild,
+                    stage: "state_machine",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        currentState = CycleStateMachine.State_06_ContextBuild,
+                        nextState = CycleStateMachine.State_07_CandidateScan,
+                        note = "Running deterministic engines: session, indicators, structure, regime, waterfall, legality, verify, capital, history.",
+                    },
+                    cancellationToken: stoppingToken);
 
                 // ── Spec v7: Gold Engine decision stack (path-aware; M5 optional for BUY_LIMIT) ──
                 var rawStackLedgerState = ledger.GetState();
@@ -391,6 +567,88 @@ public sealed class SignalPollingBackgroundService(
                         goldRegimeInterpretation = goldRegime.Interpretation,
                     },
                     cancellationToken: stoppingToken);
+
+                // Client log confirmation: STRUCTURE_STATE, WATERFALL_STATE, VOLATILITY_STATE (control whether trades allowed)
+                var sessionForEngines = SessionEngine.Resolve(snapshot.Mt5ServerTime);
+                var indicatorsForState = IndicatorEngine.Calculate(snapshot, sessionForEngines);
+                var structureForState = StructureEngine.Analyze(snapshot, indicatorsForState, sessionForEngines);
+                var volatilityResult = VolatilityRegimeEngine.Analyze(snapshot, indicatorsForState, structureForState);
+                var structureState = MapToStructureState(decisionStackResult.MarketRegime.Regime);
+                var waterfallState = MapToWaterfallState(waterfallRiskForStack);
+                var volatilityState = volatilityResult.VolatilityClass;
+                await timeline.WriteAsync(
+                    eventType: "ENGINE_STATES_ACTIVE",
+                    stage: "regime",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        STRUCTURE_STATE = structureState,
+                        WATERFALL_STATE = waterfallState,
+                        VOLATILITY_STATE = volatilityState,
+                        regime = decisionStackResult.MarketRegime.Regime,
+                        waterfallRisk = waterfallRiskForStack,
+                        volatilityClass = volatilityResult.VolatilityClass,
+                        volatilityRegime = volatilityResult.VolatilityState,
+                        shouldBlockNewTrades = volatilityResult.ShouldBlockNewTrades,
+                    },
+                    cancellationToken: stoppingToken);
+
+                var pathProjection = PathProjectionEngine.Project(snapshot, decisionStackResult);
+                pathProjectionStore.Set(pathProjection, DateTimeOffset.UtcNow);
+                await timeline.WriteAsync(
+                    eventType: CycleStateMachine.State_06B_PathProjection,
+                    stage: "state_machine",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        currentState = CycleStateMachine.State_06B_PathProjection,
+                        nextState = CycleStateMachine.State_07_CandidateScan,
+                        pathBias = pathProjection.PathBias,
+                        keyMagnets = pathProjection.KeyMagnets,
+                        nextTestZone = pathProjection.NextTestZone,
+                        invalidationShelf = pathProjection.InvalidationShelf,
+                        sessionTargetCorridor = pathProjection.SessionTargetCorridor,
+                        confidenceBand = pathProjection.ConfidenceBand,
+                        summaryLine = pathProjection.SummaryLine,
+                        note = "UI-only; not for execution.",
+                    },
+                    cancellationToken: stoppingToken);
+
+                var todayUtc = DateTimeOffset.UtcNow.Date;
+                if (todayUtc > _lastDailySummaryDate)
+                {
+                    _lastDailySummaryDate = todayUtc;
+                    var dayStart = todayUtc;
+                    var dayEnd = dayStart.AddDays(1);
+                    var totalTradesToday = await db.RuntimeTimelineEvents
+                        .AsNoTracking()
+                        .CountAsync(
+                            x => (x.EventType == "PENDING_PLACED" || x.EventType == "TRADE_ROUTED")
+                                && x.CreatedAtUtc >= dayStart && x.CreatedAtUtc < dayEnd,
+                            stoppingToken);
+                    await timeline.WriteAsync(
+                        eventType: "DAILY_SUMMARY",
+                        stage: "monitoring",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            ADR_usedPct = snapshot.AdrUsedPct,
+                            Session = snapshot.Session,
+                            VolatilityState = volatilityState,
+                            TotalTradesToday = totalTradesToday,
+                            dateUtc = todayUtc,
+                        },
+                        cancellationToken: stoppingToken);
+                }
 
                 // Spec v11 §19 — Structured context packet (deterministic snapshot for AI/logging)
                 var ledgerStateForPacket = ledger.GetState();
@@ -488,6 +746,27 @@ public sealed class SignalPollingBackgroundService(
                     },
                     cancellationToken: stoppingToken);
 
+                if (decisionStackResult.ProceedToAi)
+                {
+                    var scanEvent = string.Equals(decisionStackResult.PathState, PathState.BuyLimit, StringComparison.OrdinalIgnoreCase)
+                        ? "FLUSH_CAPTURE_SCAN"
+                        : string.Equals(decisionStackResult.PathState, PathState.BuyStop, StringComparison.OrdinalIgnoreCase)
+                            ? "BREAKOUT_SCAN"
+                            : null;
+                    if (!string.IsNullOrEmpty(scanEvent))
+                    {
+                        await timeline.WriteAsync(
+                            eventType: scanEvent,
+                            stage: "rule_engine",
+                            source: "brain",
+                            symbol: snapshot.Symbol,
+                            cycleId: cycleId,
+                            tradeId: null,
+                            payload: new { pathState = decisionStackResult.PathState, reasonCode = decisionStackResult.ReasonCode },
+                            cancellationToken: stoppingToken);
+                    }
+                }
+
                 var setupCandidate = decisionStackResult.ProceedToAi
                     ? SetupCandidateResult.Valid(
                         decisionStackResult.H1Context,
@@ -532,35 +811,82 @@ public sealed class SignalPollingBackgroundService(
                         CreatedAt: DateTimeOffset.UtcNow,
                         CycleId: cycleId,
                         ConfidenceScore: decisionStackResult.ConfidenceScore.Score));
+                    await timeline.WriteAsync(
+                        eventType: "CANDIDATE_CREATED",
+                        stage: "rule_engine",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            lifecycleEvent = "CandidateCreated",
+                            pathType = decisionStackResult.PathState,
+                            candidateBase = candidateBase,
+                            candidateLid = candidateLid,
+                            expiryMinutes = candidateExpiryMinutes,
+                        },
+                        cancellationToken: stoppingToken);
                 }
                 else if (existingCandidate != null && existingCandidate.LifecycleState == SetupLifecycleState.Armed)
                 {
                     // Safety changes: invalidate candidate when conditions change.
+                    string? cancellationReason = null;
                     if (existingCandidate.IsExpired)
                     {
                         setupLifecycleStore.MarkInvalidated(snapshot.Symbol, "CANDIDATE_EXPIRED");
+                        cancellationReason = "Cancelled_Expiry";
                     }
-                    else if (waterfallRiskForStack == "HIGH" || activeHazardWindowBlockNow || snapshot.Spread >= 0.7m)
+                    else if (waterfallRiskForStack == "HIGH")
                     {
                         setupLifecycleStore.MarkInvalidated(snapshot.Symbol, "SAFETY_CONDITION_CHANGED");
+                        cancellationReason = "Cancelled_Waterfall";
+                    }
+                    else if (activeHazardWindowBlockNow)
+                    {
+                        setupLifecycleStore.MarkInvalidated(snapshot.Symbol, "SAFETY_CONDITION_CHANGED");
+                        cancellationReason = "Cancelled_NewsHazard";
+                    }
+                    else if (snapshot.Spread >= 0.7m)
+                    {
+                        setupLifecycleStore.MarkInvalidated(snapshot.Symbol, "SAFETY_CONDITION_CHANGED");
+                        cancellationReason = "Cancelled_StructureBreak";
                     }
                     else if (decisionStackResult.PathState == PathState.Overextended
                         && string.Equals(existingCandidate.PathType, PathState.BuyStop, StringComparison.OrdinalIgnoreCase))
                     {
-                        // BUY_STOP + overextended: price expanded past lid → chase risk → mark passed.
                         setupLifecycleStore.MarkPassedOverextended(snapshot.Symbol, "OVEREXTENDED_AFTER_BUY_STOP_ARM");
+                        cancellationReason = "Cancelled_StructureBreak";
                     }
                     else if (decisionStackResult.PathState == PathState.Overextended
                         && string.Equals(existingCandidate.PathType, PathState.BuyLimit, StringComparison.OrdinalIgnoreCase))
                     {
-                        // BUY_LIMIT + overextended: check if entry level is still valid under pending-before-level law.
-                        // BUY_LIMIT entry must be < current bid.  If bid ≤ 0, guards are skipped (same as DecisionEngine rule).
                         var entryBelowBid = snapshot.Bid <= 0m || existingCandidate.BaseLevel < snapshot.Bid;
                         if (!entryBelowBid)
                         {
                             setupLifecycleStore.MarkPassedOverextended(snapshot.Symbol, "ENTRY_LEVEL_EXCEEDED_BY_CURRENT_BID");
+                            cancellationReason = "Cancelled_StructureBreak";
                         }
-                        // else: candidate remains ARMED — the BUY_LIMIT entry is still reachable on pullback.
+                    }
+
+                    if (!string.IsNullOrEmpty(cancellationReason))
+                    {
+                        await timeline.WriteAsync(
+                            eventType: "CANDIDATE_CANCELLED",
+                            stage: "rule_engine",
+                            source: "brain",
+                            symbol: snapshot.Symbol,
+                            cycleId: cycleId,
+                            tradeId: null,
+                            payload: new
+                            {
+                                lifecycleEvent = "Cancelled",
+                                cancellationReason,
+                                candidateBase = existingCandidate.BaseLevel,
+                                candidateLid = existingCandidate.LidLevel,
+                                pathType = existingCandidate.PathType,
+                            },
+                            cancellationToken: stoppingToken);
                     }
                 }
                 // Spec v11 §8 — Re-qualification: previously overextended/passed setup cooled off → re-arm BUY_LIMIT
@@ -794,6 +1120,22 @@ public sealed class SignalPollingBackgroundService(
 
                 var newsRisk = await economicNews.AssessAsync(snapshot.Timestamp, stoppingToken);
                 await timeline.WriteAsync(
+                    eventType: "NEWS_DETECTED",
+                    stage: "news",
+                    source: "forexfactory",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        blocked = newsRisk.IsBlocked,
+                        newsRisk.Reason,
+                        newsRisk.NearbyEvents,
+                        newsRisk.RefreshedAtUtc,
+                        newsRisk.IsStale,
+                    },
+                    cancellationToken: stoppingToken);
+                await timeline.WriteAsync(
                     eventType: "NEWS_CHECK",
                     stage: "news",
                     source: "forexfactory",
@@ -832,6 +1174,20 @@ public sealed class SignalPollingBackgroundService(
                     await db.SaveChangesAsync(stoppingToken);
 
                     await timeline.WriteAsync(
+                        eventType: "POST_NEWS_LOCKOUT",
+                        stage: "news",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            reason = newsRisk.Reason,
+                            newsRisk.NearbyEvents,
+                            stateMachineTransition = "POST_NEWS_LOCKOUT",
+                        },
+                        cancellationToken: stoppingToken);
+                    await timeline.WriteAsync(
                         eventType: "CYCLE_ABORTED",
                         stage: "news",
                         source: "brain",
@@ -867,6 +1223,16 @@ public sealed class SignalPollingBackgroundService(
 
                 // Spec v8 §13: enrich snapshot with NewsEventFlag (any nearby news events present)
                 snapshot = snapshot with { NewsEventFlag = newsRisk.NearbyEvents?.Count > 0 };
+
+                await timeline.WriteAsync(
+                    eventType: "POST_NEWS_REBUILD_SCAN",
+                    stage: "news",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new { stateMachineTransition = "POST_NEWS_REBUILD_SCAN", newsPassed = true },
+                    cancellationToken: stoppingToken);
 
                 await timeline.WriteAsync(
                     eventType: "AI_ANALYZE_REQUEST",
@@ -1375,6 +1741,7 @@ public sealed class SignalPollingBackgroundService(
                     EfficiencyScore = rotationResult.EfficiencyScore,
                 };
 
+                var crossAssetScore = ComputeCrossAssetScore(snapshot);
                 await timeline.WriteAsync(
                     eventType: "DECISION_EVALUATED",
                     stage: "decision",
@@ -1405,6 +1772,11 @@ public sealed class SignalPollingBackgroundService(
                         bottom_execution_ok = decision.BottomExecutionOk,
                         bottomPermissionMode = decision.BottomPermissionMode,
                         bottomPermissionReason = decision.BottomPermissionReason,
+                        StructureState = structureState,
+                        VolatilityState = volatilityState,
+                        CrossAssetScore = crossAssetScore,
+                        DxyBid = snapshot.DxyBid,
+                        SilverBid = snapshot.SilverBid,
                     },
                     cancellationToken: stoppingToken);
 
@@ -1886,14 +2258,74 @@ public sealed class SignalPollingBackgroundService(
                 // regardless of execution mode, preventing unintended automated execution.
                 var directToMt5 = autoTradeEnabled && ShouldQueueToMt5(executionMode, pending.Session, hybridSessions);
 
+                await timeline.WriteAsync(
+                    eventType: "CANDIDATE_VALIDATED",
+                    stage: "decision",
+                    source: "brain",
+                    symbol: pending.Symbol,
+                    cycleId: cycleId,
+                    tradeId: pending.Id.ToString(),
+                    payload: new { lifecycleEvent = "CandidateValidated", entry = pending.Price, tp = pending.Tp, grams = pending.Grams },
+                    cancellationToken: stoppingToken);
+
                 if (directToMt5)
                 {
+                    expectedEntryStore.Set(pending.Id, pending.Price);
                     pendingTrades.Enqueue(pending);
                 }
                 else
                 {
+                    expectedEntryStore.Set(pending.Id, pending.Price);
                     approvals.Enqueue(pending);
                 }
+
+                await timeline.WriteAsync(
+                    eventType: "CANDIDATE_VALIDATED",
+                    stage: "decision",
+                    source: "brain",
+                    symbol: pending.Symbol,
+                    cycleId: cycleId,
+                    tradeId: pending.Id.ToString(),
+                    payload: new { lifecycleEvent = "CandidateValidated", entry = pending.Price, tp = pending.Tp },
+                    cancellationToken: stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "PENDING_PLACED",
+                    stage: "routing",
+                    source: "brain",
+                    symbol: pending.Symbol,
+                    cycleId: cycleId,
+                    tradeId: pending.Id.ToString(),
+                    payload: new
+                    {
+                        pending.Id,
+                        pending.Price,
+                        pending.Tp,
+                        pending.Expiry,
+                        pending.Grams,
+                        pending.Session,
+                        route = directToMt5 ? "MT5_PENDING" : "APPROVAL_QUEUE",
+                    },
+                    cancellationToken: stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "TABLE_COMPILER",
+                    stage: "table",
+                    source: "brain",
+                    symbol: pending.Symbol,
+                    cycleId: cycleId,
+                    tradeId: pending.Id.ToString(),
+                    payload: new
+                    {
+                        EventType = "PENDING",
+                        Session = pending.Session,
+                        StructureState = structureState,
+                        VolatilityState = volatilityState,
+                        Entry = pending.Price,
+                        TP = pending.Tp,
+                        Expiry = pending.Expiry,
+                        Outcome = "PENDING",
+                        Grams = pending.Grams,
+                    },
+                    cancellationToken: stoppingToken);
 
                 // Spec v9/v10 §1: transition armed candidate to ORDER_PLANTED.
                 setupLifecycleStore.MarkOrderPlanted(snapshot.Symbol, cycleId);
@@ -2323,6 +2755,7 @@ public sealed class SignalPollingBackgroundService(
             "EUROPE" => SessionType.London,
             "NY" => SessionType.NewYork,
             "NEW_YORK" => SessionType.NewYork,
+            "LATE_NY" => SessionType.LateNewYork,
             _ => SessionType.OffHours,
         };
     }
@@ -2537,6 +2970,7 @@ public sealed class SignalPollingBackgroundService(
             "ASIA"     => "JAPAN",
             "EUROPE"   => "LONDON",
             "NEW_YORK" => "NY",
+            "LATE_NY"  => "NY",
             _          => s,
         };
     }
@@ -2561,6 +2995,51 @@ public sealed class SignalPollingBackgroundService(
             "POST_SPIKE_PULLBACK" => "RANGE",
             _                 => "RANGE",
         };
+    }
+
+    private static string MapToStructureState(string regime)
+    {
+        var r = (regime ?? string.Empty).Trim().ToUpperInvariant();
+        return r switch
+        {
+            "RANGE" or "RANGE_RELOAD" => "RANGE",
+            "CONTINUATION_REBUILD" or "EXPANSION" => "TREND",
+            "EXHAUSTION" or "LIQUIDATION" or "NEWS_SPIKE" or "SHOCK" => "CHAOTIC",
+            _ => "RANGE",
+        };
+    }
+
+    private static string MapToWaterfallState(string waterfallRisk)
+    {
+        var w = (waterfallRisk ?? string.Empty).Trim().ToUpperInvariant();
+        return w switch
+        {
+            "LOW" => "NONE",
+            "MEDIUM" or "MED" => "ATTEMPT",
+            "HIGH" => "CONTINUATION",
+            _ => "NONE",
+        };
+    }
+
+    /// <summary>Cross-asset score -2 to +2: DXY trend + Silver confirmation for gold.</summary>
+    private static int ComputeCrossAssetScore(MarketSnapshotContract snapshot)
+    {
+        var score = 0;
+        if (snapshot.DxyBid.HasValue)
+        {
+            var dxy = snapshot.DxyBid.Value;
+            if (dxy >= 105m) score -= 1;
+            else if (dxy >= 103m) score -= 0;
+            else if (dxy <= 101m) score += 1;
+        }
+        if (snapshot.SilverBid.HasValue && snapshot.Bid > 0m)
+        {
+            var goldOz = snapshot.Bid;
+            var silverOz = snapshot.SilverBid.Value;
+            var ratio = goldOz > 0 ? silverOz / goldOz : 0m;
+            if (ratio >= 0.012m && ratio <= 0.022m) score += 1;
+        }
+        return Math.Clamp(score, -2, 2);
     }
 
     /// <summary>

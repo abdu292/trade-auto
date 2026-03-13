@@ -346,6 +346,40 @@ class AiHealthStatus {
   }
 }
 
+/// Always-available market state from latest snapshot (no regime/trade pipeline). For "where rates are heading" chart.
+class MarketState {
+  const MarketState({
+    required this.bid,
+    required this.ask,
+    required this.session,
+    required this.sessionPhase,
+    required this.sessionHigh,
+    required this.sessionLow,
+    this.timestamp,
+  });
+
+  final double bid;
+  final double ask;
+  final String session;
+  final String sessionPhase;
+  final double sessionHigh;
+  final double sessionLow;
+  final DateTime? timestamp;
+
+  factory MarketState.fromJson(Map<String, dynamic> json) {
+    final ts = json['timestamp'];
+    return MarketState(
+      bid: _readDouble(json, 'bid'),
+      ask: _readDouble(json, 'ask'),
+      session: _readString(json, 'session'),
+      sessionPhase: _readString(json, 'sessionPhase'),
+      sessionHigh: _readDouble(json, 'sessionHigh'),
+      sessionLow: _readDouble(json, 'sessionLow'),
+      timestamp: ts == null ? null : DateTime.tryParse(ts.toString()),
+    );
+  }
+}
+
 class RuntimeStatus {
   const RuntimeStatus({
     required this.symbol,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../domain/models.dart';
 import '../../../presentation/app_providers.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -18,6 +19,7 @@ class DashboardScreen extends ConsumerWidget {
     final notifications = ref.watch(notificationsProvider);
     final kpi = ref.watch(kpiProvider);
     final goldDashboard = ref.watch(goldDashboardProvider);
+    final marketState = ref.watch(marketStateProvider);
     final hazardWindows = ref.watch(hazardWindowsProvider);
 
     Future<void> refresh() async {
@@ -29,7 +31,8 @@ class DashboardScreen extends ConsumerWidget {
         ..invalidate(notificationsProvider)
         ..invalidate(kpiProvider)
         ..invalidate(hazardWindowsProvider)
-        ..invalidate(goldDashboardProvider);
+        ..invalidate(goldDashboardProvider)
+        ..invalidate(marketStateProvider);
     }
 
     return RefreshIndicator(
@@ -224,6 +227,82 @@ class DashboardScreen extends ConsumerWidget {
                 },
                 loading: () => const LinearProgressIndicator(),
                 error: (e, _) => Text('Factor state error: $e'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // A2b) Rates / session range — always from market state (independent of regime/trade). Where rates are heading.
+          _AnimatedCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Rates & session range',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Text(
+                    'Market state (always shown). Session high/low and current price. Pull to refresh.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  marketState.when(
+                    data: (ms) {
+                      final current = (ms.bid + ms.ask) / 2;
+                      return goldDashboard.when(
+                        data: (dash) {
+                          final chart = dash.tradeMapChart;
+                          final sessionHigh = ms.sessionHigh > 0 ? ms.sessionHigh : chart.sessionHigh;
+                          final sessionLow = ms.sessionLow > 0 ? ms.sessionLow : chart.sessionLow;
+                          if (sessionHigh <= 0 || sessionLow <= 0) {
+                            return Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _MetricChip(
+                                    label: 'Bid / Ask',
+                                    value:
+                                        '${ms.bid.toStringAsFixed(2)} / ${ms.ask.toStringAsFixed(2)}'),
+                                _MetricChip(
+                                    label: 'Session', value: '${ms.session} · ${ms.sessionPhase}'),
+                              ],
+                            );
+                          }
+                          return _RatesSessionChart(
+                            sessionHigh: sessionHigh,
+                            sessionLow: sessionLow,
+                            currentPrice: current,
+                            bases: chart.bases,
+                            pendingBuyLimit: chart.pendingBuyLimit,
+                            pendingBuyStop: chart.pendingBuyStop,
+                          );
+                        },
+                        loading: () => _RatesFallback(ms),
+                        error: (_, __) => _RatesFallback(ms),
+                      );
+                    },
+                    loading: () => runtime.when(
+                      data: (rt) => _MetricChip(
+                          label: 'Bid / Ask',
+                          value:
+                              '${rt.bid.toStringAsFixed(2)} / ${rt.ask.toStringAsFixed(2)}'),
+                      loading: () => const LinearProgressIndicator(),
+                      error: (_, __) => const LinearProgressIndicator(),
+                    ),
+                    error: (_, __) => runtime.when(
+                      data: (rt) => _MetricChip(
+                          label: 'Bid / Ask',
+                          value:
+                              '${rt.bid.toStringAsFixed(2)} / ${rt.ask.toStringAsFixed(2)}'),
+                      loading: () => const LinearProgressIndicator(),
+                      error: (e, _) => Text('Market state error: $e'),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -668,6 +747,194 @@ class DashboardScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// When we have market state but dashboard is loading/error: show chart from market state only.
+Widget _RatesFallback(MarketState ms) {
+  final current = (ms.bid + ms.ask) / 2;
+  if (ms.sessionHigh <= 0 || ms.sessionLow <= 0) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _MetricChip(
+            label: 'Bid / Ask',
+            value: '${ms.bid.toStringAsFixed(2)} / ${ms.ask.toStringAsFixed(2)}'),
+        _MetricChip(label: 'Session', value: '${ms.session} · ${ms.sessionPhase}'),
+      ],
+    );
+  }
+  return _RatesSessionChart(
+    sessionHigh: ms.sessionHigh,
+    sessionLow: ms.sessionLow,
+    currentPrice: current,
+    bases: const [],
+    pendingBuyLimit: const [],
+    pendingBuyStop: const [],
+  );
+}
+
+/// Compact chart: session high/low range with current price and optional bases/pending levels.
+class _RatesSessionChart extends StatelessWidget {
+  const _RatesSessionChart({
+    required this.sessionHigh,
+    required this.sessionLow,
+    required this.currentPrice,
+    this.bases = const [],
+    this.pendingBuyLimit = const [],
+    this.pendingBuyStop = const [],
+  });
+
+  final double sessionHigh;
+  final double sessionLow;
+  final double currentPrice;
+  final List<double> bases;
+  final List<PendingLevelSummary> pendingBuyLimit;
+  final List<PendingLevelSummary> pendingBuyStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final range = sessionHigh - sessionLow;
+    if (range <= 0) {
+      return Text(
+        'Session: \$${sessionLow.toStringAsFixed(2)} – \$${sessionHigh.toStringAsFixed(2)} · Now: \$${currentPrice.toStringAsFixed(2)}',
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
+    }
+    final padding = range * 0.02;
+    final min = sessionLow - padding;
+    final max = sessionHigh + padding;
+    final span = max - min;
+    double pos(double v) => ((v - min) / span).clamp(0.0, 1.0);
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final width = constraints.maxWidth;
+      final theme = Theme.of(context);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Session high ',
+                style: theme.textTheme.labelSmall,
+              ),
+              Text(
+                '\$${sessionHigh.toStringAsFixed(2)}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w600, color: Colors.green.shade700),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Current ',
+                style: theme.textTheme.labelSmall,
+              ),
+              Text(
+                '\$${currentPrice.toStringAsFixed(2)}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Session low ',
+                style: theme.textTheme.labelSmall,
+              ),
+              Text(
+                '\$${sessionLow.toStringAsFixed(2)}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w600, color: Colors.red.shade700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 36,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          Colors.red.shade100,
+                          Colors.orange.shade100,
+                          Colors.green.shade100,
+                        ],
+                      ),
+                      border: Border.all(
+                          color: theme.colorScheme.outline.withOpacity(0.3)),
+                    ),
+                  ),
+                ),
+                ...bases.take(5).map((base) {
+                  final left = pos(base) * width;
+                  return Positioned(
+                    left: (left - 1).clamp(0.0, width - 2),
+                    top: 4,
+                    bottom: 4,
+                    child: Container(
+                      width: 2,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.outline.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  );
+                }),
+                ...pendingBuyLimit.take(2).map((p) {
+                  final left = pos(p.price) * width;
+                  return Positioned(
+                    left: (left - 1).clamp(0.0, width - 2),
+                    top: 2,
+                    child: Icon(Icons.arrow_downward,
+                        size: 14, color: Colors.blue.shade700),
+                  );
+                }),
+                ...pendingBuyStop.take(2).map((p) {
+                  final left = pos(p.price) * width;
+                  return Positioned(
+                    left: (left - 1).clamp(0.0, width - 2),
+                    top: 2,
+                    child: Icon(Icons.arrow_upward,
+                        size: 14, color: Colors.green.shade700),
+                  );
+                }),
+                Positioned(
+                  left: (pos(currentPrice) * width - 6).clamp(0.0, width - 12),
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: theme.colorScheme.surface, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: theme.colorScheme.primary.withOpacity(0.5),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    });
   }
 }
 

@@ -168,6 +168,9 @@ public static class Mt5Endpoints
                 var indiaTime = ksaTime.ToOffset(TimeSpan.FromMinutes(330));
                 var volatilityExpansion = request.VolatilityExpansion ?? (request.Adr <= 0 ? 0 : request.Atr / request.Adr);
                 var (resolvedSession, resolvedPhase) = TradingSessionClock.Resolve(ksaTime);
+                // London/NY overlap: Server 14:55–15:25 (spec). Derive from time so regime labels match.
+                var serverTod = mt5ServerTime.TimeOfDay;
+                var isLondonNyOverlap = serverTod >= TimeSpan.FromMinutes(14 * 60 + 55) && serverTod < TimeSpan.FromMinutes(15 * 60 + 25);
 
                 var mt5Mid = request.Bid.HasValue && request.Ask.HasValue
                     ? (request.Bid.Value + request.Ask.Value) / 2m
@@ -297,7 +300,7 @@ public static class Mt5Endpoints
                     HasLiquiditySweep: request.HasLiquiditySweep ?? false,
                     HasPanicDropSequence: request.HasPanicDropSequence ?? false,
                     IsPostSpikePullback: request.IsPostSpikePullback ?? false,
-                    IsLondonNyOverlap: request.IsLondonNyOverlap ?? false,
+                    IsLondonNyOverlap: request.IsLondonNyOverlap ?? isLondonNyOverlap,
                     IsBreakoutConfirmed: request.IsBreakoutConfirmed ?? false,
                     IsUsRiskWindow: request.IsUsRiskWindow ?? false,
                     IsFriday: mt5ServerTime.DayOfWeek == DayOfWeek.Friday,
@@ -419,6 +422,7 @@ public static class Mt5Endpoints
                 IRuntimeTimelineWriter timeline,
                 IApplicationDbContext db,
                 INotificationService notification,
+                IExpectedEntryStore expectedEntryStore,
                 CancellationToken cancellationToken) =>
             {
                 using var reader = new StreamReader(httpRequest.Body);
@@ -477,12 +481,61 @@ public static class Mt5Endpoints
                     var openedSession = snapshotStore.TryGet(out var buySnap) && buySnap is not null
                         ? buySnap.Session
                         : string.Empty;
+                    var actualFill = request.Mt5Price ?? 0m;
+                    var grams = request.Grams ?? 0m;
+                    var expectedEntry = expectedEntryStore.TryGet(tradeId, out var expected) ? expected : (decimal?)null;
+                    var slippagePips = expectedEntry.HasValue ? actualFill - expectedEntry.Value : (decimal?)null;
+                    var slippageUsd = expectedEntry.HasValue && grams > 0m
+                        ? (actualFill - expectedEntry.Value) * grams * 0.03215m
+                        : (decimal?)null;
+
                     var buySlip = ledger.ApplyBuyFill(
                         tradeId,
-                        request.Grams ?? 0m,
-                        request.Mt5Price ?? 0m,
+                        grams,
+                        actualFill,
                         mt5Time,
                         openedSession);
+
+                    await timeline.WriteAsync(
+                        eventType: "TRADE_TRIGGERED",
+                        stage: "execution",
+                        source: "mt5",
+                        symbol: snapshotStore.TryGet(out var _s) && _s is not null ? _s.Symbol : "XAUUSD.gram",
+                        cycleId: null,
+                        tradeId: request.TradeId,
+                        payload: new
+                        {
+                            request.TradeId,
+                            ExpectedEntry = expectedEntry,
+                            ActualFill = actualFill,
+                            SlippagePips = slippagePips,
+                            SlippageUSD = slippageUsd,
+                            Grams = grams,
+                            request.Mt5Time,
+                            lifecycleEvent = "TradeActive",
+                        },
+                        cancellationToken);
+                    if (expectedEntry.HasValue)
+                    {
+                        await timeline.WriteAsync(
+                            eventType: "TABLE_COMPILER",
+                            stage: "execution",
+                            source: "mt5",
+                            symbol: snapshotStore.TryGet(out var _s2) && _s2 is not null ? _s2.Symbol : "XAUUSD.gram",
+                            cycleId: null,
+                            tradeId: request.TradeId,
+                            payload: new
+                            {
+                                EventType = "FILL",
+                                Session = openedSession,
+                                ExpectedEntry = expectedEntry.Value,
+                                ActualFill = actualFill,
+                                SlippageUSD = slippageUsd,
+                                Outcome = "TRADE_ACTIVE",
+                                Grams = grams,
+                            },
+                            cancellationToken);
+                    }
 
                     await notification.NotifyAsync("BUY SLIP", buySlip.Message, cancellationToken);
 
@@ -542,6 +595,41 @@ public static class Mt5Endpoints
                             ledger = ledger.GetState(),
                         });
                     }
+
+                    await timeline.WriteAsync(
+                        eventType: "TRADE_CLOSED",
+                        stage: "execution",
+                        source: "mt5",
+                        symbol: snapshotStore.TryGet(out var _s3) && _s3 is not null ? _s3.Symbol : "XAUUSD.gram",
+                        cycleId: null,
+                        tradeId: request.TradeId,
+                        payload: new
+                        {
+                            request.TradeId,
+                            Status = normalizedStatus,
+                            lifecycleEvent = "TradeClosed",
+                            Outcome = "TP_HIT",
+                            request.Mt5Price,
+                            request.Mt5Time,
+                        },
+                        cancellationToken);
+                    await timeline.WriteAsync(
+                        eventType: "TABLE_COMPILER",
+                        stage: "execution",
+                        source: "mt5",
+                        symbol: snapshotStore.TryGet(out var _s4) && _s4 is not null ? _s4.Symbol : "XAUUSD.gram",
+                        cycleId: null,
+                        tradeId: request.TradeId,
+                        payload: new
+                        {
+                            EventType = "CLOSE",
+                            Session = closedSession,
+                            Outcome = "TP_HIT",
+                            ClosePrice = request.Mt5Price,
+                            request.Mt5Time,
+                            NetProfitAed = sellSlip.NetProfitAed,
+                        },
+                        cancellationToken);
 
                     await notification.NotifyAsync("SELL SLIP", sellSlip.Message, cancellationToken);
 

@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddSingleton<ILatestMarketSnapshotStore, InMemoryLatestMarketSnapshotStore>();
         services.AddSingleton<IChartDataStore, InMemoryChartDataStore>();
         services.AddSingleton<IPendingTradeStore, InMemoryPendingTradeStore>();
+        services.AddSingleton<IExpectedEntryStore, InMemoryExpectedEntryStore>();
         services.AddSingleton<IMt5ControlStore, InMemoryMt5ControlStore>();
         services.AddSingleton<IHistoryFetchStore, InMemoryHistoryFetchStore>();
         services.AddSingleton<ITradeApprovalStore, InMemoryTradeApprovalStore>();
@@ -55,6 +56,7 @@ public static class DependencyInjection
         services.AddSingleton<ITradingRuntimeSettingsStore>(_ =>
             new InMemoryTradingRuntimeSettingsStore(configuration["Execution:Symbol"] ?? "XAUUSD.gram"));
         services.AddSingleton<ILastGoldEngineStateStore, InMemoryLastGoldEngineStateStore>();
+        services.AddSingleton<IPathProjectionStore, InMemoryPathProjectionStore>();
         services.AddSingleton<ISetupLifecycleStore, InMemorySetupLifecycleStore>();
         services.AddSingleton<IGoldEngineThresholds, GoldEngineThresholds>();
         services.AddSingleton<ITradeLedgerService, DurableTradeLedgerService>();

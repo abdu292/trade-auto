@@ -2,10 +2,22 @@ using Brain.Application.Common.Models;
 
 namespace Brain.Application.Common.Services;
 
+/// <summary>
+/// Classifies market regime for trade gates. Per client spec: Friday risk is split into
+/// distinct regimes with precise labels (overlap vs late-NY), so UI and logs match actual trigger window.
+/// </summary>
 public static class RegimeRiskClassifier
 {
     private const decimal ExpansionThreshold = 1.15m;
     private const decimal CompressionThreshold = 0.82m;
+
+    // London→NY overlap: spec 01_master_constitution.md — Server 14:55–15:25
+    private static readonly TimeSpan FridayOverlapStartServer = new(14, 55, 0);
+    private static readonly TimeSpan FridayOverlapEndServer = new(15, 25, 0);
+
+    // Late NY / post-overlap high-risk: block from ~18:00 server (KSA ~18:50) through NY END (20:10 server)
+    private static readonly TimeSpan FridayLateNyStartServer = new(18, 0, 0);
+    private static readonly TimeSpan FridayLateNyEndServer = new(20, 10, 0);
 
     public static RegimeClassificationContract Classify(MarketSnapshotContract snapshot)
     {
@@ -16,21 +28,62 @@ public static class RegimeRiskClassifier
         var isExpansion = snapshot.IsExpansion || snapshot.IsAtrExpanding || volatilityExpansion >= ExpansionThreshold;
         var isCompression = snapshot.IsCompression || (snapshot.HasOverlapCandles && volatilityExpansion <= CompressionThreshold);
         var isNewsHigh = string.Equals(snapshot.TelegramImpactTag, "HIGH", StringComparison.OrdinalIgnoreCase);
-        var isFridayOverlapExpansion = snapshot.IsFriday && snapshot.IsLondonNyOverlap && isExpansion;
         var isPanicPattern = snapshot.HasPanicDropSequence;
-        var isWaterfall = (isExpansion && snapshot.HasImpulseCandles && isNewsHigh) || isFridayOverlapExpansion || isPanicPattern;
+        var isWaterfall = (isExpansion && snapshot.HasImpulseCandles && isNewsHigh) || isPanicPattern;
         var isPostSpikePullback = snapshot.IsPostSpikePullback || (volatilityExpansion >= 1.00m && volatilityExpansion < ExpansionThreshold && !snapshot.HasImpulseCandles);
 
-        if (isFridayOverlapExpansion)
+        var isFriday = snapshot.IsFriday;
+        var session = (snapshot.Session ?? string.Empty).Trim().ToUpperInvariant();
+        var phase = (snapshot.SessionPhase ?? string.Empty).Trim().ToUpperInvariant();
+        var isNySession = session is "NY" or "NEW_YORK";
+        var isNyLateOrEnd = TradingSessionClock.IsNewYorkLateOrEnd(snapshot.Session ?? "", snapshot.SessionPhase ?? "");
+        var t = snapshot.Mt5ServerTime.TimeOfDay;
+
+        // 1) HARD BLOCK only: Friday AND session == NEW_YORK AND phase in {LATE, END}. Client: "if Friday AND session == NEW_YORK AND phase == END: block"
+        if (isFriday && isNyLateOrEnd)
         {
             return new RegimeClassificationContract(
-                Regime: "FRIDAY_HIGH_RISK",
+                Regime: "FRIDAY_NY_LATE_BLOCK",
                 RiskTag: "BLOCK",
                 IsBlocked: true,
-                IsWaterfall: true,
-                Reason: "Friday London/NY overlap with expansion is blocked.");
+                IsWaterfall: false,
+                Reason: "Friday late New York (phase LATE/END) — hard block per client rule.");
         }
 
+        // 2) Friday London/NY overlap + expansion = CAUTION (tighter rails), not full abort unless another veto.
+        if (isFriday && IsWithin(t, FridayOverlapStartServer, FridayOverlapEndServer) && isExpansion)
+        {
+            return new RegimeClassificationContract(
+                Regime: "FRIDAY_OVERLAP_CAUTION",
+                RiskTag: "CAUTION",
+                IsBlocked: false,
+                IsWaterfall: false,
+                Reason: "Friday London/NY overlap with expansion — caution / tighter rails.");
+        }
+
+        // 3) Friday late NY window but not in LATE/END phase (e.g. expansion only) = CAUTION
+        if (isFriday && isNySession && IsWithin(t, FridayLateNyStartServer, FridayLateNyEndServer) && isExpansion && !isNyLateOrEnd)
+        {
+            return new RegimeClassificationContract(
+                Regime: "FRIDAY_EXPANSION_CAUTION",
+                RiskTag: "CAUTION",
+                IsBlocked: false,
+                IsWaterfall: false,
+                Reason: "Friday NY expansion — caution; hard block only in LATE/END phase.");
+        }
+
+        // 4) Friday spike extension (expansion + impulse + high news) = CAUTION; block only if also hazard
+        if (isFriday && isExpansion && snapshot.HasImpulseCandles && isNewsHigh)
+        {
+            return new RegimeClassificationContract(
+                Regime: "FRIDAY_NEWS_HAZARD",
+                RiskTag: "CAUTION",
+                IsBlocked: false,
+                IsWaterfall: true,
+                Reason: "Friday expansion with impulse and HIGH news — caution; no impulse chase.");
+        }
+
+        // 4) Non-Friday waterfall / news spike
         if (isWaterfall || (isExpansion && snapshot.HasImpulseCandles && isNewsHigh))
         {
             return new RegimeClassificationContract(
@@ -51,7 +104,7 @@ public static class RegimeRiskClassifier
                 Reason: "Post-spike pullback; allow only reduced sizing and deeper entries.");
         }
 
-            if (isCompression)
+        if (isCompression)
         {
             return new RegimeClassificationContract(
                 Regime: "COMPRESSION",
@@ -67,5 +120,10 @@ public static class RegimeRiskClassifier
             IsBlocked: false,
             IsWaterfall: false,
             Reason: "Expansion regime requires tighter risk controls.");
+    }
+
+    private static bool IsWithin(TimeSpan value, TimeSpan start, TimeSpan end)
+    {
+        return value >= start && value < end;
     }
 }

@@ -203,6 +203,85 @@ A replay path runs historical MT5 data through the same decision hierarchy for t
 
 ---
 
+## Ideal Runtime State Machine (Implemented)
+
+The runtime has two separate layers:
+
+1. **ENGINE LAYER** — Deterministic engines (Session, Indicators, Structure, Regime, Waterfall, Legality, Verify, News, Capital, History, Candidate, Analyze, Table, Validate, Decision, Execution).
+2. **STATE MACHINE LAYER** — The cycle controller: when a cycle starts, which engine runs next, where abort/hold happens. TABLE is the only component allowed to emit executable order instructions.
+
+### Top-level states (logged to timeline)
+
+- **STATE_00_IDLE** → waiting for snapshot
+- **STATE_01_SNAPSHOT_RECEIVED** → latest market packet accepted
+- **STATE_02_CYCLE_STARTED** → cycle_id assigned, context attached
+- **STATE_03_PRECHECK** → sanity checks (stale, spread, session)
+- **STATE_04_SESSION_CLASSIFICATION** → session = JAPAN/INDIA/LONDON/NEW_YORK, phase = OPEN/EARLY/MID/LATE/END
+- **STATE_05_REGIME_GATE** → REGIME_ALLOWED / REGIME_HIGH_CAUTION / REGIME_BLOCKED
+- **STATE_06_CONTEXT_BUILD** → deterministic engines build context
+- **STATE_06B_PATH_PROJECTION** → path bias, magnets, zones for **UI only** (not execution)
+- **STATE_07_CANDIDATE_SCAN** → and onward (ANALYZE, TABLE_BUILD, VALIDATE, FINAL_DECISION, EXECUTION_READY, EXECUTE_MT5, …)
+- **ABORT_PRECHECK / ABORT_REGIME** → with reason codes and veto source
+- **STATE_17_CYCLE_CLOSED** → archive, return to idle
+
+### Session / phase model
+
+- **SESSION**: JAPAN | INDIA | LONDON | NEW_YORK
+- **PHASE**: OPEN | EARLY | MID | LATE | END | TRANSITION | CLOSED
+
+Rules are precise: e.g. **hard block only when Friday AND session == NEW_YORK AND phase in {LATE, END}**. Friday overlap or expansion alone are **CAUTION** (tighter rails), not full abort.
+
+### Path projection (STATE_06B)
+
+- **pathBias**: UP | DOWN | TWO_WAY | RANGE
+- **keyMagnets**, **nextTestZone**, **invalidationShelf**, **sessionTargetCorridor**, **confidenceBand**, **summaryLine**
+- Exposed via **GET /api/monitoring/path-projection** for the app chart (“where rates are heading”). Not used by execution.
+
+### State machine diagram
+
+```mermaid
+flowchart TD
+    A[IDLE] --> B[SNAPSHOT_RECEIVED]
+    B --> C[CYCLE_STARTED]
+    C --> D[PRECHECK]
+    D -->|fail| D1[ABORT_PRECHECK]
+    D --> E[SESSION_CLASSIFICATION]
+    E --> F[REGIME_GATE]
+    F -->|blocked| F1[ABORT_REGIME]
+    F -->|allowed/caution| G[CONTEXT_BUILD]
+    G --> G2[PATH_PROJECTION_UI]
+    G --> H[CANDIDATE_SCAN]
+    H -->|none| H1[WAIT_NO_SETUP]
+    H -->|candidate| I[ANALYZE]
+    I -->|fail| I1[ABORT_ANALYZE]
+    I -->|pass| J[TABLE_BUILD]
+    J -->|empty| J1[ABORT_NO_TABLE]
+    J --> K[VALIDATE]
+    K -->|invalid| K1[ABORT_VALIDATE]
+    K --> L[FINAL_DECISION]
+    L -->|NO| L1[ABORT_DECISION]
+    L -->|WAIT| L2[HOLD_WAIT]
+    L -->|YES| M[EXECUTION_READY]
+    M --> N[EXECUTE_MT5]
+    N -->|fail| N1[EXECUTION_FAILED]
+    N --> O[POST_EXECUTION_MONITOR]
+    O --> P[SLIPS_LEDGER_UPDATE]
+    P --> Q[LEARNING_AUDIT]
+    Q --> R[CYCLE_CLOSED]
+    D1 --> R
+    F1 --> R
+    H1 --> R
+    I1 --> R
+    J1 --> R
+    K1 --> R
+    L1 --> R
+    L2 --> R
+    N1 --> R
+    R --> A
+```
+
+---
+
 ## Document Alignment
 This architecture is aligned with:
 - **Physical Gold Final Pack** (spec folder): master constitution, trading philosophy, capital and ledger law, TABLE compiler logic, safety rules.

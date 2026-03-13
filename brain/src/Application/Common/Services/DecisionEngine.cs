@@ -651,14 +651,16 @@ public static class DecisionEngine
             ExpiryServer: reloadExpiryOffset.ToOffset(TimeSpan.FromHours(2).Add(TimeSpan.FromMinutes(10))));
     }
 
+    /// <summary>Maps granular phase (OPEN, EARLY, MID, LATE, END) to legacy START/MID/END for decision logic.</summary>
     private static string NormalizeSessionPhase(string? value)
     {
         var normalized = (value ?? string.Empty).Trim().ToUpperInvariant();
         return normalized switch
         {
-            "START" => "START",
+            "START" or "OPEN" or "EARLY" => "START",
             "MID" => "MID",
-            "END" => "END",
+            "END" or "LATE" => "END",
+            "TRANSITION" => "TRANSITION",
             _ => "UNKNOWN",
         };
     }
