@@ -63,43 +63,48 @@ public class GoldEngineOrchestrator
         CancellationToken cancellationToken = default)
     {
         // 1. MT5 snapshot ingestion
-        var snapshot = await _marketDataProvider.GetMarketSnapshotAsync(symbol, cancellationToken);
-        if (snapshot == null)
-        {
-            return OrchestrationResult.NoTrade("Failed to fetch market snapshot");
-        }
+        var snapshot = await _marketDataProvider.GetSnapshotAsync(symbol, cancellationToken);
 
         // 2. Session engine
         var (session, phase) = TradingSessionClock.Resolve(snapshot.Mt5ServerTime);
         snapshot = snapshot with { Session = session, SessionPhase = phase };
+        var sessionResult = SessionEngine.Resolve(snapshot.Mt5ServerTime);
 
         // 3. Indicator engine
-        var indicatorResult = IndicatorEngine.Calculate(snapshot);
+        var indicatorResult = IndicatorEngine.Calculate(snapshot, sessionResult);
 
         // 4. Structure engine (using existing RuleEngine)
         var structureResult = RuleEngine.EvaluateStructure(snapshot);
+        var structureEngineResult = ToStructureEngineResult(structureResult);
 
-        // 5. Volatility / regime engine
-        var regimeResult = MarketRegimeDetector.Classify(snapshot);
-        var volatilityState = RegimeRiskClassifier.ClassifyVolatility(snapshot, regimeResult);
+        // 5. Regime (RegimeRiskClassifier gives RegimeClassificationContract for waterfall)
+        var regimeResult = RegimeRiskClassifier.Classify(snapshot);
 
         // 6. Waterfall / crisis engine
         var waterfallRisk = WaterfallDetectionEngine.Detect(snapshot, regimeResult);
-        var crisisVeto = waterfallRisk == "HIGH";
+        var waterfallCrisisResult = new WaterfallCrisisEngineResult(
+            PatternType: "",
+            PatternReason: "",
+            CrisisVeto: waterfallRisk == "HIGH",
+            CrisisReason: waterfallRisk == "HIGH" ? "Waterfall HIGH" : "",
+            WaterfallRisk: waterfallRisk,
+            ShouldBlock: waterfallRisk == "HIGH");
 
         // 7. Hard legality checks
         var ledgerState = _ledgerService.GetState();
         var legalityResult = HardLegalityEngine.Check(
             snapshot,
             ledgerState,
-            regimeResult,
-            waterfallRisk);
+            waterfallCrisisResult,
+            structureEngineResult,
+            snapshot.IsUsRiskWindow || snapshot.NewsEventFlag);
 
         if (!legalityResult.IsLegal)
         {
+            var blockReason = legalityResult.BlockingChecks.FirstOrDefault()?.Reason ?? "BLOCKED";
             return OrchestrationResult.NoTrade(
-                $"Hard legality block: {legalityResult.BlockReason}",
-                reasonCode: legalityResult.BlockReason);
+                $"Hard legality block: {blockReason}",
+                reasonCode: blockReason);
         }
 
         // 8. VERIFY
@@ -112,59 +117,33 @@ public class GoldEngineOrchestrator
             tradingViewSignal = tvSignal;
         }
 
-        var verifyResult = VerifyEngine.Verify(
+        var verifyResult = VerifyEngine.Process(
             snapshot,
-            telegramSignals?.Select(s => new TelegramSignalContract(
-                s.SourceTag,
-                s.Timestamp,
-                s.Symbol,
-                s.Direction,
-                s.EntryZoneLow,
-                s.EntryZoneHigh,
-                s.StopLoss,
-                s.TpPips,
-                s.CommentTags)).ToList(),
-            tradingViewSignal,
-            new StructureLevelsContract(
-                structureResult.S1,
-                structureResult.S2,
-                structureResult.S3,
-                structureResult.R1,
-                structureResult.R2,
-                structureResult.Fail));
+            structureEngineResult,
+            SessionEngine.Resolve(snapshot.Mt5ServerTime));
 
-        // 9. NEWS
-        var newsAssessment = await _newsService.AssessAsync(snapshot.Timestamp, cancellationToken);
-        var upcomingEvents = newsAssessment.NearbyEvents?.Select(e => new EconomicEventContract(
-            e.EventTimeUtc,
-            e.Tier ?? "Tier3",
-            e.Currency ?? "USD",
-            e.Title,
-            e.Actual,
-            e.Forecast,
-            e.Previous,
-            e.Impact)).ToList();
-        var newsResult = NewsEngine.ProcessNews(
+        // 9. NEWS (build volatility + session for Process)
+        var volatilityResult = VolatilityRegimeEngine.Analyze(snapshot, indicatorResult, structureEngineResult);
+        var newsResult = NewsEngine.Process(
             snapshot,
-            upcomingEvents,
-            null,  // Recent events - would need separate query
-            null,  // Macro intel - would need separate service
-            null);  // Current mode - would need separate query
+            waterfallCrisisResult,
+            volatilityResult,
+            sessionResult);
 
         // 10. CAPITAL UTILIZATION
         var capitalResult = CapitalUtilizationService.Check(
-            ledgerState.CashAedTotal,
+            ledgerState.CashAed,
             snapshot.AuthoritativeRate > 0 ? snapshot.AuthoritativeRate : snapshot.Ask,
             100m);  // Default check with 100g
 
-        var capitalUtilResult = new CapitalUtilizationResult(
-            RecommendedGrams: capitalResult.ApprovedGrams,
+        var capitalUtilResult = new CapitalUtilizationEngineResult(
+            C1Capacity: ledgerState.DeployableCashAed * 0.8m,
+            C2Capacity: ledgerState.DeployableCashAed * 0.2m,
+            CapacityClamp: !capitalResult.ApprovedByCapacityGate,
             SizeState: capitalResult.ApprovedGrams >= 200m ? "LARGE" : capitalResult.ApprovedGrams >= 100m ? "STANDARD" : "MINIMUM",
-            ExposureState: ledgerState.OpenPositionsCount >= 2 ? "MAXED" : ledgerState.OpenPositionsCount == 1 ? "MODERATE" : "SAFE",
+            ExposureState: ledgerState.OpenBuyCount >= 2 ? "MAXED" : ledgerState.OpenBuyCount == 1 ? "MODERATE" : "SAFE",
             AffordableFlag: capitalResult.ApprovedByCapacityGate,
-            SlotCount: ledgerState.OpenPositionsCount,
-            C1Available: ledgerState.CashAedTotal * 0.7m,  // 70% in C1
-            C2Available: ledgerState.CashAedTotal * 0.3m);  // 30% in C2
+            MaxAffordableGrams: capitalResult.ApprovedGrams);
 
         // 11. HISTORICAL_PATTERN_ENGINE
         var historicalMatches = _historicalPatternStore != null
@@ -176,72 +155,74 @@ public class GoldEngineOrchestrator
                 cancellationToken)
             : null;
 
-        var historicalResult = HistoricalPatternEngine.AnalyzeHistoricalPattern(
+        var historicalResult = HistoricalPatternEngine.Process(
             snapshot,
-            regimeResult,
-            session,
-            phase,
-            snapshot.DayOfWeek,
-            historicalMatches);
+            indicatorResult,
+            structureEngineResult,
+            sessionResult);
 
         // 12. Candidate Engine
-        var candidate = _candidateStore.GetCandidate(symbol);
-        var candidateState = candidate?.State ?? "NONE";
-        var candidateResult = CandidateEngine.UpdateCandidate(
-            candidateState,
+        var candidateResult = CandidateEngine.Process(
             snapshot,
-            structureResult,
-            waterfallRisk,
-            verifyResult,
-            historicalResult);
-
-        // 13. ANALYZE (via AI Worker)
-        // The AI Worker receives the snapshot and builds its own context packet
-        var aiAnalyzeResult = await _aiWorkerClient.AnalyzeAsync(snapshot, snapshot.CycleId, cancellationToken);
-
-        // Convert AI result to AnalyzeResult
-        var analyzeResult = ConvertAiResultToAnalyzeResult(aiAnalyzeResult, structureResult);
-
-        // 14. TABLE
-        var tableResult = TableCompiler.Compile(
-            snapshot,
-            analyzeResult,
-            ledgerState,
+            structureEngineResult,
+            volatilityResult,
+            waterfallCrisisResult,
             newsResult,
             capitalUtilResult,
             historicalResult,
             verifyResult,
-            100m);  // minTradeGrams
+            sessionResult);
+
+        // 13. ANALYZE (via AI Worker)
+        var aiAnalyzeResult = await _aiWorkerClient.AnalyzeAsync(snapshot, snapshot.CycleId, cancellationToken);
+        var analyzeResult = ConvertAiResultToAnalyzeResult(aiAnalyzeResult, structureResult);
+        var analyzeEngineResult = ToAnalyzeEngineResult(analyzeResult);
+
+        // 14. TABLE
+        var tableResult = TableCompiler.Compile(
+            snapshot,
+            candidateResult,
+            analyzeEngineResult,
+            structureEngineResult,
+            volatilityResult,
+            waterfallCrisisResult,
+            newsResult,
+            capitalUtilResult,
+            historicalResult,
+            ledgerState,
+            null);
 
         if (!tableResult.IsValid)
         {
             return OrchestrationResult.NoTrade(
-                $"TABLE compilation failed: {tableResult.RejectionReason}",
-                reasonCode: tableResult.ReasonCode);
+                $"TABLE compilation failed: {tableResult.Reason}",
+                reasonCode: tableResult.Reason);
         }
 
         // 15. VALIDATE
         var validateResult = ValidateEngine.Validate(
-            tableResult,
             snapshot,
+            tableResult,
+            structureEngineResult,
+            volatilityResult,
             newsResult,
-            analyzeResult,
-            historicalResult);
+            sessionResult);
 
         if (!validateResult.IsValid)
         {
             return OrchestrationResult.NoTrade(
-                $"VALIDATE failed: {validateResult.RejectionReason}",
-                reasonCode: validateResult.ReasonCode);
+                $"VALIDATE failed: {validateResult.Reason}",
+                reasonCode: validateResult.Reason);
         }
 
         // 16. Final Decision Engine
-        var finalDecision = FinalDecisionEngine.MakeDecision(
+        var finalDecision = FinalDecisionEngine.Decide(
+            candidateResult,
+            tableResult,
             validateResult,
-            snapshot,
-            newsResult,
-            analyzeResult,
-            historicalResult);
+            legalityResult,
+            waterfallCrisisResult,
+            newsResult);
 
         if (finalDecision.Decision != "YES")
         {
@@ -251,15 +232,16 @@ public class GoldEngineOrchestrator
         }
 
         // 17. MT5 Execution (return order for execution)
+        var validated = validateResult.ValidatedOrder!;
         var order = new PendingOrderContract(
-            validateResult.OrderType!,
-            validateResult.EntryPrice!.Value,
-            validateResult.Tp1!.Value,
-            validateResult.Tp2,
-            validateResult.Tp3,
-            validateResult.StopLoss,
-            validateResult.Grams!.Value,
-            validateResult.Expiry!.Value,
+            validated.OrderType!,
+            validated.Entry!.Value,
+            validated.Tp!.Value,
+            null,
+            null,
+            null,
+            validated.Grams!.Value,
+            validated.ExpiryUtc!.Value,
             "TABLE_COMPILED",
             finalDecision.ReasonCode);
 
@@ -269,7 +251,7 @@ public class GoldEngineOrchestrator
     // Helper methods...
     private static AnalyzeResult ConvertAiResultToAnalyzeResult(
         TradeSignalContract aiResult,
-        RuleEngine.StructureResult structureResult)
+        StructureResult structureResult)
     {
         // Convert AI worker result to AnalyzeResult
         return new AnalyzeResult(
@@ -303,6 +285,55 @@ public class GoldEngineOrchestrator
             ConfidenceScore: aiResult.AlignmentScore,
             LidPrice: null);
     }
+
+    private static StructureEngineResult ToStructureEngineResult(StructureResult r)
+    {
+        return new StructureEngineResult(
+            S1: r.S1 ?? 0m,
+            S2: r.S2,
+            S3: r.S3,
+            R1: r.R1 ?? 0m,
+            R2: r.R2,
+            Fail: r.Fail,
+            HasShelf: r.HasShelf,
+            ShelfLevel: r.S1 ?? 0m,
+            HasLid: r.HasLid,
+            LidLevel: r.R1 ?? 0m,
+            HasSweep: r.HasSweep,
+            SweepLevel: 0m,
+            HasReclaim: r.HasReclaim,
+            ReclaimLevel: 0m,
+            IsMidAir: r.IsMidAir,
+            MidAirZone: "",
+            StructureQuality: r.FailBroken ? "WEAK" : "STRONG");
+    }
+
+    private static AnalyzeEngineResult ToAnalyzeEngineResult(AnalyzeResult a)
+    {
+        return new AnalyzeEngineResult(
+            Regime: a.Regime,
+            WaterfallRisk: a.WaterfallRisk,
+            MidAirStatus: a.MidAirStatus,
+            RailAStatus: a.RailAStatus,
+            RailAReason: a.RailAReason ?? "",
+            RailBStatus: a.RailBStatus,
+            RailBReason: a.RailBReason ?? "",
+            S1: a.S1 ?? 0m,
+            S2: a.S2,
+            R1: a.R1 ?? 0m,
+            R2: a.R2,
+            Fail: a.FailPrice,
+            CurrentSessionAnchors: Array.Empty<string>(),
+            NextSessionAnchors: Array.Empty<string>(),
+            NearestMagnet: a.NearestMagnet ?? 0m,
+            PrimaryTradeConcept: a.PrimaryTradeConcept,
+            RotationEnvelope: (8m, 12m),
+            TriggerObjects: Array.Empty<string>(),
+            BottomType: a.BottomType,
+            PatternType: a.PatternType,
+            ImpulseHarvestScore: a.ImpulseHarvestScore,
+            SessionHistoricalModifier: a.SessionHistoricalModifier);
+    }
 }
 
 // Supporting contracts and results
@@ -330,19 +361,3 @@ public record PendingOrderContract(
     DateTimeOffset Expiry,
     string Template,
     string ReasonCode);
-
-// Placeholder interfaces for missing stores
-public interface ITelegramSignalStore
-{
-    Task<IReadOnlyCollection<TelegramSignalContract>> GetRecentSignalsAsync(TimeSpan window, CancellationToken ct);
-}
-
-public interface IHistoricalPatternStore
-{
-    Task<IReadOnlyCollection<HistoricalPatternMatch>> FindMatchesAsync(
-        MarketSnapshotContract snapshot,
-        string session,
-        string phase,
-        DayOfWeek dayOfWeek,
-        CancellationToken ct);
-}

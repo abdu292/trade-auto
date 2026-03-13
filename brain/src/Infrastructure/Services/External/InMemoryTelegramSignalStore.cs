@@ -1,4 +1,5 @@
 using Brain.Application.Common.Interfaces;
+using Brain.Application.Common.Models;
 using Brain.Application.Common.Services;
 using Microsoft.Extensions.Logging;
 

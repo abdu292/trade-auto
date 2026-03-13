@@ -101,6 +101,40 @@ public sealed record StructureResult(
     bool HasCompression,
     bool IsMidAir);
 
+/// <summary>
+/// AI-worker conversion result used by GoldEngineOrchestrator (TABLE path).
+/// </summary>
+public sealed record AnalyzeResult(
+    string Regime,
+    string WaterfallRisk,
+    string MidAirStatus,
+    string RailAStatus,
+    string RailBStatus,
+    string? RailAReason,
+    string? RailBReason,
+    decimal? S1,
+    decimal? S2,
+    decimal? S3,
+    decimal? R1,
+    decimal? R2,
+    decimal? FailPrice,
+    bool FailThreatened,
+    bool FailBroken,
+    bool FailProtected,
+    bool StructureValid,
+    string? CurrentSessionAnchor,
+    string? NextSessionAnchor,
+    decimal? NearestMagnet,
+    string PrimaryTradeConcept,
+    string RotationEnvelope,
+    string? TriggerObject,
+    string BottomType,
+    string PatternType,
+    decimal ImpulseHarvestScore,
+    decimal SessionHistoricalModifier,
+    decimal ConfidenceScore,
+    decimal? LidPrice);
+
 public sealed record ReplayStartRequest(
     string Symbol = "XAUUSD.gram",
     DateTimeOffset? From = null,

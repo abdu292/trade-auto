@@ -204,7 +204,11 @@ public sealed record RegimeClassificationContract(
     string RiskTag,
     bool IsBlocked,
     bool IsWaterfall,
-    string Reason);
+    string Reason)
+{
+    /// <summary>Alias for Regime for compatibility.</summary>
+    public string RegimeTag => Regime;
+}
 
 public sealed record DecisionResultContract(
     bool IsTradeAllowed,
@@ -264,7 +268,17 @@ public sealed record LedgerStateContract(
     decimal EquityMultiple = 0m,
     // Section 4: C1/C2 bucket capacity (C1=80%, C2=20% of deployable cash)
     decimal BucketC1Aed = 0m,
-    decimal BucketC2Aed = 0m);
+    decimal BucketC2Aed = 0m)
+{
+    /// <summary>Alias for CashAed.</summary>
+    public decimal CashAedTotal => CashAed;
+    /// <summary>Alias for GoldGrams.</summary>
+    public decimal GoldGramsTotal => GoldGrams;
+    /// <summary>Alias for DeployableCashAed.</summary>
+    public decimal DeployableAed => DeployableCashAed;
+    /// <summary>Alias for OpenBuyCount.</summary>
+    public int OpenPositionsCount => OpenBuyCount;
+}
 
 public sealed record TradeSlipContract(
     string SlipType,
@@ -292,6 +306,51 @@ public sealed record TradingViewSignalContract(
     DateTimeOffset Timestamp,
     string Source,
     string Notes);
+
+/// <summary>Structure levels (S1–S3, R1–R2, Fail) for Verify and decision stack.</summary>
+public sealed record StructureLevelsContract(
+    decimal? S1,
+    decimal? S2,
+    decimal? S3,
+    decimal? R1,
+    decimal? R2,
+    decimal? Fail);
+
+/// <summary>Economic calendar event for news engine (enriched from feed).</summary>
+public sealed record EconomicEventContract(
+    DateTimeOffset EventTimeUtc,
+    string Tier,
+    string Currency,
+    string Title,
+    string? Actual,
+    string? Forecast,
+    string? Previous,
+    string Impact);
+
+/// <summary>
+/// Telegram signal DTO for Verify engine and stores (advisory only).
+/// </summary>
+public sealed record TelegramSignalContract(
+    string SourceTag,
+    DateTimeOffset Timestamp,
+    string Symbol,
+    string Direction,
+    decimal EntryZoneLow,
+    decimal EntryZoneHigh,
+    decimal StopLoss,
+    decimal TpPips,
+    string? CommentTags = null);
+
+/// <summary>
+/// Single historical pattern match from 10+ year memory (session/regime/phase).
+/// </summary>
+public sealed record HistoricalPatternMatch(
+    string Session,
+    string RegimeTag,
+    string? Phase = null,
+    DayOfWeek? DayOfWeek = null,
+    decimal ContinuationScore = 0m,
+    decimal ReversalRisk = 0m);
 
 public sealed record TradeCommandContract(
     string Type,

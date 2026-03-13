@@ -25,7 +25,7 @@ public static class WaterfallDetectionEngine
         }
 
         // Shelf breaks continue
-        if (regime.RegimeTag == "LIQUIDATION" || regime.RegimeTag == "SHOCK")
+        if (regime.Regime == "LIQUIDATION" || regime.Regime == "SHOCK")
         {
             waterfallSignals += 2;
         }

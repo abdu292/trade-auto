@@ -1,4 +1,4 @@
-using Brain.Application.Common.Services;
+using Brain.Application.Common.Models;
 
 namespace Brain.Application.Common.Interfaces;
 
