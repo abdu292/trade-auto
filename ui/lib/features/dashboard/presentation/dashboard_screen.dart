@@ -21,6 +21,7 @@ class DashboardScreen extends ConsumerWidget {
     final goldDashboard = ref.watch(goldDashboardProvider);
     final marketState = ref.watch(marketStateProvider);
     final hazardWindows = ref.watch(hazardWindowsProvider);
+    final liveFeed = ref.watch(timelineProvider);
 
     Future<void> refresh() async {
       ref
@@ -32,7 +33,8 @@ class DashboardScreen extends ConsumerWidget {
         ..invalidate(kpiProvider)
         ..invalidate(hazardWindowsProvider)
         ..invalidate(goldDashboardProvider)
-        ..invalidate(marketStateProvider);
+        ..invalidate(marketStateProvider)
+        ..invalidate(timelineProvider);
     }
 
     return RefreshIndicator(
@@ -327,12 +329,15 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   liveFeed.when(
-                    data: (feed) {
+                    data: (events) {
+                      if (events.isEmpty) {
+                        return const Text('Direction data unavailable');
+                      }
                       // Find latest ANALYZE_STARTED or PATH_PROJECTION event
-                      final analyzeEvent = feed.events.firstWhere(
+                      final analyzeEvent = events.firstWhere(
                         (e) => e.eventType == 'ANALYZE_STARTED' ||
                             e.eventType == 'STATE_06B_PATH_PROJECTION',
-                        orElse: () => feed.events.first,
+                        orElse: () => events.first,
                       );
                       
                       final payload = analyzeEvent.payload;
