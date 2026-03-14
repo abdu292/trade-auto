@@ -5,6 +5,8 @@ namespace Brain.Application.Common.Services;
 /// Single canonical time/session authority per client audit.
 /// All downstream modules must consume only this output.
 /// Emits TIME_MAPPING_CONFLICT when clock and session engine disagree.
+/// When MT5 server time yields OFFHOURS/LATE_NY (e.g. replay or wrong server time),
+/// falls back to deriving server time from snapshot KSA or India time so Asia session is correct.
 /// </summary>
 public static class CanonicalTimeSessionService
 {
@@ -13,20 +15,67 @@ public static class CanonicalTimeSessionService
 
     /// <summary>
     /// Resolves canonical session and phase from MT5 server time.
-    /// Compares TradingSessionClock vs SessionEngine; if they disagree, conflict is set.
+    /// When optional snapshot KSA/India times are provided and primary resolution is OFFHOURS or LATE_NY,
+    /// derives effective server time from KSA (or India) and re-resolves so Asia session is correct (e.g. replay).
     /// </summary>
-    public static CanonicalTimeSessionResult Resolve(DateTimeOffset mt5ServerTime, int mt5ToKsaOffsetMinutes = 50)
+    public static CanonicalTimeSessionResult Resolve(
+        DateTimeOffset mt5ServerTime,
+        int mt5ToKsaOffsetMinutes = 50,
+        DateTimeOffset? snapshotKsaTime = null,
+        DateTimeOffset? snapshotIndiaTime = null,
+        DateTimeOffset? snapshotUaeTime = null)
     {
-        var clockSession = TradingSessionClock.Resolve(mt5ServerTime);
         var engineResult = SessionEngine.Resolve(mt5ServerTime);
+        var clockSession = TradingSessionClock.Resolve(mt5ServerTime);
         var ksaTime = TradingSessionClock.ServerTimeToKsa(mt5ServerTime);
         var istTime = TradingSessionClock.ServerTimeToIst(mt5ServerTime);
+        bool usedKsaOrIndiaFallback = false;
+        string? fallbackSource = null;
+
+        // Replay / wrong server time: if primary is OFFHOURS or LATE_NY but snapshot has valid KSA/India/UAE that clearly falls in a session, derive server time and re-resolve
+        if ((engineResult.Session == "OFFHOURS" || engineResult.Session == "LATE_NY") &&
+            (HasValidTime(snapshotKsaTime) || HasValidTime(snapshotIndiaTime) || HasValidTime(snapshotUaeTime)))
+        {
+            DateTimeOffset? derivedServer = null;
+            if (HasValidTime(snapshotKsaTime))
+            {
+                derivedServer = snapshotKsaTime!.Value.AddMinutes(-mt5ToKsaOffsetMinutes);
+                fallbackSource = "KsaTime";
+            }
+            else if (HasValidTime(snapshotIndiaTime))
+            {
+                derivedServer = snapshotIndiaTime!.Value.AddHours(-3).AddMinutes(-20); // Server = IST - 3h20m
+                fallbackSource = "IndiaTime";
+            }
+            else if (HasValidTime(snapshotUaeTime))
+            {
+                // UAE/Dubai = UTC+4, KSA = UTC+3 → KSA = UAE - 1h. Server = KSA - 50min = UAE - 1h50m
+                derivedServer = snapshotUaeTime!.Value.AddHours(-1).AddMinutes(-50);
+                fallbackSource = "UaeTime";
+            }
+
+            if (derivedServer.HasValue)
+            {
+                var fallbackResult = SessionEngine.Resolve(derivedServer.Value);
+                if (fallbackResult.Session is "JAPAN" or "INDIA" or "LONDON" or "NEW_YORK" or "TRANSITION")
+                {
+                    engineResult = fallbackResult;
+                    ksaTime = TradingSessionClock.ServerTimeToKsa(derivedServer.Value);
+                    istTime = TradingSessionClock.ServerTimeToIst(derivedServer.Value);
+                    usedKsaOrIndiaFallback = true;
+                }
+            }
+        }
 
         var conflict = !SessionPhaseEquivalent(clockSession.Session, clockSession.Phase, engineResult.Session, engineResult.Phase);
         string? conflictDetail = null;
         if (conflict)
         {
             conflictDetail = $"Clock=({clockSession.Session},{clockSession.Phase}) Engine=({engineResult.Session},{engineResult.Phase})";
+        }
+        if (usedKsaOrIndiaFallback)
+        {
+            conflictDetail = (conflictDetail ?? "") + (string.IsNullOrEmpty(conflictDetail) ? "" : "; ") + $"Session derived from {fallbackSource} (MT5 server time likely wrong/replay).";
         }
 
         return new CanonicalTimeSessionResult(
@@ -37,9 +86,20 @@ public static class CanonicalTimeSessionService
             KsaTime: ksaTime,
             IstTime: istTime,
             DerivedKsaOffsetMinutes: mt5ToKsaOffsetMinutes,
-            HasConflict: conflict,
+            HasConflict: conflict || usedKsaOrIndiaFallback,
             ConflictDetail: conflictDetail,
-            ConfidenceDegraded: conflict);
+            ConfidenceDegraded: conflict,
+            UsedKsaOrIndiaFallback: usedKsaOrIndiaFallback,
+            FallbackSource: fallbackSource);
+    }
+
+    /// <summary>True if the value is set and not default (year &gt; 1 and reasonable date).</summary>
+    private static bool HasValidTime(DateTimeOffset? t)
+    {
+        if (!t.HasValue) return false;
+        var v = t.Value;
+        if (v.Year < 2000 || v.Year > 2100) return false;
+        return true;
     }
 
     private static bool SessionPhaseEquivalent(string sessionA, string phaseA, string sessionB, string phaseB)
@@ -75,4 +135,6 @@ public sealed record CanonicalTimeSessionResult(
     int DerivedKsaOffsetMinutes,
     bool HasConflict,
     string? ConflictDetail,
-    bool ConfidenceDegraded);
+    bool ConfidenceDegraded,
+    bool UsedKsaOrIndiaFallback = false,
+    string? FallbackSource = null);

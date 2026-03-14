@@ -213,8 +213,14 @@ public sealed class SignalPollingBackgroundService(
                 var m5CandleForMa = (rawSnapshot.TimeframeData ?? []).FirstOrDefault(x =>
                     string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase));
                 var enrichedMa20M5 = m5CandleForMa?.Ma20Value ?? 0m;
-                // PATCH 1 — Canonical time/session: single source for all downstream (SessionEngine per spec)
-                var canonicalTimeSession = CanonicalTimeSessionService.Resolve(rawSnapshot.Mt5ServerTime, rawSnapshot.Mt5ToKsaOffsetMinutes);
+                // PATCH 1 — Canonical time/session: single source for all downstream (SessionEngine per spec).
+                // When MT5 server time yields OFFHOURS (e.g. replay), fall back to KSA/India/UAE time so Asia session is correct.
+                var canonicalTimeSession = CanonicalTimeSessionService.Resolve(
+                    rawSnapshot.Mt5ServerTime,
+                    rawSnapshot.Mt5ToKsaOffsetMinutes,
+                    snapshotKsaTime: rawSnapshot.KsaTime != default ? rawSnapshot.KsaTime : null,
+                    snapshotIndiaTime: rawSnapshot.IndiaTime != default ? rawSnapshot.IndiaTime : null,
+                    snapshotUaeTime: rawSnapshot.UaeTime != default ? rawSnapshot.UaeTime : null);
                 if (canonicalTimeSession.HasConflict)
                 {
                     await timeline.WriteAsync(
@@ -235,6 +241,8 @@ public sealed class SignalPollingBackgroundService(
                             confidenceDegraded = canonicalTimeSession.ConfidenceDegraded,
                             conflictDetail = canonicalTimeSession.ConflictDetail,
                             manualOverrideExists = false,
+                            usedKsaOrIndiaFallback = canonicalTimeSession.UsedKsaOrIndiaFallback,
+                            fallbackSource = canonicalTimeSession.FallbackSource,
                         },
                         cancellationToken: stoppingToken);
                 }
@@ -253,6 +261,8 @@ public sealed class SignalPollingBackgroundService(
                         mt5ServerTime = canonicalTimeSession.Mt5ServerTime,
                         ksaTime = canonicalTimeSession.KsaTime,
                         istTime = canonicalTimeSession.IstTime,
+                        usedKsaOrIndiaFallback = canonicalTimeSession.UsedKsaOrIndiaFallback,
+                        fallbackSource = canonicalTimeSession.FallbackSource,
                     },
                     cancellationToken: stoppingToken);
                 var snapshot = rawSnapshot with
