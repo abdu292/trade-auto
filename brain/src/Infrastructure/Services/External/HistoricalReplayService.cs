@@ -22,6 +22,7 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     private readonly ConcurrentDictionary<string, List<ReplayCandle>> _candles = new();
 
     private readonly IServiceProvider _serviceProvider;
+    private readonly IReplayLiveBridge _replayLiveBridge;
     private readonly ILogger<HistoricalReplayService> _logger;
 
     // Replay state
@@ -49,9 +50,10 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     private const int CompressionWindowM15 = 8;
     private const int CompressionWindowM5 = 10;
 
-    public HistoricalReplayService(IServiceProvider serviceProvider, ILogger<HistoricalReplayService> logger)
+    public HistoricalReplayService(IServiceProvider serviceProvider, IReplayLiveBridge replayLiveBridge, ILogger<HistoricalReplayService> logger)
     {
         _serviceProvider = serviceProvider;
+        _replayLiveBridge = replayLiveBridge;
         _logger = logger;
     }
 
@@ -333,7 +335,8 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             _processedCandles++;
             _cyclesTriggered++;
 
-            await ProcessReplayCycleAsync(snapshot, useAI, ignoreNewsGate, ct);
+            // Always run through the same pipeline as live (state machine, logs, etc.); execution is blocked in the polling service.
+            await _replayLiveBridge.SubmitReplaySnapshotAndWaitAsync(snapshot, ct);
 
             if (candleIntervalMs > 0)
                 await Task.Delay(candleIntervalMs, ct);

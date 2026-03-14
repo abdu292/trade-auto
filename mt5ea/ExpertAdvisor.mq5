@@ -98,6 +98,8 @@ int OnInit()
 {
     g_api.Configure(BrainBaseUrl, BrainApiKey);
     EventSetTimer(MathMax(1, PollTradeSeconds));
+    if (MQLInfoInteger(MQL_TESTER))
+        Print("Trade Auto EA: Strategy Tester mode. WebRequest is disabled in the tester by MT5; use Replay from the app for pipeline/logs testing.");
     Print("Trade Auto EA initialized - Reacting to price ticks and timer control polling");
     return(INIT_SUCCEEDED);
 }

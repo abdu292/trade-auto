@@ -84,8 +84,9 @@ For older MT5 versions the History Center route still works; ensure you export b
 - **Live mode**: candles come from real MT5 EA snapshots (`/mt5/market-snapshot`), using `H1/M15/M5`.
   - `mt5ea/ExpertAdvisor.mq5`
   - `mt5ea/Http/ApiClient.mqh`
-- **Replay mode**: candles come only from imported CSV files.
-  - `brain/src/Infrastructure/Services/External/HistoricalReplayService.cs`
+- **Replay mode**: candles come from imported CSV (or one-click MT5 history fetch). Replay **always** runs through the **same pipeline as live** (state machine, STATE_01–STATE_17, logs, timeline). Only execution is blocked; logs and behaviour match live. You can test the system exactly like live via replay (news can be bypassed with `ignoreNewsGate`, AI toggled with `useMockAI`).
+  - `brain/src/Infrastructure/Services/External/HistoricalReplayService.cs` + live pipeline via `IReplayLiveBridge`.
+  - **Replay from the mobile app** uses the same API (`POST /api/replay/run`, `POST /api/replay/start`, etc.). Start replay from the app; the brain runs the same pipeline and timeline events. No extra setup required.
 
 ---
 
@@ -220,6 +221,15 @@ Replay safety: no real trade execution (`replayMode=true`, `executionBlocked=tru
 - `RULE_ENGINE_ABORT` before AI: setup invalid.
 - No live cycles: verify EA URL/API key/symbol.
 - Real AI expensive: use mock for broad runs, real AI only for short spot checks.
+
+### 6.1 MT5 Strategy Tester: no logs even though live works / URL is allowed?
+
+**WebRequest is disabled in the Strategy Tester by design.** In MetaTrader 5, `WebRequest()` cannot be executed in the Strategy Tester at all. This is a platform limitation, not a configuration issue. So even if you have added the brain URL under **Tools → Options → Expert Advisors → Allow WebRequest for listed URL** (and live MT5 works and logs appear), the **tester will not** send HTTP requests to the brain, and you will see no logs from the brain when running in the tester.
+
+- **Live chart**: WebRequest works; EA posts snapshots; brain runs the pipeline and you see logs.
+- **Strategy Tester**: WebRequest is blocked; EA cannot reach the brain; no logs.
+
+**What to do:** Use **Replay** (e.g. from the **mobile app**) to test the full pipeline with the same logs as live. Replay always uses the same code path as live; execution is blocked. For MT5 order/execution behaviour in isolation, use the Strategy Tester; for pipeline and logs parity with live, use Replay from the app or API.
 
 ---
 

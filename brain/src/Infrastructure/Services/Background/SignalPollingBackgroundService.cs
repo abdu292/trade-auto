@@ -18,6 +18,7 @@ public sealed class SignalPollingBackgroundService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
     ILogger<SignalPollingBackgroundService> logger,
+    IReplayLiveBridge replayLiveBridge,
     DynamicSessionRiskService dynamicSessionRisk,
     ISetupLifecycleStore setupLifecycleStore,
     IExpectedEntryStore expectedEntryStore,
@@ -72,10 +73,24 @@ public sealed class SignalPollingBackgroundService(
             var timeline = scope.ServiceProvider.GetRequiredService<IRuntimeTimelineWriter>();
             var notification = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
+            Action? replaySignal = null;
             try
             {
                 var cycleId = $"cyc_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}";
 
+                bool isReplay = false;
+                var (hasReplay, replaySnap, signalProcessed) = replayLiveBridge.TryDequeueReplaySnapshot();
+                string symbol;
+                MarketSnapshotContract rawSnapshot;
+                if (hasReplay && replaySnap is not null)
+                {
+                    isReplay = true;
+                    replaySignal = signalProcessed;
+                    symbol = replaySnap.Symbol;
+                    rawSnapshot = replaySnap with { CycleId = cycleId };
+                }
+                else
+                {
                 // Check study lock (PRD point 4): after 2 consecutive waterfall failures,
                 // the system pauses new signal generation and requires STUDY & SELF_CROSSCHECK.
                 bool isStudyLockActive;
@@ -190,8 +205,10 @@ public sealed class SignalPollingBackgroundService(
                     continue;
                 }
 
-                var symbol = runtimeSettings.GetSymbol();
-                var rawSnapshot = await marketData.GetSnapshotAsync(symbol, stoppingToken);
+                symbol = runtimeSettings.GetSymbol();
+                rawSnapshot = await marketData.GetSnapshotAsync(symbol, stoppingToken);
+                }
+
                 // Spec v8 §13: enrich snapshot with Ma20M5 extracted from TimeframeData
                 var m5CandleForMa = (rawSnapshot.TimeframeData ?? []).FirstOrDefault(x =>
                     string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase));
@@ -246,29 +263,32 @@ public sealed class SignalPollingBackgroundService(
                     SessionPhase = canonicalTimeSession.CanonicalPhase,
                 };
 
-                // Candle-aligned gate: only run the strategy when a new M5 or M15 candle has closed.
-                var currentM5Time = snapshot.TimeframeData
-                    .FirstOrDefault(x => string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.CandleStartTime;
-                var currentM15Time = snapshot.TimeframeData
-                    .FirstOrDefault(x => string.Equals(x.Timeframe, "M15", StringComparison.OrdinalIgnoreCase))?.CandleStartTime;
-
-                if (currentM5Time.HasValue || currentM15Time.HasValue)
+                // Candle-aligned gate: only run the strategy when a new M5 or M15 candle has closed (skip for replay).
+                if (!isReplay)
                 {
-                    var isM5New = currentM5Time.HasValue && currentM5Time != _lastM5CandleTime;
-                    var isM15New = currentM15Time.HasValue && currentM15Time != _lastM15CandleTime;
+                    var currentM5Time = snapshot.TimeframeData
+                        .FirstOrDefault(x => string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.CandleStartTime;
+                    var currentM15Time = snapshot.TimeframeData
+                        .FirstOrDefault(x => string.Equals(x.Timeframe, "M15", StringComparison.OrdinalIgnoreCase))?.CandleStartTime;
 
-                    if (!isM5New && !isM15New)
+                    if (currentM5Time.HasValue || currentM15Time.HasValue)
                     {
-                        // No new M5 or M15 candle since last cycle — skip strategy to reduce noise.
-                        await Task.Delay(CandleCheckInterval, stoppingToken);
-                        continue;
+                        var isM5New = currentM5Time.HasValue && currentM5Time != _lastM5CandleTime;
+                        var isM15New = currentM15Time.HasValue && currentM15Time != _lastM15CandleTime;
+
+                        if (!isM5New && !isM15New)
+                        {
+                            // No new M5 or M15 candle since last cycle — skip strategy to reduce noise.
+                            await Task.Delay(CandleCheckInterval, stoppingToken);
+                            continue;
+                        }
+
+                        var trigger = isM5New && isM15New ? "M5+M15" : isM5New ? "M5" : "M15";
+                        logger.LogInformation("Candle-aligned cycle triggered by {Trigger} close.", trigger);
+
+                        if (currentM5Time.HasValue) _lastM5CandleTime = currentM5Time;
+                        if (currentM15Time.HasValue) _lastM15CandleTime = currentM15Time;
                     }
-
-                    var trigger = isM5New && isM15New ? "M5+M15" : isM5New ? "M5" : "M15";
-                    logger.LogInformation("Candle-aligned cycle triggered by {Trigger} close.", trigger);
-
-                    if (currentM5Time.HasValue) _lastM5CandleTime = currentM5Time;
-                    if (currentM15Time.HasValue) _lastM15CandleTime = currentM15Time;
                 }
 
                 await timeline.WriteAsync(
@@ -3053,12 +3073,40 @@ public sealed class SignalPollingBackgroundService(
                     payload: new { lifecycleEvent = "CandidateValidated", entry = pending.Price, tp = pending.Tp, grams = pending.Grams },
                     cancellationToken: stoppingToken);
 
-                if (directToMt5)
+                if (!isReplay)
                 {
-                    expectedEntryStore.Set(pending.Id, pending.Price);
-                    pendingTrades.Enqueue(pending);
+                    if (directToMt5)
+                    {
+                        expectedEntryStore.Set(pending.Id, pending.Price);
+                        pendingTrades.Enqueue(pending);
+                        await timeline.WriteAsync(
+                            eventType: "MT5_PENDING_ORDER_SUBMITTED",
+                            stage: "execution",
+                            source: "brain",
+                            symbol: pending.Symbol,
+                            cycleId: cycleId,
+                            tradeId: pending.Id.ToString(),
+                            payload: new
+                            {
+                                tradeId = pending.Id,
+                                entry = pending.Price,
+                                tp = pending.Tp,
+                                grams = pending.Grams,
+                                route = "MT5_PENDING",
+                                note = "Pending order sent to MT5 queue; local final recheck passed.",
+                            },
+                            cancellationToken: stoppingToken);
+                    }
+                    else
+                    {
+                        expectedEntryStore.Set(pending.Id, pending.Price);
+                        approvals.Enqueue(pending);
+                    }
+                }
+                else
+                {
                     await timeline.WriteAsync(
-                        eventType: "MT5_PENDING_ORDER_SUBMITTED",
+                        eventType: "REPLAY_TRADE_BLOCKED",
                         stage: "execution",
                         source: "brain",
                         symbol: pending.Symbol,
@@ -3066,19 +3114,13 @@ public sealed class SignalPollingBackgroundService(
                         tradeId: pending.Id.ToString(),
                         payload: new
                         {
-                            tradeId = pending.Id,
+                            note = "Replay: same pipeline as live but execution blocked.",
+                            wouldHaveRoute = directToMt5 ? "MT5_PENDING" : "APPROVAL_QUEUE",
                             entry = pending.Price,
                             tp = pending.Tp,
                             grams = pending.Grams,
-                            route = "MT5_PENDING",
-                            note = "Pending order sent to MT5 queue; local final recheck passed.",
                         },
                         cancellationToken: stoppingToken);
-                }
-                else
-                {
-                    expectedEntryStore.Set(pending.Id, pending.Price);
-                    approvals.Enqueue(pending);
                 }
 
                 await timeline.WriteAsync(
@@ -3305,6 +3347,10 @@ public sealed class SignalPollingBackgroundService(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Signal polling iteration failed.");
+            }
+            finally
+            {
+                replaySignal?.Invoke();
             }
 
             await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);

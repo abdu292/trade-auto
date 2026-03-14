@@ -43,6 +43,7 @@ public static class DependencyInjection
         
         services.AddScoped<IAIWorkerClient>(provider => provider.GetRequiredService<HttpAIWorkerClient>());
         services.AddSingleton<ILatestMarketSnapshotStore, InMemoryLatestMarketSnapshotStore>();
+        services.AddSingleton<IReplayLiveBridge, ReplayLiveBridge>();
         services.AddSingleton<IChartDataStore, InMemoryChartDataStore>();
         services.AddSingleton<IPendingTradeStore, InMemoryPendingTradeStore>();
         services.AddSingleton<IExpectedEntryStore, InMemoryExpectedEntryStore>();
