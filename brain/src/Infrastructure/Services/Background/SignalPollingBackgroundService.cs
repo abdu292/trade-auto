@@ -196,13 +196,54 @@ public sealed class SignalPollingBackgroundService(
                 var m5CandleForMa = (rawSnapshot.TimeframeData ?? []).FirstOrDefault(x =>
                     string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase));
                 var enrichedMa20M5 = m5CandleForMa?.Ma20Value ?? 0m;
-                var (sessionResolved, phaseResolved) = TradingSessionClock.Resolve(rawSnapshot.Mt5ServerTime);
+                // PATCH 1 — Canonical time/session: single source for all downstream (SessionEngine per spec)
+                var canonicalTimeSession = CanonicalTimeSessionService.Resolve(rawSnapshot.Mt5ServerTime, rawSnapshot.Mt5ToKsaOffsetMinutes);
+                if (canonicalTimeSession.HasConflict)
+                {
+                    await timeline.WriteAsync(
+                        eventType: "TIME_MAPPING_CONFLICT",
+                        stage: "time_integrity",
+                        source: "brain",
+                        symbol: rawSnapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            rawMt5ServerTime = rawSnapshot.Mt5ServerTime,
+                            configuredKsaOffsetMinutes = rawSnapshot.Mt5ToKsaOffsetMinutes,
+                            derivedKsaTime = canonicalTimeSession.KsaTime,
+                            derivedIstTime = canonicalTimeSession.IstTime,
+                            sessionChosen = canonicalTimeSession.CanonicalSession,
+                            phaseChosen = canonicalTimeSession.CanonicalPhase,
+                            confidenceDegraded = canonicalTimeSession.ConfidenceDegraded,
+                            conflictDetail = canonicalTimeSession.ConflictDetail,
+                            manualOverrideExists = false,
+                        },
+                        cancellationToken: stoppingToken);
+                }
+                await timeline.WriteAsync(
+                    eventType: "SESSION_SOURCE_SELECTED",
+                    stage: "time_integrity",
+                    source: "brain",
+                    symbol: rawSnapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        canonicalSource = CanonicalTimeSessionService.CanonicalSource,
+                        session = canonicalTimeSession.CanonicalSession,
+                        phase = canonicalTimeSession.CanonicalPhase,
+                        mt5ServerTime = canonicalTimeSession.Mt5ServerTime,
+                        ksaTime = canonicalTimeSession.KsaTime,
+                        istTime = canonicalTimeSession.IstTime,
+                    },
+                    cancellationToken: stoppingToken);
                 var snapshot = rawSnapshot with
                 {
                     CycleId = cycleId,
                     Ma20M5 = enrichedMa20M5,
-                    Session = sessionResolved,
-                    SessionPhase = phaseResolved,
+                    Session = canonicalTimeSession.CanonicalSession,
+                    SessionPhase = canonicalTimeSession.CanonicalPhase,
                 };
 
                 // Candle-aligned gate: only run the strategy when a new M5 or M15 candle has closed.
@@ -487,8 +528,66 @@ public sealed class SignalPollingBackgroundService(
                     cancellationToken: stoppingToken);
 
                 // ── Spec v7: Gold Engine decision stack (path-aware; M5 optional for BUY_LIMIT) ──
+                // PATCH 7 — Ledger/capacity transparency
                 var rawStackLedgerState = ledger.GetState();
+                await timeline.WriteAsync(
+                    eventType: "LEDGER_SOURCE_APPLIED",
+                    stage: "ledger",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        source = "ITradeLedgerService.GetState",
+                        ledgerCashAED = rawStackLedgerState.CashAed,
+                        ledgerGoldGrams = rawStackLedgerState.GoldGrams,
+                        deployableAED = rawStackLedgerState.DeployableCashAed,
+                        openBuyCount = rawStackLedgerState.OpenBuyCount,
+                    },
+                    cancellationToken: stoppingToken);
                 var reservedPendingAedForStack = EstimateReservedPendingAed(pendingTrades.Snapshot());
+                await timeline.WriteAsync(
+                    eventType: "CAPITAL_BUCKETS_COMPUTED",
+                    stage: "ledger",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        cashAed = rawStackLedgerState.CashAed,
+                        reservedPendingAed = reservedPendingAedForStack,
+                        deployableAfterReserved = Math.Max(0m, rawStackLedgerState.DeployableCashAed - reservedPendingAedForStack),
+                    },
+                    cancellationToken: stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "DEPLOYABLE_CAPACITY_COMPUTED",
+                    stage: "ledger",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        deployableCashAed = rawStackLedgerState.DeployableCashAed,
+                        reservedCapitalExplained = $"Pending orders reserve: {reservedPendingAedForStack:0.00} AED.",
+                    },
+                    cancellationToken: stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "RESERVED_CAPITAL_EXPLAINED",
+                    stage: "ledger",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        reservedPendingAed = reservedPendingAedForStack,
+                        pendingOrderCount = pendingTrades.Snapshot().Count,
+                        note = "Reserved for pending BUY_LIMIT/BUY_STOP not yet filled.",
+                    },
+                    cancellationToken: stoppingToken);
                 var stackLedgerState = new LedgerStateContract(
                     CashAed: rawStackLedgerState.CashAed,
                     GoldGrams: rawStackLedgerState.GoldGrams,
@@ -500,6 +599,20 @@ public sealed class SignalPollingBackgroundService(
                     .AnyAsync(
                         x => x.IsActive && x.IsBlocked && x.StartUtc <= snapshot.Timestamp && x.EndUtc >= snapshot.Timestamp,
                         stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "HAZARD_WINDOW_EVALUATED",
+                    stage: "governance",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        hazardWindowActive = activeHazardWindowBlockNow,
+                        snapshotTimestamp = snapshot.Timestamp,
+                        note = "Hazard windows from DB; rail permission may be reduced when active.",
+                    },
+                    cancellationToken: stoppingToken);
                 var waterfallRiskForStack = regime.IsWaterfall ? "HIGH" : (regime.RiskTag == "CAUTION" ? "MEDIUM" : "LOW");
 
                 // Spec v11 §9 — Pending order supervision: cancel if FAIL/hazard/waterfall/spread/stale
@@ -568,14 +681,65 @@ public sealed class SignalPollingBackgroundService(
                     },
                     cancellationToken: stoppingToken);
 
-                // Client log confirmation: STRUCTURE_STATE, WATERFALL_STATE, VOLATILITY_STATE (control whether trades allowed)
+                // Engine states needed for regime reconciliation (session, indicators, structure, volatility)
                 var sessionForEngines = SessionEngine.Resolve(snapshot.Mt5ServerTime);
                 var indicatorsForState = IndicatorEngine.Calculate(snapshot, sessionForEngines);
                 var structureForState = StructureEngine.Analyze(snapshot, indicatorsForState, sessionForEngines);
                 var volatilityResult = VolatilityRegimeEngine.Analyze(snapshot, indicatorsForState, structureForState);
+
+                // PATCH 2 & 3 — Pattern detector runs before regime reconciliation; waterfall BLOCKED is authoritative
+                var patterns = PatternDetector.Detect(snapshot);
+                var reconciled = RegimeReconciler.Reconcile(
+                    regime,
+                    decisionStackResult.MarketRegime,
+                    goldRegime,
+                    patterns,
+                    volatilityResult.ShouldBlockNewTrades,
+                    waterfallRiskForStack,
+                    activeHazardWindowBlockNow);
+                await timeline.WriteAsync(
+                    eventType: "REGIME_RECONCILED",
+                    stage: "regime",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        masterRegime = reconciled.MasterRegime,
+                        finalTradeability = reconciled.FinalTradeability,
+                        dominantBlocker = reconciled.DominantBlocker,
+                        downgradedSignals = reconciled.DowngradedSignals,
+                        finalReasonCode = reconciled.FinalReasonCode,
+                        patternBlocked = reconciled.PatternBlocked,
+                        hazardBlocked = reconciled.HazardBlocked,
+                    },
+                    cancellationToken: stoppingToken);
+                var waterfallVetoActive = reconciled.PatternBlocked;
+                if (waterfallVetoActive)
+                {
+                    await timeline.WriteAsync(
+                        eventType: "WATERFALL_VETO_APPLIED",
+                        stage: "regime",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            waterfallState = "ACTIVE_BLOCK",
+                            shouldBlockNewTrades = true,
+                            reason = "Pattern detector WaterfallRisk + entrySafety BLOCKED; authoritative per spec.",
+                            patternBlocked = true,
+                        },
+                        cancellationToken: stoppingToken);
+                }
+
+                // Client log confirmation: STRUCTURE_STATE, WATERFALL_STATE, VOLATILITY_STATE (waterfall veto authoritative)
                 var structureState = MapToStructureState(decisionStackResult.MarketRegime.Regime);
-                var waterfallState = MapToWaterfallState(waterfallRiskForStack);
+                var waterfallState = waterfallVetoActive ? "ACTIVE_BLOCK" : MapToWaterfallState(waterfallRiskForStack);
                 var volatilityState = volatilityResult.VolatilityClass;
+                var shouldBlockNewTradesReconciled = !reconciled.FinalTradeability || waterfallVetoActive;
                 await timeline.WriteAsync(
                     eventType: "ENGINE_STATES_ACTIVE",
                     stage: "regime",
@@ -588,11 +752,60 @@ public sealed class SignalPollingBackgroundService(
                         STRUCTURE_STATE = structureState,
                         WATERFALL_STATE = waterfallState,
                         VOLATILITY_STATE = volatilityState,
-                        regime = decisionStackResult.MarketRegime.Regime,
+                        regime = reconciled.MasterRegime,
                         waterfallRisk = waterfallRiskForStack,
                         volatilityClass = volatilityResult.VolatilityClass,
                         volatilityRegime = volatilityResult.VolatilityState,
-                        shouldBlockNewTrades = volatilityResult.ShouldBlockNewTrades,
+                        shouldBlockNewTrades = shouldBlockNewTradesReconciled,
+                    },
+                    cancellationToken: stoppingToken);
+
+                // PATCH 4 — Structure proof chain: sweep/reclaim/retest/compression diagnostics
+                await timeline.WriteAsync(
+                    eventType: "SWEEP_RECLAIM_STATUS",
+                    stage: "structure",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        sweepFound = structureForState.HasSweep,
+                        reclaimCloseFound = structureForState.HasReclaim,
+                        sweepLevel = structureForState.SweepLevel,
+                        reclaimLevel = structureForState.ReclaimLevel,
+                        basePrice = structureForState.S1,
+                        lidPrice = structureForState.R1,
+                    },
+                    cancellationToken: stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "RETEST_STATUS",
+                    stage: "structure",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        retestHoldFound = indicatorsForState.IsCompression,
+                        compressionBars = snapshot.CompressionCountM15,
+                        structureQuality = structureForState.StructureQuality,
+                    },
+                    cancellationToken: stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "COMPRESSION_STATUS",
+                    stage: "structure",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        compressionBars = snapshot.CompressionCountM15,
+                        isCompression = snapshot.IsCompression,
+                        expansionCountM15 = snapshot.ExpansionCountM15,
+                        basePrice = structureForState.S1,
+                        lidPrice = structureForState.R1,
                     },
                     cancellationToken: stoppingToken);
 
@@ -1138,10 +1351,7 @@ public sealed class SignalPollingBackgroundService(
                 var lastEngineStore = scope.ServiceProvider.GetRequiredService<ILastGoldEngineStateStore>();
                 lastEngineStore.SetLast(decisionStackResult.EngineStates, decisionStackResult.PathRouting, snapshot);
 
-                // ── Pattern Detector (CR8): runs after regime check, before AI ──────────────
-                // Produces structured pattern intelligence for ANALYZE/TABLE/MANAGE/STUDY feeds.
-                // Non-executing: no trades placed here, only intelligence emitted.
-                var patterns = PatternDetector.Detect(snapshot);
+                // ── Pattern Detector (CR8): patterns already computed before REGIME_RECONCILED; emit results here ──
                 if (patterns.Count > 0)
                 {
                     await timeline.WriteAsync(
@@ -1194,6 +1404,26 @@ public sealed class SignalPollingBackgroundService(
                     },
                     cancellationToken: stoppingToken);
 
+                if (setupCandidate.IsValid)
+                {
+                    await timeline.WriteAsync(
+                        eventType: "CANDIDATE_PROMOTION_REASON",
+                        stage: "structure",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            pathState = decisionStackResult.PathState,
+                            reasonCode = decisionStackResult.ReasonCode,
+                            promotionReason = "Setup candidate valid; H1/M15/M5 and impulse confirmed.",
+                            expiryCandidate = existingCandidate != null ? existingCandidate.ExpiryWindow.ToString() : null,
+                            blockerReason = (string?)null,
+                        },
+                        cancellationToken: stoppingToken);
+                }
+
                 if (!setupCandidate.IsValid)
                 {
                     logger.LogInformation(
@@ -1214,6 +1444,26 @@ public sealed class SignalPollingBackgroundService(
                             pathState = decisionStackResult.PathState,
                             reasonCode = decisionStackResult.ReasonCode,
                             abortReason = setupCandidate.AbortReason,
+                        },
+                        cancellationToken: stoppingToken);
+
+                    // PATCH 4 — Why nearest legal zone is not armable (structure proof chain)
+                    var nearestLegalBuyZoneInfo = snapshot.SessionLow > 0m ? snapshot.SessionLow : snapshot.PreviousSessionLow > 0m ? snapshot.PreviousSessionLow : (decimal?)null;
+                    await timeline.WriteAsync(
+                        eventType: "WHY_ZONE_NOT_ARMED",
+                        stage: "structure",
+                        source: "brain",
+                        symbol: snapshot.Symbol,
+                        cycleId: cycleId,
+                        tradeId: null,
+                        payload: new
+                        {
+                            nearestLegalBuyZone = nearestLegalBuyZoneInfo,
+                            pathState = decisionStackResult.PathState,
+                            reasonCode = decisionStackResult.ReasonCode,
+                            blockerReason = setupCandidate.AbortReason ?? decisionStackResult.ReasonCode ?? "no_candidate",
+                            expiryCandidate = (string?)null,
+                            note = "Nearest zone is informational only; candidate not promoted to armable.",
                         },
                         cancellationToken: stoppingToken);
 
@@ -1246,6 +1496,67 @@ public sealed class SignalPollingBackgroundService(
                 var newsForAnalyze = NewsEngine.Process(snapshot, waterfallForAnalyze, volatilityForAnalyze, sessionForAnalyze);
                 var historicalForAnalyze = HistoricalPatternEngine.Process(snapshot, indicatorsForAnalyze, structureForAnalyze, sessionForAnalyze);
                 var verifyForAnalyze = VerifyEngine.Process(snapshot, structureForAnalyze, sessionForAnalyze);
+                await timeline.WriteAsync(
+                    eventType: "VERIFY_CONTEXT_BUILT",
+                    stage: "governance",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        credibilityClass = verifyForAnalyze.CredibilityClass,
+                        zoneLow = verifyForAnalyze.ZoneLow,
+                        zoneHigh = verifyForAnalyze.ZoneHigh,
+                        telegramZoneAligned = verifyForAnalyze.TelegramZoneAligned,
+                        tvZoneAligned = verifyForAnalyze.TvZoneAligned,
+                    },
+                    cancellationToken: stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "VERIFY_ALIGNMENT_RESULT",
+                    stage: "governance",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        alignment = verifyForAnalyze.TelegramZoneAligned || verifyForAnalyze.TvZoneAligned ? "ALIGNED" : "NONE",
+                        credibilityReason = verifyForAnalyze.CredibilityReason,
+                        advisoryWeight = verifyForAnalyze.AdvisoryWeight,
+                    },
+                    cancellationToken: stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "NEWS_CONTEXT_BUILT",
+                    stage: "governance",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        hazardWindowActive = newsForAnalyze.HazardWindowActive,
+                        globalRegime = newsForAnalyze.GlobalRegime,
+                        tradingRegime = newsForAnalyze.TradingRegime,
+                        waterfallRisk = newsForAnalyze.WaterfallRisk,
+                        overallMode = newsForAnalyze.OverallMODE,
+                        minutesToNextCleanWindow = newsForAnalyze.MinutesToNextCleanWindow,
+                    },
+                    cancellationToken: stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "RAIL_PERMISSION_SET",
+                    stage: "governance",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        railAPermission = newsForAnalyze.RailAPermission,
+                        railBPermission = newsForAnalyze.RailBPermission,
+                        note = "From NEWS engine; never overrides FAIL/waterfall/hazard.",
+                    },
+                    cancellationToken: stoppingToken);
                 var capitalForAnalyze = CapitalUtilizationEngine.Process(snapshot, stackLedgerState, indicatorsForAnalyze);
                 var candidateForAnalyze = CandidateEngine.Process(
                     snapshot,
@@ -1357,6 +1668,25 @@ public sealed class SignalPollingBackgroundService(
                     historicalForAnalyze,
                     stackLedgerState,
                     null);
+                await timeline.WriteAsync(
+                    eventType: "TABLE_COMPILED",
+                    stage: "table",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        isValid = tableResult.IsValid,
+                        reason = tableResult.Reason,
+                        orderType = tableResult.IsValid ? tableResult.OrderType : null,
+                        entry = tableResult.IsValid ? tableResult.Entry : (decimal?)null,
+                        tp = tableResult.IsValid ? tableResult.Tp : (decimal?)null,
+                        grams = tableResult.IsValid ? tableResult.Grams : (decimal?)null,
+                        expiryUtc = tableResult.IsValid ? tableResult.ExpiryUtc : default(DateTimeOffset?),
+                        template = tableResult.IsValid ? tableResult.Template : null,
+                    },
+                    cancellationToken: stoppingToken);
 
                 if (tableResult.IsValid)
                 {
@@ -1495,6 +1825,25 @@ public sealed class SignalPollingBackgroundService(
                             tp = validateResult.ValidatedOrder.Tp,
                             grams = validateResult.ValidatedOrder.Grams,
                         } : null,
+                    },
+                    cancellationToken: stoppingToken);
+                await timeline.WriteAsync(
+                    eventType: "TABLE_VALIDATED",
+                    stage: "table",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        isValid = validateResult.IsValid,
+                        reason = validateResult.Reason,
+                        expiryValid = validateResult.IsValid,
+                        tpValid = validateResult.IsValid,
+                        sizeLegal = validateResult.ValidatedOrder != null,
+                        regimeCoherent = validateResult.IsValid,
+                        capacityLegal = capitalForAnalyze.AffordableFlag,
+                        safetyPass = validateResult.IsValid,
                     },
                     cancellationToken: stoppingToken);
 
@@ -2618,6 +2967,21 @@ public sealed class SignalPollingBackgroundService(
                     continue;
                 }
 
+                await timeline.WriteAsync(
+                    eventType: "LOCAL_FINAL_RECHECK_PASSED",
+                    stage: "execution",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: null,
+                    payload: new
+                    {
+                        capitalGatePassed = true,
+                        exposureGatePassed = true,
+                        note = "Capital utilization and portfolio exposure gates passed; order may proceed to MT5 or approval queue.",
+                    },
+                    cancellationToken: stoppingToken);
+
                 var pending = new PendingTradeContract(
                     Id: Guid.NewGuid(),
                     Symbol: snapshot.Symbol,
@@ -2654,6 +3018,23 @@ public sealed class SignalPollingBackgroundService(
                     ShopSell: decision.ShopSell,
                     ExpiryKSA: decision.ExpiryKSA,
                     ExpiryServer: decision.ExpiryServer);
+                await timeline.WriteAsync(
+                    eventType: "EXECUTION_PAYLOAD_BUILT",
+                    stage: "execution",
+                    source: "brain",
+                    symbol: snapshot.Symbol,
+                    cycleId: cycleId,
+                    tradeId: pending.Id.ToString(),
+                    payload: new
+                    {
+                        orderType = pending.Type,
+                        entry = pending.Price,
+                        tp = pending.Tp,
+                        grams = pending.Grams,
+                        expiryUtc = pending.Expiry,
+                        note = "TABLE-only execution payload; no raw AI/Telegram/TradingView.",
+                    },
+                    cancellationToken: stoppingToken);
 
                 var executionMode = ResolveExecutionMode(configuration["Execution:Mode"]);
                 var hybridSessions = ResolveHybridAutoSessions(configuration["Execution:HybridAutoSessions"]);
@@ -2676,6 +3057,23 @@ public sealed class SignalPollingBackgroundService(
                 {
                     expectedEntryStore.Set(pending.Id, pending.Price);
                     pendingTrades.Enqueue(pending);
+                    await timeline.WriteAsync(
+                        eventType: "MT5_PENDING_ORDER_SUBMITTED",
+                        stage: "execution",
+                        source: "brain",
+                        symbol: pending.Symbol,
+                        cycleId: cycleId,
+                        tradeId: pending.Id.ToString(),
+                        payload: new
+                        {
+                            tradeId = pending.Id,
+                            entry = pending.Price,
+                            tp = pending.Tp,
+                            grams = pending.Grams,
+                            route = "MT5_PENDING",
+                            note = "Pending order sent to MT5 queue; local final recheck passed.",
+                        },
+                        cancellationToken: stoppingToken);
                 }
                 else
                 {

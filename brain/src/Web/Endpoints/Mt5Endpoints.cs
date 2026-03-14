@@ -498,6 +498,24 @@ public static class Mt5Endpoints
                         openedSession);
 
                     await timeline.WriteAsync(
+                        eventType: "LAST_SLIP_USED",
+                        stage: "ledger",
+                        source: "brain",
+                        symbol: snapshotStore.TryGet(out var _sym) && _sym is not null ? _sym.Symbol : "XAUUSD.gram",
+                        cycleId: null,
+                        tradeId: request.TradeId,
+                        payload: new
+                        {
+                            slipType = buySlip.SlipType,
+                            tradeId = buySlip.TradeId,
+                            grams = buySlip.Grams,
+                            mt5Price = buySlip.Mt5Price,
+                            slipTimestamp = buySlip.Mt5Time,
+                            sourceOfTruth = "ledger_ApplyBuyFill",
+                        },
+                        cancellationToken);
+
+                    await timeline.WriteAsync(
                         eventType: "TRADE_TRIGGERED",
                         stage: "execution",
                         source: "mt5",
@@ -586,6 +604,27 @@ public static class Mt5Endpoints
                         request.Mt5Price ?? 0m,
                         mt5Time,
                         closedSession);
+
+                    if (sellSlip is not null)
+                    {
+                        await timeline.WriteAsync(
+                            eventType: "LAST_SLIP_USED",
+                            stage: "ledger",
+                            source: "brain",
+                            symbol: snapshotStore.TryGet(out var _symSell) && _symSell is not null ? _symSell.Symbol : "XAUUSD.gram",
+                            cycleId: null,
+                            tradeId: request.TradeId,
+                            payload: new
+                            {
+                                slipType = sellSlip.SlipType,
+                                tradeId = sellSlip.TradeId,
+                                grams = sellSlip.Grams,
+                                mt5Price = sellSlip.Mt5Price,
+                                slipTimestamp = sellSlip.Mt5Time,
+                                sourceOfTruth = "ledger_ApplySellFill",
+                            },
+                            cancellationToken);
+                    }
 
                     if (sellSlip is null)
                     {
