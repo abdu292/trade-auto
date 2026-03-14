@@ -273,28 +273,50 @@ class AnalyzerService:
 
             return compact
 
-        try:
-            telegram_news = await asyncio.wait_for(
-                self._telegram_news.collect_news_context(snapshot.symbol),
-                timeout=max(1.0, AI_NEWS_TIMEOUT_SECONDS),
-            )
-        except asyncio.TimeoutError:
-            logger.warning("Telegram context timed out after %.1fs; using safe fallback context.", AI_NEWS_TIMEOUT_SECONDS)
+        # Replay: by default do not use live Telegram/news (they are current, not relevant to historical candles).
+        # Use neutral/safe context so replay evaluates only on price/structure. Optional flag replay_use_live_news
+        # allows testing with live news/telegram.
+        is_replay = (snapshot.cycleId or "").strip().lower().startswith("replay_")
+        use_live_news_in_replay = getattr(snapshot, "replay_use_live_news", False)
+        if is_replay and not use_live_news_in_replay:
             telegram_news = TelegramNewsContext(
                 enabled=False,
                 impact_tag="LOW",
-                risk_tag="CAUTION",
+                risk_tag="SAFE",
                 direction_bias="NEUTRAL",
-                telegram_state="QUIET",
+                telegram_state=(snapshot.telegramState or "QUIET").strip() or "QUIET",
                 panic_suspected=False,
                 buy_score=0.0,
                 sell_score=0.0,
                 dominance=0.0,
-                tags=["telegram_timeout"],
-                summary="Telegram context timeout; fallback context used.",
+                tags=["replay_neutral_telegram"],
+                summary="Replay: live Telegram omitted; using neutral context for historical candles.",
                 headlines=[],
                 items=[],
             )
+        else:
+            try:
+                telegram_news = await asyncio.wait_for(
+                    self._telegram_news.collect_news_context(snapshot.symbol),
+                    timeout=max(1.0, AI_NEWS_TIMEOUT_SECONDS),
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Telegram context timed out after %.1fs; using safe fallback context.", AI_NEWS_TIMEOUT_SECONDS)
+                telegram_news = TelegramNewsContext(
+                    enabled=False,
+                    impact_tag="LOW",
+                    risk_tag="CAUTION",
+                    direction_bias="NEUTRAL",
+                    telegram_state="QUIET",
+                    panic_suspected=False,
+                    buy_score=0.0,
+                    sell_score=0.0,
+                    dominance=0.0,
+                    tags=["telegram_timeout"],
+                    summary="Telegram context timeout; fallback context used.",
+                    headlines=[],
+                    items=[],
+                )
 
         external_news = ExternalNewsContext(
             enabled=False,
@@ -343,14 +365,17 @@ class AnalyzerService:
             "items": external_news.items,
         }
 
-        try:
-            macro_intel = await asyncio.wait_for(
-                self._macro_intel.collect_context(snapshot.symbol),
-                timeout=max(1.0, AI_MACRO_TIMEOUT_SECONDS),
-            )
-        except asyncio.TimeoutError:
-            logger.warning("Macro intelligence timed out after %.1fs; using safe fallback context.", AI_MACRO_TIMEOUT_SECONDS)
-            macro_intel = MacroIntelContext(summary="Macro intelligence timeout; fallback context used.")
+        if is_replay and not use_live_news_in_replay:
+            macro_intel = MacroIntelContext(summary="Replay: live macro omitted; using neutral context for historical candles.")
+        else:
+            try:
+                macro_intel = await asyncio.wait_for(
+                    self._macro_intel.collect_context(snapshot.symbol),
+                    timeout=max(1.0, AI_MACRO_TIMEOUT_SECONDS),
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Macro intelligence timed out after %.1fs; using safe fallback context.", AI_MACRO_TIMEOUT_SECONDS)
+                macro_intel = MacroIntelContext(summary="Macro intelligence timeout; fallback context used.")
 
         market_context["macro_intel"] = {
             "geo_headline": macro_intel.geo_headline,
@@ -518,6 +543,11 @@ class AnalyzerService:
             )
 
         if not self._has_live_analyzers or self._manager is None or self._lead_manager is None:
+            logger.warning(
+                "Using fallback: no live AI analyzers configured (has_live=%s). "
+                "Set OPENROUTER_API_KEY and OPENROUTER_MULTI_MODEL_COMMITTEE=true (or other provider keys) in .env; same key works for replay and live.",
+                self._has_live_analyzers,
+            )
             return _build_fallback_signal(
                 snapshot,
                 volatility_expansion,
@@ -679,6 +709,11 @@ class AnalyzerService:
 
         if not committee.consensus_passed or committee.signal is None:
             if committee.agreement_count == 0:
+                logger.warning(
+                    "AI committee returned 0 votes (lead + failover unavailable). Reason: %s. "
+                    "Check OPENROUTER_API_KEY (or other provider keys) and API health; same key is used for replay and live.",
+                    committee.disagreement_reason or "no_votes",
+                )
                 fallback = _build_fallback_signal(
                     snapshot,
                     volatility_expansion,

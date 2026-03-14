@@ -143,6 +143,7 @@ public sealed class HttpAIWorkerClient : IAIWorkerClient
                 rateAuthority = snapshot.RateAuthority,
                 authoritativeRate = snapshot.AuthoritativeRate,
                 cycleId = cycleId,
+                replay_use_live_news = snapshot.ReplayUseLiveNewsAndTelegram ?? false,
                 compressionRangesM15 = snapshot.CompressionRangesM15 ?? [],
                 freeMargin = snapshot.FreeMargin,
                 equity = snapshot.Equity,

@@ -12,6 +12,31 @@ public static class ReplayEndpoints
     // (EMA200 on H1 needs at least 200 bars; keep margin above that).
     private static readonly TimeSpan ReplayFetchWarmup = TimeSpan.FromHours(260);
 
+    /// <summary>When timezoneId is set, treat from/to as local time in that zone and convert to UTC for replay filtering.</summary>
+    private static (DateTimeOffset fromUtc, DateTimeOffset toUtc) ResolveReplayRangeUtc(
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        string? timezoneId)
+    {
+        var fromUtc = from ?? DateTimeOffset.UtcNow.AddDays(-7);
+        var toUtc = to ?? DateTimeOffset.UtcNow;
+        if (string.IsNullOrWhiteSpace(timezoneId))
+            return (fromUtc, toUtc);
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timezoneId.Trim());
+            var fromLocal = DateTime.SpecifyKind(fromUtc.DateTime, DateTimeKind.Unspecified);
+            var toLocal = DateTime.SpecifyKind(toUtc.DateTime, DateTimeKind.Unspecified);
+            fromUtc = TimeZoneInfo.ConvertTimeToUtc(fromLocal, tz);
+            toUtc = TimeZoneInfo.ConvertTimeToUtc(toLocal, tz);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            // Fall back to treating as UTC
+        }
+        return (fromUtc, toUtc);
+    }
+
     public static IEndpointRouteBuilder MapReplayEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/replay")
@@ -143,8 +168,7 @@ public static class ReplayEndpoints
                 var sym = string.IsNullOrWhiteSpace(request.Symbol)
                     ? DefaultReplaySymbol
                     : request.Symbol.Trim();
-                var from = request.From ?? DateTimeOffset.UtcNow.AddDays(-7);
-                var to = request.To ?? DateTimeOffset.UtcNow;
+                var (from, to) = ResolveReplayRangeUtc(request.From, request.To, request.TimezoneId);
                 var fetchFrom = from - ReplayFetchWarmup;
 
                 if (to <= from)
@@ -201,18 +225,21 @@ public static class ReplayEndpoints
                 try
                 {
                     replay.SetPhase("IMPORTING");
+                    var (fromUtc, toUtc) = ResolveReplayRangeUtc(request.From, request.To, request.TimezoneId);
                     var startReq = new ReplayStartRequest(
                         Symbol: string.IsNullOrWhiteSpace(request.Symbol)
                             ? DefaultReplaySymbol
                             : request.Symbol.Trim(),
-                        From: request.From,
-                        To: request.To,
+                        From: fromUtc,
+                        To: toUtc,
+                        TimezoneId: request.TimezoneId,
                         SpeedMultiplier: request.SpeedMultiplier,
                         UseAI: !request.UseMockAI,
                         UseMockAI: request.UseMockAI,
                         InitialCashAed: request.InitialCashAed,
                         IgnoreNewsGate: request.IgnoreNewsGate,
-                        TelegramReplayState: request.TelegramReplayState);
+                        TelegramReplayState: request.TelegramReplayState,
+                        UseLiveNewsAndTelegramInReplay: request.UseLiveNewsAndTelegramInReplay);
 
                     await replay.StartAsync(startReq, cancellationToken);
                     logger.LogInformation(
@@ -242,7 +269,9 @@ public static class ReplayEndpoints
             {
                 try
                 {
-                    await replay.StartAsync(request, cancellationToken);
+                    var (fromUtc, toUtc) = ResolveReplayRangeUtc(request.From, request.To, request.TimezoneId);
+                    var normalizedRequest = request with { From = fromUtc, To = toUtc };
+                    await replay.StartAsync(normalizedRequest, cancellationToken);
                     var status = replay.GetStatus();
 
                     return TypedResults.Ok(new

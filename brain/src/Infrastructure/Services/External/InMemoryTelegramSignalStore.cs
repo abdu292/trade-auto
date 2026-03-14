@@ -10,7 +10,9 @@ namespace Brain.Infrastructure.Services.External;
 /// In production, this would query a database or external Telegram API.
 /// </summary>
 public sealed class InMemoryTelegramSignalStore(
+#pragma warning disable CS9113
     ILogger<InMemoryTelegramSignalStore> logger) : ITelegramSignalStore
+#pragma warning restore CS9113
 {
     private static readonly List<TelegramSignalContract> _signals = [];
     private static readonly Lock _gate = new();

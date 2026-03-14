@@ -6,11 +6,16 @@ namespace Brain.Infrastructure.Services.External;
 
 public sealed class ReplayLiveBridge : IReplayLiveBridge
 {
-    private readonly ConcurrentQueue<(MarketSnapshotContract Snapshot, TaskCompletionSource Tcs)> _queue = new();
+    private readonly ConcurrentQueue<(MarketSnapshotContract Snapshot, TaskCompletionSource<bool> Tcs)> _queue = new();
+    private decimal? _replayDeployableCashAed;
+    private bool? _replayUseLiveNewsAndTelegram;
 
-    public Task SubmitReplaySnapshotAndWaitAsync(MarketSnapshotContract snapshot, CancellationToken cancellationToken)
+    public decimal? ReplayDeployableCashAed { get => _replayDeployableCashAed; set => _replayDeployableCashAed = value; }
+    public bool? ReplayUseLiveNewsAndTelegram { get => _replayUseLiveNewsAndTelegram; set => _replayUseLiveNewsAndTelegram = value; }
+
+    public Task<bool> SubmitReplaySnapshotAndWaitAsync(MarketSnapshotContract snapshot, CancellationToken cancellationToken)
     {
-        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _queue.Enqueue((snapshot, tcs));
 
         if (cancellationToken.CanBeCanceled)
@@ -21,7 +26,7 @@ public sealed class ReplayLiveBridge : IReplayLiveBridge
         return tcs.Task;
     }
 
-    public (bool HasReplay, MarketSnapshotContract? Snapshot, Action? SignalCycleProcessed) TryDequeueReplaySnapshot()
+    public (bool HasReplay, MarketSnapshotContract? Snapshot, Action<bool>? SignalCycleProcessed) TryDequeueReplaySnapshot()
     {
         if (!_queue.TryDequeue(out var pair))
         {
@@ -29,11 +34,11 @@ public sealed class ReplayLiveBridge : IReplayLiveBridge
         }
 
         var (snapshot, tcs) = pair;
-        void Signal()
+        void Signal(bool tradeArmed)
         {
             try
             {
-                tcs.TrySetResult();
+                tcs.TrySetResult(tradeArmed);
             }
             catch
             {

@@ -195,9 +195,12 @@ public static class StructureEngine
         decimal s1,
         decimal? s2)
     {
-        // Shelf = defended base level with compression/overlap candles
-        var hasShelf = (indicators.HasOverlapCandles || indicators.IsCompression)
-            && (snapshot.HasLiquiditySweep || snapshot.TvAlertType is "SHELF_RECLAIM" or "RETEST_HOLD");
+        // Shelf = defended base level with compression/overlap candles.
+        // Live confirmation = liquidity sweep (from candles/MT5) OR TradingView alert.
+        // Replay: we have sweep when DetectLiquiditySweep(symbol, at) is true from H1 candles; we never have TV. So only when sweep/TV are not available do we allow shelf from structure alone.
+        var structurePresent = indicators.HasOverlapCandles || indicators.IsCompression;
+        var liveConfirmation = snapshot.HasLiquiditySweep || snapshot.TvAlertType is "SHELF_RECLAIM" or "RETEST_HOLD";
+        var hasShelf = structurePresent && (liveConfirmation || string.Equals(snapshot.RateAuthority, "REPLAY_CANDLE", StringComparison.OrdinalIgnoreCase));
         
         var shelfLevel = s2.HasValue && s2.Value < s1 ? s2.Value : s1;
         
@@ -210,10 +213,12 @@ public static class StructureEngine
         decimal r1,
         decimal? r2)
     {
-        // Lid = compression resistance level with breakout potential
-        var hasLid = indicators.IsCompression 
-            && indicators.CompressionCountM15 >= 3
-            && (snapshot.IsBreakoutConfirmed || snapshot.TvAlertType is "LID_BREAK" or "BREAKOUT");
+        // Lid = compression resistance level with breakout potential.
+        // Live confirmation = breakout (from MT5/EA or derived from price) OR TradingView alert.
+        // Replay: we can derive IsBreakoutConfirmed from candles (close above R1/session high); we never have TV. So only when breakout/TV are not available do we allow lid from compression alone.
+        var compressionOk = indicators.IsCompression && indicators.CompressionCountM15 >= 3;
+        var liveConfirmation = snapshot.IsBreakoutConfirmed || snapshot.TvAlertType is "LID_BREAK" or "BREAKOUT";
+        var hasLid = compressionOk && (liveConfirmation || string.Equals(snapshot.RateAuthority, "REPLAY_CANDLE", StringComparison.OrdinalIgnoreCase));
         
         var lidLevel = r1;
         

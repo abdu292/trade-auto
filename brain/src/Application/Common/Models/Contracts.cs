@@ -112,6 +112,8 @@ public sealed record MarketSnapshotContract(
     string RateAuthority = "MT5",
     decimal AuthoritativeRate = 0m,
     string? CycleId = null,
+    /// <summary>When true and cycle is replay, AI worker uses live Telegram/news. Default false = neutral context for historical candles.</summary>
+    bool? ReplayUseLiveNewsAndTelegram = null,
     // Compression metric support (PRD)
     IReadOnlyCollection<decimal>? CompressionRangesM15 = null,
     // Pending/open/execution snapshots (PRD)

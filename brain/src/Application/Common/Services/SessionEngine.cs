@@ -38,19 +38,19 @@ public static class SessionEngine
     private static readonly (TimeSpan Start, TimeSpan Mid, TimeSpan End) NyServer = 
         (new TimeSpan(15, 10, 0), new TimeSpan(16, 10, 0), new TimeSpan(18, 40, 0));
     
-    // TRANSITION WINDOWS
-    private static readonly (TimeSpan Start, TimeSpan End) JapanToIndiaIst = 
+    // TRANSITION WINDOWS (Server used in IsInTransition; IST kept for reference)
+#pragma warning disable CS0414
+    private static readonly (TimeSpan Start, TimeSpan End) JapanToIndiaIst =
         (new TimeSpan(9, 15, 0), new TimeSpan(9, 45, 0));
-    private static readonly (TimeSpan Start, TimeSpan End) JapanToIndiaServer = 
-        (new TimeSpan(5, 55, 0), new TimeSpan(6, 25, 0));
-    
-    private static readonly (TimeSpan Start, TimeSpan End) IndiaToLondonIst = 
+    private static readonly (TimeSpan Start, TimeSpan End) IndiaToLondonIst =
         (new TimeSpan(13, 15, 0), new TimeSpan(13, 45, 0));
-    private static readonly (TimeSpan Start, TimeSpan End) IndiaToLondonServer = 
-        (new TimeSpan(9, 55, 0), new TimeSpan(10, 25, 0));
-    
-    private static readonly (TimeSpan Start, TimeSpan End) LondonToNyIst = 
+    private static readonly (TimeSpan Start, TimeSpan End) LondonToNyIst =
         (new TimeSpan(18, 15, 0), new TimeSpan(18, 45, 0));
+#pragma warning restore CS0414
+    private static readonly (TimeSpan Start, TimeSpan End) JapanToIndiaServer =
+        (new TimeSpan(5, 55, 0), new TimeSpan(6, 25, 0));
+    private static readonly (TimeSpan Start, TimeSpan End) IndiaToLondonServer =
+        (new TimeSpan(9, 55, 0), new TimeSpan(10, 25, 0));
     private static readonly (TimeSpan Start, TimeSpan End) LondonToNyServer = 
         (new TimeSpan(14, 55, 0), new TimeSpan(15, 25, 0));
 
@@ -226,7 +226,7 @@ public static class SessionEngine
             return true;
         }
 
-        transition = default;
+        transition = new TransitionInfo("", default, default, default, default);
         return false;
     }
 

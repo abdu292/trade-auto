@@ -10,7 +10,9 @@ namespace Brain.Infrastructure.Services.External;
 /// In production, this would query a 10+ year historical database.
 /// </summary>
 public sealed class InMemoryHistoricalPatternStore(
+#pragma warning disable CS9113
     ILogger<InMemoryHistoricalPatternStore> logger) : IHistoricalPatternStore
+#pragma warning restore CS9113
 {
     private static readonly List<HistoricalPatternMatch> _patterns = [];
     private static readonly Lock _gate = new();

@@ -165,22 +165,32 @@ class BrainApi {
 
   /// One-click: queues an MT5 history fetch + auto-import + replay.
   /// Returns immediately with phase=MT5_FETCH_QUEUED.
+  /// If [timezoneId] is set (e.g. 'Asia/Kolkata'), [from] and [to] are sent as local time and the server converts to UTC.
   Future<ReplayStatusResponse> runReplay({
     required String symbol,
     required DateTime from,
     required DateTime to,
+    String? timezoneId,
     int speedMultiplier = 100,
     bool useMockAI = true,
     double initialCashAed = 350000,
+    bool useLiveNewsAndTelegramInReplay = false,
   }) async {
-    final response = await _dio.post('/api/replay/run', data: {
+    final payload = <String, dynamic>{
       'symbol': symbol,
       'from': from.toUtc().toIso8601String(),
       'to': to.toUtc().toIso8601String(),
       'speedMultiplier': speedMultiplier,
       'useMockAI': useMockAI,
       'initialCashAed': initialCashAed,
-    });
+      'useLiveNewsAndTelegramInReplay': useLiveNewsAndTelegramInReplay,
+    };
+    if (timezoneId != null && timezoneId.isNotEmpty) {
+      payload['timezoneId'] = timezoneId;
+      payload['from'] = from.toIso8601String();
+      payload['to'] = to.toIso8601String();
+    }
+    final response = await _dio.post('/api/replay/run', data: payload);
     final data = _asMap(response.data);
     return ReplayStatusResponse(
       status: ReplayStatus.fromJson(_asMap(data['status'])),
@@ -189,22 +199,33 @@ class BrainApi {
   }
 
   /// Starts replay using already-imported candles (after MT5 fetch is done).
+  /// If [timezoneId] is set, [from] and [to] are sent as local time.
+  /// [useLiveNewsAndTelegramInReplay] defaults to false: replay uses neutral news/telegram for historical candles.
   Future<ReplayStatusResponse> startAfterFetch({
     required String symbol,
     DateTime? from,
     DateTime? to,
+    String? timezoneId,
     int speedMultiplier = 100,
     bool useMockAI = true,
     double initialCashAed = 350000,
+    bool useLiveNewsAndTelegramInReplay = false,
   }) async {
-    final response = await _dio.post('/api/replay/start-after-fetch', data: {
+    final payload = <String, dynamic>{
       'symbol': symbol,
       'from': from?.toUtc().toIso8601String(),
       'to': to?.toUtc().toIso8601String(),
       'speedMultiplier': speedMultiplier,
       'useMockAI': useMockAI,
       'initialCashAed': initialCashAed,
-    });
+      'useLiveNewsAndTelegramInReplay': useLiveNewsAndTelegramInReplay,
+    };
+    if (timezoneId != null && timezoneId.isNotEmpty && from != null && to != null) {
+      payload['timezoneId'] = timezoneId;
+      payload['from'] = from.toIso8601String();
+      payload['to'] = to.toIso8601String();
+    }
+    final response = await _dio.post('/api/replay/start-after-fetch', data: payload);
     final data = _asMap(response.data);
     return ReplayStatusResponse(
       status: ReplayStatus.fromJson(_asMap(data['status'])),
@@ -212,6 +233,7 @@ class BrainApi {
     );
   }
 
+  /// [useLiveNewsAndTelegramInReplay] defaults to false: replay uses neutral news/telegram for historical candles.
   Future<ReplayStatusResponse> startReplay({
     required String symbol,
     int speedMultiplier = 100,
@@ -219,15 +241,24 @@ class BrainApi {
     bool useMockAI = true,
     DateTime? from,
     DateTime? to,
+    String? timezoneId,
+    bool useLiveNewsAndTelegramInReplay = false,
   }) async {
-    final response = await _dio.post('/api/replay/start', data: {
+    final payload = <String, dynamic>{
       'symbol': symbol,
       'speedMultiplier': speedMultiplier,
       'useAI': useAI,
       'useMockAI': useMockAI,
       'from': from?.toUtc().toIso8601String(),
       'to': to?.toUtc().toIso8601String(),
-    });
+      'useLiveNewsAndTelegramInReplay': useLiveNewsAndTelegramInReplay,
+    };
+    if (timezoneId != null && timezoneId.isNotEmpty && from != null && to != null) {
+      payload['timezoneId'] = timezoneId;
+      payload['from'] = from.toIso8601String();
+      payload['to'] = to.toIso8601String();
+    }
+    final response = await _dio.post('/api/replay/start', data: payload);
     final data = _asMap(response.data);
     return ReplayStatusResponse(
       status: ReplayStatus.fromJson(_asMap(data['status'])),

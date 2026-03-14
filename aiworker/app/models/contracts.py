@@ -115,6 +115,8 @@ class MarketSnapshot(BaseModel):
     rateAuthority: str = "MT5"
     authoritativeRate: float = 0.0
     cycleId: str | None = None
+    # Replay: when True, use live Telegram/news in replay (default False = neutral context for historical candles).
+    replay_use_live_news: bool = False
     # Compression and order/account snapshots (PRD)
     compressionRangesM15: list[float] = Field(default_factory=list)
     pendingOrders: list[dict[str, Any]] = Field(default_factory=list)

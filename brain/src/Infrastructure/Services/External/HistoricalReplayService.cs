@@ -49,6 +49,8 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
     private const decimal DefaultAtrEstimate = 10m; // Default fallback ATR estimate for gold (USD/oz)
     private const int CompressionWindowM15 = 8;
     private const int CompressionWindowM5 = 10;
+    /// <summary>MT5 server is typically GMT+2; replay candle timestamps from EA are UTC. We derive server time so session resolves correctly.</summary>
+    private const int ReplayMt5ServerOffsetHours = 2;
 
     public HistoricalReplayService(IServiceProvider serviceProvider, IReplayLiveBridge replayLiveBridge, ILogger<HistoricalReplayService> logger)
     {
@@ -208,6 +210,9 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
                 _initialCashAed);
         }
 
+        _replayLiveBridge.ReplayDeployableCashAed = _initialCashAed;
+        _replayLiveBridge.ReplayUseLiveNewsAndTelegram = request.UseLiveNewsAndTelegramInReplay;
+
         // Ensure each replay run starts from a clean risk state.
         DecisionEngine.ResetRuntimeGuards();
 
@@ -231,6 +236,8 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             {
                 _isRunning = false;
                 _isPaused = false;
+                _replayLiveBridge.ReplayDeployableCashAed = null;
+                _replayLiveBridge.ReplayUseLiveNewsAndTelegram = null;
                 _logger.LogInformation(
                     "Replay finished. {Symbol} {Tf}: {Processed}/{Total} candles, {Cycles} cycles, {Setups} setup candidates, {Trades} trades armed.",
                     symbol, driverTf, _processedCandles, _totalCandles, _cyclesTriggered, _setupCandidatesFound, _tradesArmed);
@@ -266,6 +273,8 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         _replayCts?.Cancel();
         _isRunning = false;
         _isPaused = false;
+        _replayLiveBridge.ReplayDeployableCashAed = null;
+        _replayLiveBridge.ReplayUseLiveNewsAndTelegram = null;
         if (_pauseGate.CurrentCount == 0)
             _pauseGate.Release();
         _phase = "IDLE";
@@ -336,7 +345,9 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             _cyclesTriggered++;
 
             // Always run through the same pipeline as live (state machine, logs, etc.); execution is blocked in the polling service.
-            await _replayLiveBridge.SubmitReplaySnapshotAndWaitAsync(snapshot, ct);
+            var tradeArmed = await _replayLiveBridge.SubmitReplaySnapshotAndWaitAsync(snapshot, ct);
+            if (tradeArmed)
+                Interlocked.Increment(ref _tradesArmed);
 
             if (candleIntervalMs > 0)
                 await Task.Delay(candleIntervalMs, ct);
@@ -787,7 +798,14 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
                 CandleRange: range));
         }
 
-        var (session, phase) = TradingSessionClock.Resolve(primary.Timestamp);
+        // Replay candles from EA are UTC; derive MT5 server time so session and KSA/India/UAE resolve correctly
+        var mt5ServerTime = ReplayUtcToMt5ServerTime(primary.Timestamp);
+        var ksaTime = TradingSessionClock.ServerTimeToKsa(mt5ServerTime);
+        var indiaTime = TradingSessionClock.ServerTimeToIst(mt5ServerTime);
+        var uaeTime = ksaTime.AddHours(1);
+        var (session, phase) = TradingSessionClock.Resolve(mt5ServerTime);
+        var (sessionHigh, sessionLow, previousSessionHigh, previousSessionLow) = GetSessionHighLowFromM5(symbol, primary.Timestamp, mt5ServerTime);
+
         var close = primary.Close;
         var atr = EstimateAtr(symbol, primary.Timestamp);
         var h1Indicators = indicatorByTimeframe.GetValueOrDefault("H1");
@@ -797,6 +815,8 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
         var compressionCountM5 = CountCompressionCandles(symbol, "M5", primary.Timestamp, CompressionWindowM5);
         var expansionCountM15 = CountExpansionCandles(symbol, primary.Timestamp);
         var hasLiquiditySweep = DetectLiquiditySweep(symbol, primary.Timestamp);
+        // Derive breakout from candles when available: price closed above session high (lid)
+        var isBreakoutConfirmed = sessionHigh > 0m && primary.Close > sessionHigh;
         var m5Range = timeframeData.FirstOrDefault(t => string.Equals(t.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.CandleRange ?? 0m;
         var m5Body = timeframeData.FirstOrDefault(t => string.Equals(t.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.CandleBodySize ?? 0m;
         var atrM15 = m15Indicators.Atr14 > 0m ? m15Indicators.Atr14 : atr;
@@ -832,13 +852,20 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
             IsAtrExpanding: expansionCountM15 > 0,
             ImpulseStrengthScore: impulseScore,
             HasOverlapCandles: DetectBase(symbol, primary.Timestamp),
-                HasLiquiditySweep: hasLiquiditySweep,
+            HasLiquiditySweep: hasLiquiditySweep,
+            IsBreakoutConfirmed: isBreakoutConfirmed,
             DayOfWeek: primary.Timestamp.DayOfWeek,
-            Mt5ServerTime: primary.Timestamp,
-            KsaTime: primary.Timestamp.AddMinutes(50),
+            Mt5ServerTime: mt5ServerTime,
+            KsaTime: ksaTime,
+            IndiaTime: indiaTime,
+            UaeTime: uaeTime,
+            SessionHigh: sessionHigh,
+            SessionLow: sessionLow,
+            PreviousSessionHigh: previousSessionHigh,
+            PreviousSessionLow: previousSessionLow,
             SessionPhase: phase,
             IsFriday: primary.Timestamp.DayOfWeek == DayOfWeek.Friday,
-                CompressionCountM5: compressionCountM5,
+            CompressionCountM5: compressionCountM5,
             CycleId: $"replay_{primary.Timestamp:yyyyMMddHHmmss}");
     }
 
@@ -1203,6 +1230,86 @@ public sealed class HistoricalReplayService : IHistoricalReplayService
 
     private static string BuildKey(string symbol, string timeframe)
         => $"{symbol.Trim().ToUpperInvariant()}_{timeframe.Trim().ToUpperInvariant()}";
+
+    /// <summary>Replay candles from EA are typically UTC. Derive MT5 server time (same instant, server local time-of-day) so session resolves correctly.</summary>
+    private static DateTimeOffset ReplayUtcToMt5ServerTime(DateTimeOffset utc)
+    {
+        var d = utc.UtcDateTime;
+        int h = d.Hour + ReplayMt5ServerOffsetHours;
+        int dayAdd = h >= 24 ? 1 : (h < 0 ? -1 : 0);
+        h = (h % 24 + 24) % 24;
+        var date = d.Date.AddDays(dayAdd);
+        return new DateTimeOffset(date.Year, date.Month, date.Day, h, d.Minute, d.Second, 0, TimeSpan.FromHours(ReplayMt5ServerOffsetHours));
+    }
+
+    /// <summary>Session boundaries in server time (hour, minute). Order: Japan, India, London, NY.</summary>
+    private static readonly (TimeSpan Start, TimeSpan End)[] SessionBoundsServer = new[]
+    {
+        (new TimeSpan(2, 10, 0), new TimeSpan(6, 10, 0)),   // JAPAN
+        (new TimeSpan(6, 10, 0), new TimeSpan(10, 10, 0)),  // INDIA
+        (new TimeSpan(10, 10, 0), new TimeSpan(15, 10, 0)), // LONDON
+        (new TimeSpan(15, 10, 0), new TimeSpan(20, 10, 0)), // NEW_YORK
+    };
+
+    private static (DateTimeOffset startUtc, DateTimeOffset endUtc) GetSessionUtcRange(DateTimeOffset mt5ServerTime, bool previousSession)
+    {
+        var (session, _) = TradingSessionClock.Resolve(mt5ServerTime);
+        int idx = session switch
+        {
+            "JAPAN" => 0,
+            "INDIA" => 1,
+            "LONDON" => 2,
+            "NEW_YORK" or "NY" => 3,
+            _ => 1,
+        };
+        if (previousSession)
+        {
+            idx = (idx - 1 + SessionBoundsServer.Length) % SessionBoundsServer.Length;
+        }
+        var (start, end) = SessionBoundsServer[idx];
+        var offset = mt5ServerTime.Offset;
+        var date = mt5ServerTime.Date;
+        var startServer = date.Add(start);
+        var endServer = date.Add(end);
+        var startUtc = new DateTimeOffset(startServer.Year, startServer.Month, startServer.Day, startServer.Hour, startServer.Minute, 0, offset);
+        var endUtc = new DateTimeOffset(endServer.Year, endServer.Month, endServer.Day, endServer.Hour, endServer.Minute, 0, offset);
+        return (startUtc, endUtc);
+    }
+
+    private (decimal sessionHigh, decimal sessionLow, decimal previousSessionHigh, decimal previousSessionLow) GetSessionHighLowFromM5(string symbol, DateTimeOffset primaryTimestampUtc, DateTimeOffset mt5ServerTime)
+    {
+        var key = BuildKey(symbol, "M5");
+        if (!_candles.TryGetValue(key, out var list) || list.Count == 0)
+            return (0m, 0m, 0m, 0m);
+
+        var (currentStart, currentEnd) = GetSessionUtcRange(mt5ServerTime, previousSession: false);
+        var (prevStart, prevEnd) = GetSessionUtcRange(mt5ServerTime, previousSession: true);
+
+        decimal curHigh = 0m, curLow = 0m;
+        decimal prevHigh = 0m, prevLow = 0m;
+        bool curSet = false, prevSet = false;
+
+        var curStartUtc = currentStart.UtcDateTime;
+        var curEndUtc = currentEnd.UtcDateTime;
+        var prevStartUtc = prevStart.UtcDateTime;
+        var prevEndUtc = prevEnd.UtcDateTime;
+        foreach (var c in list)
+        {
+            var t = c.Timestamp.UtcDateTime;
+            if (c.Timestamp > primaryTimestampUtc) break;
+            if (t >= curStartUtc && t < curEndUtc)
+            {
+                if (!curSet) { curHigh = c.High; curLow = c.Low; curSet = true; }
+                else { curHigh = Math.Max(curHigh, c.High); curLow = Math.Min(curLow, c.Low); }
+            }
+            if (t >= prevStartUtc && t < prevEndUtc)
+            {
+                if (!prevSet) { prevHigh = c.High; prevLow = c.Low; prevSet = true; }
+                else { prevHigh = Math.Max(prevHigh, c.High); prevLow = Math.Min(prevLow, c.Low); }
+            }
+        }
+        return (curHigh, curLow, prevHigh, prevLow);
+    }
 
     private static bool IsHeaderLine(string line)
     {

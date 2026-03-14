@@ -73,7 +73,8 @@ public sealed class SignalPollingBackgroundService(
             var timeline = scope.ServiceProvider.GetRequiredService<IRuntimeTimelineWriter>();
             var notification = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
-            Action? replaySignal = null;
+            Action<bool>? replaySignal = null;
+            bool replayTradeArmed = false;
             try
             {
                 var cycleId = $"cyc_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}";
@@ -87,7 +88,7 @@ public sealed class SignalPollingBackgroundService(
                     isReplay = true;
                     replaySignal = signalProcessed;
                     symbol = replaySnap.Symbol;
-                    rawSnapshot = replaySnap with { CycleId = cycleId };
+                    rawSnapshot = replaySnap with { CycleId = cycleId, ReplayUseLiveNewsAndTelegram = replayLiveBridge.ReplayUseLiveNewsAndTelegram };
                 }
                 else
                 {
@@ -221,7 +222,9 @@ public sealed class SignalPollingBackgroundService(
                     snapshotKsaTime: rawSnapshot.KsaTime != default ? rawSnapshot.KsaTime : null,
                     snapshotIndiaTime: rawSnapshot.IndiaTime != default ? rawSnapshot.IndiaTime : null,
                     snapshotUaeTime: rawSnapshot.UaeTime != default ? rawSnapshot.UaeTime : null);
-                if (canonicalTimeSession.HasConflict)
+                // In replay, runtime is "now" (e.g. March 14) while candles are historical (e.g. Feb 27); Clock vs Engine mismatch is expected. Skip conflict event to avoid noisy logs.
+                var isReplaySnapshot = string.Equals(rawSnapshot.RateAuthority, "REPLAY_CANDLE", StringComparison.OrdinalIgnoreCase);
+                if (canonicalTimeSession.HasConflict && !isReplaySnapshot)
                 {
                     await timeline.WriteAsync(
                         eventType: "TIME_MAPPING_CONFLICT",
@@ -276,9 +279,10 @@ public sealed class SignalPollingBackgroundService(
                 // Candle-aligned gate: only run the strategy when a new M5 or M15 candle has closed (skip for replay).
                 if (!isReplay)
                 {
-                    var currentM5Time = snapshot.TimeframeData
+                    var timeframeData = snapshot.TimeframeData ?? [];
+                    var currentM5Time = timeframeData
                         .FirstOrDefault(x => string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.CandleStartTime;
-                    var currentM15Time = snapshot.TimeframeData
+                    var currentM15Time = timeframeData
                         .FirstOrDefault(x => string.Equals(x.Timeframe, "M15", StringComparison.OrdinalIgnoreCase))?.CandleStartTime;
 
                     if (currentM5Time.HasValue || currentM15Time.HasValue)
@@ -558,8 +562,17 @@ public sealed class SignalPollingBackgroundService(
                     cancellationToken: stoppingToken);
 
                 // ── Spec v7: Gold Engine decision stack (path-aware; M5 optional for BUY_LIMIT) ──
-                // PATCH 7 — Ledger/capacity transparency
-                var rawStackLedgerState = ledger.GetState();
+                // PATCH 7 — Ledger/capacity transparency. Replay: use virtual ledger (ReplayDeployableCashAed) so capacity passes.
+                var rawLiveState = ledger.GetState();
+                var replayCashAed = isReplay ? replayLiveBridge.ReplayDeployableCashAed : null;
+                var rawStackLedgerState = (replayCashAed.HasValue && replayCashAed.Value > 0m)
+                    ? new LedgerStateContract(
+                        CashAed: replayCashAed.Value,
+                        GoldGrams: 0m,
+                        OpenExposurePercent: 0m,
+                        DeployableCashAed: replayCashAed.Value,
+                        OpenBuyCount: 0)
+                    : rawLiveState;
                 await timeline.WriteAsync(
                     eventType: "LEDGER_SOURCE_APPLIED",
                     stage: "ledger",
@@ -569,7 +582,7 @@ public sealed class SignalPollingBackgroundService(
                     tradeId: null,
                     payload: new
                     {
-                        source = "ITradeLedgerService.GetState",
+                        source = (replayCashAed.HasValue && replayCashAed.Value > 0m) ? "ReplayVirtualLedger" : "ITradeLedgerService.GetState",
                         ledgerCashAED = rawStackLedgerState.CashAed,
                         ledgerGoldGrams = rawStackLedgerState.GoldGrams,
                         deployableAED = rawStackLedgerState.DeployableCashAed,
@@ -1042,13 +1055,13 @@ public sealed class SignalPollingBackgroundService(
                         pathStateLadder = pathStateLadderStack,
                         reasonCode = decisionStackResult.ReasonCode,
                         legalityState = decisionStackResult.LegalityState,
-                        confidenceScore = decisionStackResult.ConfidenceScore.Score,
+                        confidenceScore = decisionStackResult.ConfidenceScore!.Score,
                         confidenceTier = decisionStackResult.ConfidenceScore.Tier,
                         overextensionState = decisionStackResult.Overextension.State,
                         sweepReclaimState = decisionStackResult.SweepReclaim.State,
                         engineStates = decisionStackResult.EngineStates == null ? null : new
                         {
-                            decisionStackResult.EngineStates.LegalityState,
+                            decisionStackResult.EngineStates!.LegalityState,
                             decisionStackResult.EngineStates.BiasState,
                             decisionStackResult.EngineStates.PathState,
                             decisionStackResult.EngineStates.SizeState,
@@ -1821,13 +1834,15 @@ public sealed class SignalPollingBackgroundService(
                     cancellationToken: stoppingToken);
 
                 // ── VALIDATE ENGINE integration ──────────────────────────────────────────────
+                var minTradeGramsForValidate = runtimeSettings.GetMinTradeGrams();
                 var validateResult = ValidateEngine.Validate(
                     snapshot,
                     tableResult,
                     structureForAnalyze,
                     volatilityForAnalyze,
                     newsForAnalyze,
-                    sessionForAnalyze);
+                    sessionForAnalyze,
+                    minTradeGramsForValidate);
 
                 await timeline.WriteAsync(
                     eventType: "VALIDATE_STARTED",
@@ -1842,7 +1857,7 @@ public sealed class SignalPollingBackgroundService(
                         reason = validateResult.Reason,
                         expiryValid = tableResult.ExpiryUtc.HasValue && (tableResult.ExpiryUtc.Value - DateTimeOffset.UtcNow).TotalMinutes >= 30,
                         tpValid = tableResult.Tp.HasValue && tableResult.Tp.Value > snapshot.Bid,
-                        sizeLegal = tableResult.Grams.HasValue && tableResult.Grams.Value >= 100m,
+                        sizeLegal = tableResult.Grams.HasValue && tableResult.Grams.Value >= minTradeGramsForValidate,
                         regimeCoherent = validateResult.IsValid,
                         capacityLegal = capitalForAnalyze.AffordableFlag,
                         safetyPass = validateResult.IsValid && !waterfallForAnalyze.ShouldBlock,
@@ -2034,10 +2049,17 @@ public sealed class SignalPollingBackgroundService(
 
                 ModeSignalContract? modeSignal;
                 TradeSignalContract aiSignal;
+                // AI worker gate skips staleness when cycle_id starts with "replay_" (replay mode)
+                var aiWorkerCycleId = string.Equals(snapshot.RateAuthority, "REPLAY_CANDLE", StringComparison.OrdinalIgnoreCase)
+                    ? "replay_" + cycleId
+                    : cycleId;
+                // When replay has live news/telegram off, skip /mode entirely so AI worker never touches Telegram.
+                var skipModeInReplay = string.Equals(snapshot.RateAuthority, "REPLAY_CANDLE", StringComparison.OrdinalIgnoreCase)
+                    && snapshot.ReplayUseLiveNewsAndTelegram != true;
                 try
                 {
-                    modeSignal = await aiWorker.GetModeAsync(snapshot, stoppingToken);
-                    aiSignal = await aiWorker.AnalyzeAsync(snapshot, cycleId, stoppingToken);
+                    modeSignal = skipModeInReplay ? null : await aiWorker.GetModeAsync(snapshot, stoppingToken);
+                    aiSignal = await aiWorker.AnalyzeAsync(snapshot, aiWorkerCycleId, stoppingToken);
                 }
                 catch (Exception ex)
                 {
@@ -2299,14 +2321,8 @@ public sealed class SignalPollingBackgroundService(
                     .FirstOrDefaultAsync(stoppingToken)
                     ?? "Standard";
 
-                var rawState = ledger.GetState();
-                var reservedPendingAed = EstimateReservedPendingAed(pendingTrades.Snapshot());
-                var state = new LedgerStateContract(
-                    CashAed: rawState.CashAed,
-                    GoldGrams: rawState.GoldGrams,
-                    OpenExposurePercent: rawState.OpenExposurePercent,
-                    DeployableCashAed: Math.Max(0m, rawState.DeployableCashAed - reservedPendingAed),
-                    OpenBuyCount: rawState.OpenBuyCount);
+                // Use same ledger state as stack (replay uses virtual ledger when ReplayDeployableCashAed is set)
+                var state = stackLedgerState;
 
                 // PRETABLE Risk Intelligence: Impulse Exhaustion Guard, Liquidity Sweep Detector, PRETABLE.
                 // PRETABLE BLOCK → no trade regardless of engine output.
@@ -2489,7 +2505,9 @@ public sealed class SignalPollingBackgroundService(
                     minTradeGrams,
                     effectiveSizeModifier,
                     decisionStackResult.PathState,
-                    decisionStackResult.PathRouting.PendingLimitPath);
+                    decisionStackResult.PathRouting!.PendingLimitPath);
+                if (isReplay)
+                    replayTradeArmed = decision.IsTradeAllowed;
                 var snapshotHash = ComputeSnapshotHash(snapshot);
 
                 // Spec v8 §14: compute entry levels (limit1, limit2, stop1) from rotation result and decision
@@ -2742,9 +2760,10 @@ public sealed class SignalPollingBackgroundService(
                     continue;
                 }
 
-                var currentPrice = snapshot.TimeframeData
+                var tfData = snapshot.TimeframeData ?? [];
+                var currentPrice = tfData
                     .FirstOrDefault(x => string.Equals(x.Timeframe, "M5", StringComparison.OrdinalIgnoreCase))?.Close
-                    ?? snapshot.TimeframeData.First().Close;
+                    ?? tfData.First().Close;
 
                 if (!ledger.CanScaleIn(currentPrice, regime, minSpacingPercent: 0.0025m, exposureCapPercent: 65m))
                 {
@@ -2791,13 +2810,13 @@ public sealed class SignalPollingBackgroundService(
                     continue;
                 }
 
-                var projectedReservedAed = reservedPendingAed + EstimateOrderReserveAed(decision.Entry, decision.Grams);
-                if (projectedReservedAed > rawState.CashAed)
+                var projectedReservedAed = reservedPendingAedForStack + EstimateOrderReserveAed(decision.Entry, decision.Grams);
+                if (projectedReservedAed > state.CashAed)
                 {
                     logger.LogInformation(
                         "NO_TRADE due to projected reserve breach. Reserved={Reserved} Cash={Cash}",
                         projectedReservedAed,
-                        rawState.CashAed);
+                        state.CashAed);
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                     continue;
                 }
@@ -2808,7 +2827,7 @@ public sealed class SignalPollingBackgroundService(
                 var mt5BuyPrice = snapshot.AuthoritativeRate > 0m
                     ? snapshot.AuthoritativeRate
                     : snapshot.Ask > 0m ? snapshot.Ask : decision.Entry;
-                var capitalCheck = CapitalUtilizationService.Check(rawState.CashAed, mt5BuyPrice, decision.Grams);
+                var capitalCheck = CapitalUtilizationService.Check(state.CashAed, mt5BuyPrice, decision.Grams);
 
                 logger.LogInformation(
                     "CAPITAL_GATE Cash={CashAed} Price={Price} Attempted={Attempted}g MaxLegal={MaxLegal}g Required={Required}AED Allowed={Allowed}AED Status={Status}",
@@ -2843,7 +2862,7 @@ public sealed class SignalPollingBackgroundService(
                 {
                     logger.LogWarning(
                         "CAPITAL_GATE REJECTED — insufficient cash. Cash={CashAed} MaxLegal={MaxLegal}g Price={Price}",
-                        rawState.CashAed, capitalCheck.MaxLegalGrams, mt5BuyPrice);
+                        state.CashAed, capitalCheck.MaxLegalGrams, mt5BuyPrice);
 
                     db.DecisionLogs.Add(DecisionLog.Create(
                         symbol: snapshot.Symbol,
@@ -2855,7 +2874,7 @@ public sealed class SignalPollingBackgroundService(
                         telegramState: decision.TelegramState,
                         railPermissionA: decision.RailPermissionA,
                         railPermissionB: decision.RailPermissionB,
-                        reason: $"CR10 capital gate rejected order. MaxLegalGrams={capitalCheck.MaxLegalGrams:0.00}, Cash={rawState.CashAed:0.00}AED",
+                        reason: $"CR10 capital gate rejected order. MaxLegalGrams={capitalCheck.MaxLegalGrams:0.00}, Cash={state.CashAed:0.00}AED",
                         entry: 0m,
                         tp: 0m,
                         grams: 0m,
@@ -2884,8 +2903,17 @@ public sealed class SignalPollingBackgroundService(
                 //
                 // maxSymbolExposureGrams = (accountEquityUsd * 0.25) / goldPricePerGram
                 // where goldPricePerGram = authoritativeRate / 31.1035
+                // Replay: use virtual ledger (zero open gold, equity = ReplayDeployableCashAed) so exposure gate passes.
                 var authoritativeRate = snapshot.AuthoritativeRate;
-                var extendedLedger = ledger.GetExtendedState(authoritativeRate > 0m ? authoritativeRate : snapshot.Bid);
+                var extendedLedger = (isReplay && replayCashAed.HasValue && replayCashAed.Value > 0m)
+                    ? new LedgerStateContract(
+                        CashAed: replayCashAed.Value,
+                        GoldGrams: 0m,
+                        OpenExposurePercent: 0m,
+                        DeployableCashAed: replayCashAed.Value,
+                        OpenBuyCount: 0,
+                        NetEquityAed: replayCashAed.Value)
+                    : ledger.GetExtendedState(authoritativeRate > 0m ? authoritativeRate : snapshot.Bid);
                 var accountEquityUsd = extendedLedger.NetEquityAed / UsdToAed;
                 var openPositionGrams = extendedLedger.GoldGrams;
 
@@ -3360,7 +3388,7 @@ public sealed class SignalPollingBackgroundService(
             }
             finally
             {
-                replaySignal?.Invoke();
+                replaySignal?.Invoke(replayTradeArmed);
             }
 
             await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);

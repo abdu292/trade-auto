@@ -156,7 +156,7 @@ public static class MonitoringEndpoints
                                 !string.IsNullOrEmpty(lifecycleStatus.LifecycleState) && lifecycleStatus.LifecycleState != "NONE",
                                 false)
                             : null,
-                        reasonCode = engineStates.ReasonCode,
+                        reasonCode = engineStates!.ReasonCode,
                         overextensionState = engineStates.OverextensionState,
                         waterfallRisk = engineStates.WaterfallRisk,
                         session = engineStates.Session,

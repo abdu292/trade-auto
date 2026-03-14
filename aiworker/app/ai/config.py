@@ -1,9 +1,17 @@
 import os
+from pathlib import Path
 from typing import List
 from dotenv import load_dotenv
 from app.ai.providers.base_provider import AIProviderConfig
 
+# Load .env from cwd and repo root so one .env works for brain + aiworker
 load_dotenv()
+try:
+    _config_dir = Path(__file__).resolve().parent
+    _repo_root = _config_dir.parent.parent.parent.parent  # app/ai/config.py -> aiworker -> repo root
+    load_dotenv(_repo_root / ".env")
+except Exception:
+    pass
 
 def _read_csv_env(name: str, default: str = "") -> List[str]:
     raw = os.getenv(name, default)
@@ -133,7 +141,7 @@ EXTERNAL_NEWS_BEARISH_KEYWORDS = _read_csv_env(
 
 AI_NEWS_TIMEOUT_SECONDS = float(os.getenv("AI_NEWS_TIMEOUT_SECONDS", "8"))
 AI_MODE_TIMEOUT_SECONDS = float(os.getenv("AI_MODE_TIMEOUT_SECONDS", "10"))
-AI_COMMITTEE_TIMEOUT_SECONDS = float(os.getenv("AI_COMMITTEE_TIMEOUT_SECONDS", "20"))
+AI_COMMITTEE_TIMEOUT_SECONDS = float(os.getenv("AI_COMMITTEE_TIMEOUT_SECONDS", "28"))
 AI_MACRO_TIMEOUT_SECONDS = float(os.getenv("AI_MACRO_TIMEOUT_SECONDS", "10"))
 
 # ── CR9 AI Cost Optimisation ─────────────────────────────────────────────────
@@ -177,7 +185,7 @@ def build_analyzers() -> List[AIProviderConfig]:
                     api_key=OPENROUTER_API_KEY,
                     model=model_name,
                     temperature=0.2,
-                    max_tokens=450,
+                    max_tokens=1024,
                     timeout=20,
                 )
             )
@@ -190,7 +198,7 @@ def build_analyzers() -> List[AIProviderConfig]:
                 api_key=OPENROUTER_API_KEY,
                 model=GROK_OPENROUTER_MODEL,
                 temperature=0.2,
-                max_tokens=450,
+                max_tokens=1024,
                 timeout=20,
             )
         )

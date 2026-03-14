@@ -22,13 +22,15 @@ namespace Brain.Application.Common.Services;
 /// </summary>
 public static class ValidateEngine
 {
+    /// <param name="minTradeGrams">Minimum trade size in grams (from runtime settings). Same for live and replay.</param>
     public static ValidateEngineResult Validate(
         MarketSnapshotContract snapshot,
         TableCompilerResult table,
         StructureEngineResult structure,
         VolatilityRegimeEngineResult volatility,
         NewsEngineResult news,
-        SessionEngineResult session)
+        SessionEngineResult session,
+        decimal minTradeGrams = 100m)
     {
         if (!table.IsValid)
         {
@@ -44,15 +46,15 @@ public static class ValidateEngine
         var validatedOrder = table;
         var resizeApplied = false;
         
-        // Check expiry realism
+        // Check expiry realism (replay: use snapshot time as "now" so past expiry is valid)
         if (table.ExpiryUtc.HasValue)
         {
-            var expiryCheck = CheckExpiryRealism(table.ExpiryUtc.Value, session, news);
+            var expiryCheck = CheckExpiryRealism(table.ExpiryUtc.Value, session, news, snapshot);
             if (!expiryCheck.IsValid)
             {
                 return new ValidateEngineResult(
                     IsValid: false,
-                    Reason: expiryCheck.Reason,
+                    Reason: expiryCheck.Reason ?? "Expiry check failed",
                     ValidatedOrder: null,
                     Downgrades: Array.Empty<string>(),
                     ResizeApplied: false);
@@ -64,15 +66,15 @@ public static class ValidateEngine
             }
         }
         
-        // Check size realism
+        // Check size realism (minTradeGrams from runtime settings — same for live and replay)
         if (table.Grams.HasValue)
         {
-            var sizeCheck = CheckSizeRealism(table.Grams.Value, snapshot, volatility);
+            var sizeCheck = CheckSizeRealism(table.Grams.Value, snapshot, volatility, minTradeGrams);
             if (!sizeCheck.IsValid)
             {
                 return new ValidateEngineResult(
                     IsValid: false,
-                    Reason: sizeCheck.Reason,
+                    Reason: sizeCheck.Reason ?? "Size check failed",
                     ValidatedOrder: null,
                     Downgrades: downgrades,
                     ResizeApplied: false);
@@ -116,7 +118,7 @@ public static class ValidateEngine
         {
             return new ValidateEngineResult(
                 IsValid: false,
-                Reason: netEdgeCheck.Reason,
+                Reason: netEdgeCheck.Reason ?? "Net edge check failed",
                 ValidatedOrder: null,
                 Downgrades: downgrades,
                 ResizeApplied: resizeApplied);
@@ -135,9 +137,14 @@ public static class ValidateEngine
     private static (bool IsValid, string? Reason, string? Downgrade) CheckExpiryRealism(
         DateTimeOffset expiry,
         SessionEngineResult session,
-        NewsEngineResult news)
+        NewsEngineResult news,
+        MarketSnapshotContract? snapshot = null)
     {
-        var minutesToExpiry = (expiry - DateTimeOffset.UtcNow).TotalMinutes;
+        // Replay: expiry is relative to snapshot time; live: relative to UtcNow
+        var asOf = snapshot != null && string.Equals(snapshot.RateAuthority, "REPLAY_CANDLE", StringComparison.OrdinalIgnoreCase)
+            ? snapshot.Timestamp
+            : DateTimeOffset.UtcNow;
+        var minutesToExpiry = (expiry - asOf).TotalMinutes;
         
         // Check if expiry is too short
         if (minutesToExpiry < 30)
@@ -172,12 +179,13 @@ public static class ValidateEngine
     private static (bool IsValid, string? Reason, bool ResizeRequired, decimal? ResizedGrams) CheckSizeRealism(
         decimal grams,
         MarketSnapshotContract snapshot,
-        VolatilityRegimeEngineResult volatility)
+        VolatilityRegimeEngineResult volatility,
+        decimal minTradeGrams = 100m)
     {
-        // Minimum grams check
-        if (grams < 100m)
+        // Minimum grams check (from runtime settings — same for live and replay)
+        if (grams < minTradeGrams)
         {
-            return (false, $"Grams {grams:0.##} below 100g minimum", false, null);
+            return (false, $"Grams {grams:0.##} below {minTradeGrams:0.##}g minimum", false, null);
         }
         
         // Check if size is too large for volatility

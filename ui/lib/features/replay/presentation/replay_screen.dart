@@ -43,6 +43,7 @@ class ReplayScreen extends ConsumerStatefulWidget {
 
 class _ReplayScreenState extends ConsumerState<ReplayScreen> {
   bool _useMockAi = true;
+  bool _useLiveNewsAndTelegramInReplay = false;
   int _speedMultiplier = 100;
   final TextEditingController _initialCashController =
       TextEditingController(text: '350000');
@@ -208,13 +209,15 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
     final symbol = _symbolController.text.trim();
 
     try {
+      // from/to sent as UTC (device converts local time); works for India, KSA, UAE, etc.
       await ref.read(brainApiProvider).runReplay(
             symbol: symbol,
             from: _fromDate,
             to: _toDate,
             speedMultiplier: _speedMultiplier,
             useMockAI: _useMockAi,
-        initialCashAed: _initialCashValue(),
+            initialCashAed: _initialCashValue(),
+            useLiveNewsAndTelegramInReplay: _useLiveNewsAndTelegramInReplay,
           );
       if (mounted) {
         setState(() {
@@ -246,6 +249,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
             useMockAI: _useMockAi,
             from: _fromDate,
             to: _toDate,
+            useLiveNewsAndTelegramInReplay: _useLiveNewsAndTelegramInReplay,
           );
       await _refresh();
       messenger.showSnackBar(const SnackBar(
@@ -281,7 +285,8 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
               to: _toDate,
               speedMultiplier: _speedMultiplier,
               useMockAI: _useMockAi,
-            initialCashAed: _initialCashValue(),
+              initialCashAed: _initialCashValue(),
+              useLiveNewsAndTelegramInReplay: _useLiveNewsAndTelegramInReplay,
             );
         if (mounted) {
           setState(() {
@@ -504,6 +509,15 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen> {
                     title: const Text('Use Mock AI'),
                     subtitle: const Text(
                         'Fast replay. Disable only to validate real AI.'),
+                  ),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: _useLiveNewsAndTelegramInReplay,
+                    onChanged: (v) =>
+                        setState(() => _useLiveNewsAndTelegramInReplay = v),
+                    title: const Text('Use live News/Telegram in replay'),
+                    subtitle: const Text(
+                        'Off by default. Turn on only to test scenarios with current news/telegram.'),
                   ),
 
                   const Divider(height: 24),

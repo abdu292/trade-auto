@@ -139,12 +139,16 @@ public sealed record ReplayStartRequest(
     string Symbol = "XAUUSD.gram",
     DateTimeOffset? From = null,
     DateTimeOffset? To = null,
+    /// <summary>Optional. If set (e.g. "Asia/Kolkata"), From/To are interpreted as local time in this zone and converted to UTC for candle filtering.</summary>
+    string? TimezoneId = null,
     int SpeedMultiplier = 100,
     bool UseAI = true,
     bool UseMockAI = false,
     decimal InitialCashAed = 350000m,
     bool IgnoreNewsGate = true,
-    string TelegramReplayState = "QUIET");  // starting deployable cash for the ledger
+    string TelegramReplayState = "QUIET",
+    /// <summary>When true, replay uses live Telegram/news in AI (for testing). Default false = neutral context for historical candles.</summary>
+    bool UseLiveNewsAndTelegramInReplay = false);
 
 public sealed record ReplayStatusContract(
     bool IsRunning,
@@ -190,8 +194,11 @@ public sealed record RunReplayRequest(
     string Symbol = "XAUUSD.gram",
     DateTimeOffset? From = null,
     DateTimeOffset? To = null,
+    /// <summary>Optional. If set (e.g. "Asia/Kolkata"), From/To are interpreted as local time in this zone and converted to UTC for fetch/filter.</summary>
+    string? TimezoneId = null,
     int SpeedMultiplier = 100,
     bool UseMockAI = true,
     decimal InitialCashAed = 350000m,
     bool IgnoreNewsGate = true,
-    string TelegramReplayState = "QUIET");
+    string TelegramReplayState = "QUIET",
+    bool UseLiveNewsAndTelegramInReplay = false);
